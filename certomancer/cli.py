@@ -7,7 +7,6 @@ import click
 import tzlocal
 import logging
 
-from .integrations.animator import Animator
 from .registry import CertomancerConfig
 from .version import __version__
 
@@ -109,6 +108,14 @@ def necronomicon(ctx, architecture, crl_repo, output, no_pem, at_time):
               required=False, type=int, default=9000, show_default=True)
 @click.pass_context
 def animate(ctx, port):
+    try:
+        from .integrations.animator import Animator
+    except ImportError as e:
+        raise click.ClickException(
+            "'animate' requires additional dependencies."
+            "Re-run setup with the [web-api] extension set, or install "
+            "Werkzeug and Jinja2 manually."
+        ) from e
     cfg: CertomancerConfig = next(ctx.obj['config'])
     from werkzeug.serving import run_simple
     app = Animator(cfg.pki_archs)
