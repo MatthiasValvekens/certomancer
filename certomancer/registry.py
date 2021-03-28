@@ -155,11 +155,16 @@ class KeySets:
 
 
 class EntityRegistry:
-    def __init__(self, config):
-        self._dict = {
-            k: x509.Name.build(key_dashes_to_underscores(v))
-            for k, v in config.items()
-        }
+    def __init__(self, config, defaults=None):
+        defaults = {} if defaults is None else \
+            key_dashes_to_underscores(defaults)
+
+        def _prepare_name(ent_cfg):
+            new_cfg = dict(defaults)
+            new_cfg.update(key_dashes_to_underscores(ent_cfg))
+            return x509.Name.build(new_cfg)
+
+        self._dict = {k: _prepare_name(v) for k, v in config.items()}
 
     def __getitem__(self, name) -> x509.Name:
         try:
@@ -339,6 +344,10 @@ DEFAULT_FIRST_SERIAL = 0x1001
 
 
 class PKIArchitecture:
+    CONFIG_KEYS = (
+        'keyset', 'entities', 'certs', 'services', 'entity-defaults'
+    )
+
     @classmethod
     def default_smart_value_procs(cls):
         from .smart_values import (
@@ -356,10 +365,7 @@ class PKIArchitecture:
         if smart_value_procs is None:
             smart_value_procs = cls.default_smart_value_procs()
         for arch_label, cfg in cfgs.items():
-            check_config_keys(
-                arch_label, ('keyset', 'entities', 'certs', 'services'),
-                cfg
-            )
+            check_config_keys(arch_label, PKIArchitecture.CONFIG_KEYS, cfg)
             service_base_url = cfg.get(
                 'base-url', f"{global_base_url}/{arch_label}"
             )
@@ -385,7 +391,9 @@ class PKIArchitecture:
                     "The 'certs' key is required in all PKI architecture "
                     "specifications."
                 ) from e
-            entities = EntityRegistry(entity_cfg)
+            entities = EntityRegistry(
+                entity_cfg, cfg.get('entity-defaults', None)
+            )
             services = cfg.get('services', {})
             yield PKIArchitecture(
                 arch_label, key_set=key_set, entities=entities,

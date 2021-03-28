@@ -28,31 +28,22 @@ keysets:
 pki-architectures:
   testing-ca:
     keyset: testing-ca
+    entity-defaults:
+      country-name: BE
+      organization-name: Testing Authority
     entities:
       root:
-        country-name: BE
-        organization-name: Testing Authority
         common-name: Root CA
       interm:
-        country-name: BE
-        organization-name: Testing Authority
         common-name: Intermediate CA
       tsa:
-        country-name: BE
-        organization-name: Testing Authority
         common-name: Time Stamping Authority
       interm-ocsp:
-        country-name: BE
-        organization-name: Testing Authority
         common-name: OCSP responder
       signer1:
-        country-name: BE
-        organization-name: Testing Authority
         organizational-unit-name: Signers
         common-name: Alice
       signer2:
-        country-name: BE
-        organization-name: Testing Authority
         organizational-unit-name: Signers
         common-name: Bob
     certs:
