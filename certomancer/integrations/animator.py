@@ -3,6 +3,7 @@ import logging
 import os
 from dataclasses import dataclass
 from datetime import datetime
+from io import BytesIO
 from typing import Optional, Dict
 
 import tzlocal
@@ -138,6 +139,7 @@ class Animator:
 
         def _all_rules():
             yield Rule('/', endpoint='index')
+            yield Rule('/cert-download/<label:arch>', endpoint='download')
             for pki_arch in architectures.values():
                 yield from service_rules(pki_arch.service_registry)
 
@@ -220,6 +222,19 @@ class Animator:
             data = pem.armor('certificate', data)
         return Response(data, mimetype=mime)
 
+    def serve_zip(self, *, arch):
+        try:
+            pki_arch = self.architectures[ArchLabel(arch)]
+        except KeyError:
+            raise NotFound()
+        zip_buffer = BytesIO()
+        pki_arch.zip_certs(zip_buffer)
+        zip_buffer.seek(0)
+        data = zip_buffer.read()
+        cd_header = f'attachment; filename="{arch}-certificates.zip"'
+        return Response(data, mimetype='application/zip',
+                        headers={'Content-Disposition': cd_header})
+
     def dispatch(self, request: Request):
         adapter = self.url_map.bind_to_environ(request.environ)
         # TODO even though this is a testing tool, inserting some safeguards
@@ -228,6 +243,8 @@ class Animator:
             endpoint, values = adapter.match()
             if endpoint == 'index':
                 return Response(self.index_html, mimetype='text/html')
+            if endpoint == 'download':
+                return self.serve_zip(**values)
             assert isinstance(endpoint, Endpoint)
             if endpoint.service_type == ServiceType.OCSP:
                 return self.serve_ocsp_response(

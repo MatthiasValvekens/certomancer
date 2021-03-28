@@ -11,6 +11,7 @@ This page lists all PKI services provided by this Animator instance. Right-click
 {% for arch_services in pki_archs %}
     {# TODO make CRL repos and cert repos browsable #}
     <h2>Architecture: {{ arch_services.arch }}</h2>
+    All certificates (.zip): <a href="/cert-download/{{ arch_services.arch }}">download</a>
     <h3>Time stamping</h3>
     {% if arch_services.tsa %}
         <ul>

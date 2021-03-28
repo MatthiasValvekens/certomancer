@@ -6,6 +6,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict
+from zipfile import ZipFile
 
 import yaml
 from dateutil.parser import parse as parse_dt
@@ -702,6 +703,23 @@ class PKIArchitecture:
             # Coerce unevaluated parts of cert object structure
             # noinspection PyStatementEffect
             cert.native
+
+    def zip_certs(self, output_buffer, use_pem=True):
+        self._load_all_certs()
+        ext = '.cert.pem' if use_pem else '.crt'
+        zip_file = ZipFile(output_buffer, 'w')
+        lbl = self.arch_label.value
+        for iss_label, iss_certs in self._cert_labels_by_issuer.items():
+            for cert_label in iss_certs:
+                fname = os.path.join(
+                    lbl, iss_label.value, cert_label.value + ext
+                )
+                cert = self.get_cert(cert_label)
+                data = cert.dump()
+                if use_pem:
+                    data = pem.armor('certificate', data)
+                zip_file.writestr(fname, data)
+        zip_file.close()
 
     def dump_certs(self, folder_path: str, use_pem=True):
         self._load_all_certs()
