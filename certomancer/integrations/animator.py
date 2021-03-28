@@ -3,7 +3,7 @@ import logging
 import os
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Dict
 
 import tzlocal
 from asn1crypto import ocsp, tsp, pem
@@ -31,36 +31,40 @@ class ServiceType(enum.Enum):
     TSA = 'tsa'
     CERT_REPO = 'certs'
 
-    def endpoint(self, label: ServiceLabel):
-        return Endpoint(self, label)
+    def endpoint(self, arch: ArchLabel, label: ServiceLabel):
+        return Endpoint(arch, self, label)
 
 
 @dataclass(frozen=True)
 class Endpoint:
+    arch: ArchLabel
     service_type: ServiceType
     label: ServiceLabel
 
 
 def service_rules(services: ServiceRegistry):
+    arch = services.pki_arch.arch_label
     srv = ServiceType.OCSP
     for ocsp_info in services.list_ocsp_responders():
         logger.info("OCSP:" + ocsp_info.internal_url)
         yield Rule(
-            ocsp_info.internal_url, endpoint=srv.endpoint(ocsp_info.label),
+            ocsp_info.internal_url,
+            endpoint=srv.endpoint(arch, ocsp_info.label),
             methods=('POST',)
         )
     srv = ServiceType.TSA
     for tsa_info in services.list_time_stamping_services():
         logger.info("TSA:" + tsa_info.internal_url)
         yield Rule(
-            tsa_info.internal_url, endpoint=srv.endpoint(tsa_info.label),
-            methods=('POST',)
+            tsa_info.internal_url, endpoint=srv.endpoint(
+                arch, tsa_info.label
+            ), methods=('POST',)
         )
     srv = ServiceType.CRL_REPO
     for crl_repo in services.list_crl_repos():
         logger.info("CRLs:" + crl_repo.internal_url)
         # latest CRL
-        endpoint = srv.endpoint(crl_repo.label)
+        endpoint = srv.endpoint(arch, crl_repo.label)
         yield Rule(
             f"{crl_repo.internal_url}/latest.<extension>",
             defaults={'crl_no': None}, endpoint=endpoint,
@@ -78,7 +82,7 @@ def service_rules(services: ServiceRegistry):
             f"CERT:{cert_repo.internal_url} "
             f"({'all certs' if publish_issued else 'CA only'})"
         )
-        endpoint = srv.endpoint(cert_repo.label)
+        endpoint = srv.endpoint(arch, cert_repo.label)
         yield Rule(
             f"{cert_repo.internal_url}/ca.<extension>",
             defaults={'cert_label': None}, endpoint=endpoint, methods=('GET',)
@@ -93,13 +97,17 @@ def service_rules(services: ServiceRegistry):
 
 class Animator:
 
-    def __init__(self, pki_arch: PKIArchitecture,
+    def __init__(self, architectures: Dict[ArchLabel, PKIArchitecture],
                  at_time: Optional[datetime] = None):
-        self.pki_arch = pki_arch
         self.fixed_time = at_time
+        self.architectures = architectures
+
+        def _all_rules():
+            for pki_arch in architectures.values():
+                yield from service_rules(pki_arch.service_registry)
 
         self.url_map = Map(
-            list(service_rules(pki_arch.service_registry)),
+            list(_all_rules()),
             converters={'label': LabelConverter}
         )
 
@@ -107,8 +115,10 @@ class Animator:
     def at_time(self):
         return self.fixed_time or datetime.now(tz=tzlocal.get_localzone())
 
-    def serve_ocsp_response(self, request: Request, *, label: ServiceLabel):
-        ocsp_resp = self.pki_arch.service_registry.summon_responder(
+    def serve_ocsp_response(self, request: Request, *, label: ServiceLabel,
+                            arch: ArchLabel):
+        pki_arch = self.architectures[arch]
+        ocsp_resp = pki_arch.service_registry.summon_responder(
             label, self.at_time
         )
         data = request.stream.read()
@@ -116,8 +126,10 @@ class Animator:
         response = ocsp_resp.build_ocsp_response(req)
         return Response(response.dump(), mimetype='application/ocsp-response')
 
-    def serve_timestamp_response(self, request, *, label: ServiceLabel):
-        tsa = self.pki_arch.service_registry.summon_timestamper(
+    def serve_timestamp_response(self, request, *, label: ServiceLabel,
+                                 arch: ArchLabel):
+        pki_arch = self.architectures[arch]
+        tsa = pki_arch.service_registry.summon_timestamper(
             label, self.at_time
         )
         data = request.stream.read()
@@ -125,7 +137,9 @@ class Animator:
         response = tsa.request_tsa_response(req)
         return Response(response.dump(), mimetype='application/timestamp-reply')
 
-    def serve_crl(self, *, label: ServiceLabel, crl_no, extension):
+    def serve_crl(self, *, label: ServiceLabel, arch: ArchLabel,
+                  crl_no, extension):
+        pki_arch = self.architectures[arch]
         if extension == 'crl.pem':
             use_pem = True
             mime = 'application/x-pem-file'
@@ -136,17 +150,17 @@ class Animator:
             raise NotFound()
 
         if crl_no is not None:
-            crl = self.pki_arch.service_registry.get_crl(label, number=crl_no)
+            crl = pki_arch.service_registry.get_crl(label, number=crl_no)
         else:
-            crl = self.pki_arch.service_registry.get_crl(label, self.at_time)
+            crl = pki_arch.service_registry.get_crl(label, self.at_time)
 
         data = crl.dump()
         if use_pem:
             data = pem.armor('X509 CRL', data)
         return Response(data, mimetype=mime)
 
-    def serve_cert(self, *, label: ServiceLabel, cert_label: Optional[str],
-                   extension):
+    def serve_cert(self, *, label: ServiceLabel, arch: ArchLabel,
+                   cert_label: Optional[str], extension):
         if extension == 'cert.pem':
             use_pem = True
             mime = 'application/x-pem-file'
@@ -156,9 +170,10 @@ class Animator:
         else:
             raise NotFound()
 
+        pki_arch = self.architectures[arch]
         cert_label = CertLabel(cert_label) if cert_label is not None else None
 
-        cert = self.pki_arch.service_registry.get_cert_from_repo(
+        cert = pki_arch.service_registry.get_cert_from_repo(
             label, cert_label
         )
         if cert is None:
@@ -177,15 +192,21 @@ class Animator:
             endpoint, values = adapter.match()
             assert isinstance(endpoint, Endpoint)
             if endpoint.service_type == ServiceType.OCSP:
-                return self.serve_ocsp_response(request, label=endpoint.label)
+                return self.serve_ocsp_response(
+                    request, label=endpoint.label, arch=endpoint.arch
+                )
             if endpoint.service_type == ServiceType.TSA:
                 return self.serve_timestamp_response(
-                    request, label=endpoint.label
+                    request, label=endpoint.label, arch=endpoint.arch
                 )
             if endpoint.service_type == ServiceType.CRL_REPO:
-                return self.serve_crl(label=endpoint.label, **values)
+                return self.serve_crl(
+                    label=endpoint.label, arch=endpoint.arch, **values
+                )
             if endpoint.service_type == ServiceType.CERT_REPO:
-                return self.serve_cert(label=endpoint.label, **values)
+                return self.serve_cert(
+                    label=endpoint.label, arch=endpoint.arch, **values
+                )
             raise InternalServerError()  # pragma: nocover
         except CertomancerObjectNotFoundError as e:
             logger.info(e)
@@ -212,10 +233,8 @@ class LazyAnimator:
         env = os.environ
         cfg_file = env['CERTOMANCER_CONFIG']
         key_dir = env['CERTOMANCER_KEY_DIR']
-        arch = env['CERTOMANCER_ARCH']
         cfg = CertomancerConfig.from_file(cfg_file, key_dir)
-        pki_arch = cfg.get_pki_arch(ArchLabel(arch))
-        self.animator = Animator(pki_arch)
+        self.animator = Animator(cfg.pki_archs)
 
     def __call__(self, environ, start_response):
         self._load()

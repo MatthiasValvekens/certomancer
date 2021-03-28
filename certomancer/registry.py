@@ -1171,6 +1171,9 @@ class CertomancerConfig:
 
     @classmethod
     def from_file(cls, cfg_path, working_dir=None) -> 'CertomancerConfig':
+        # TODO this is a bit too hacky for my tastes; the key loaders
+        #  should simply be able to refer back to the loading context
+        #  in some way.
         with open(cfg_path, 'r') as inf:
             config_dict = yaml.safe_load(inf)
         cwd = None

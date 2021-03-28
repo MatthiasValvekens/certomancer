@@ -95,13 +95,11 @@ def necronomicon(ctx, architecture, crl_repo, output, no_pem, at_time):
 
 
 @cli.command(help='run a local web server with Certomancer-backed PKI services')
-@click.argument('architecture', type=str, metavar='PKI_ARCH')
 @click.option('--port', help='port to listen on',
               required=False, type=int, default=9000, show_default=True)
 @click.pass_context
-def animate(ctx, architecture, port):
+def animate(ctx, port):
     cfg: CertomancerConfig = next(ctx.obj['config'])
-    pki_arch = cfg.get_pki_arch(architecture)
     from werkzeug.serving import run_simple
-    app = Animator(pki_arch=pki_arch)
+    app = Animator(cfg.pki_archs)
     run_simple('127.0.0.1', port, app)
