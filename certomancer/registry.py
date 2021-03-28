@@ -319,7 +319,7 @@ class CertificateSpec(ConfigurableMixin):
         super().process_entries(config_dict)
 
     @classmethod
-    def from_config(cls, config_dict):
+    def from_config(cls, config_dict) -> 'CertificateSpec':
         if not isinstance(config_dict, dict):
             raise ConfigurationError(
                 f"Cert config should be a dictionary, not {type(config_dict)}."
@@ -417,6 +417,7 @@ class PKIArchitecture:
         # This only processes the configuration, the actual signing etc.
         # happens on-demand
         self._cert_specs = cert_specs = {}
+        self._labels_by_issuer = defaultdict(list)
         for name, cert_config in cert_spec_config.items():
             cert_config = key_dashes_to_underscores(cert_config)
             template = cert_config.pop('template', None)
@@ -445,12 +446,12 @@ class PKIArchitecture:
                 ) from e
             effective_cert_config.setdefault('authority_key', issuer)
 
-            cert_specs[name] = CertificateSpec.from_config(
+            cert_specs[name] = spec = CertificateSpec.from_config(
                 effective_cert_config
             )
+            self._labels_by_issuer[spec.issuer].append(name)
 
         self._cert_cache = {}
-        self._certs_by_issuer = defaultdict(dict)
 
     def get_cert_spec(self, label) -> CertificateSpec:
         try:
@@ -466,7 +467,7 @@ class PKIArchitecture:
         if issuer_label is None:
             try:
                 issuer_label = next(
-                    lbl for lbl in self._certs_by_issuer.keys()
+                    lbl for lbl in self._labels_by_issuer.keys()
                     # we could go via entities, but this way is safer
                     if issuer_match(cid, self.get_cert(lbl))
                 )
@@ -475,11 +476,11 @@ class PKIArchitecture:
                     f"Could not find a suitable issuer for CertID {cid.native}."
                 ) from e
 
-        certs = self._certs_by_issuer[issuer_label]
+        specs = self._labels_by_issuer[issuer_label]
         try:
             return next(
-                lbl for lbl, cert in certs.items()
-                if cert.serial_number == serial
+                lbl for lbl in specs
+                if self.get_cert(lbl).serial_number == serial
             )
         except StopIteration as e:
             raise CertomancerServiceError(
@@ -501,10 +502,11 @@ class PKIArchitecture:
 
         # start writing only after we know that all certs have been built
         ext = '.cert.pem' if use_pem else '.crt'
-        for iss_label, iss_certs in self._certs_by_issuer.items():
+        for iss_label, iss_certs in self._labels_by_issuer.items():
             iss_path = os.path.join(folder_path, iss_label)
             os.makedirs(iss_path, exist_ok=True)
-            for cert_label, cert in iss_certs.items():
+            for cert_label in iss_certs:
+                cert = self.get_cert(cert_label)
                 with open(os.path.join(iss_path, cert_label + ext), 'wb') as f:
                     data = cert.dump()
                     if use_pem:
@@ -586,7 +588,6 @@ class PKIArchitecture:
         })
 
         self._serial_by_issuer[spec.issuer] = serial + 1
-        self._certs_by_issuer[spec.issuer][label] = cert
         self._cert_cache[label] = cert
         return cert
 
@@ -600,10 +601,10 @@ class PKIArchitecture:
             return None
 
     def get_revoked_certs_at_time(self, issuer_label: str, at_time: datetime):
-        self._load_all_certs()
-        certs = self._certs_by_issuer[issuer_label]
-        for cert_label, cert in certs.items():
+        labels = self._labels_by_issuer[issuer_label]
+        for cert_label in labels:
             revo = self.check_revocation_status(cert_label, at_time=at_time)
+            cert = self.get_cert(cert_label)
             if revo is not None:
                 yield revo.to_asn1(cert.serial_number)
 
