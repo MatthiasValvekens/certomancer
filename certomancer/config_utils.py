@@ -16,7 +16,8 @@ from datetime import timedelta
 
 __all__ = [
     'ConfigurationError', 'ConfigurableMixin', 'check_config_keys',
-    'parse_duration', 'key_dashes_to_underscores', 'get_and_apply'
+    'parse_duration', 'key_dashes_to_underscores', 'get_and_apply',
+    'LabelString'
 ]
 
 from typing import get_args, Optional
@@ -205,7 +206,7 @@ def parse_duration(input_str) -> timedelta:
         days_m = DURATION_REGEX_DAYS.fullmatch(days_part)
         if days_m is None:
             raise ValueError(f"Failed to parse duration string {input_str}")
-            # these designations can't be represented with timedelta objects
+        # these designations can't be represented with timedelta objects
         unsupported = (days_m.group('years'), days_m.group('months'))
         if not all(x is None for x in unsupported):
             raise ValueError(

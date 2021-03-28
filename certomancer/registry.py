@@ -208,6 +208,7 @@ class EntityRegistry:
         ent = self[label]
         return getattr(hashlib, hash_algo)(ent.dump()).digest()
 
+
 @dataclass(frozen=True)
 class Validity(ConfigurableMixin):
     valid_from: datetime
@@ -455,7 +456,7 @@ class PKIArchitecture:
 
         self._serial_by_issuer = defaultdict(lambda: DEFAULT_FIRST_SERIAL)
 
-        self.service_registry = ServiceRegistry(
+        self.service_registry: ServiceRegistry = ServiceRegistry(
             self, service_base_url, service_config
         )
 
@@ -928,7 +929,8 @@ class ServiceRegistry:
             md_algorithm=info.digest_algo
         )
 
-    def get_crl(self, repo_label, at_time: Optional[datetime] = None,
+    def get_crl(self, repo_label: ServiceLabel,
+                at_time: Optional[datetime] = None,
                 number: Optional[int] = None):
         # TODO support indirect CRLs, delta CRLs, etc.?
 
