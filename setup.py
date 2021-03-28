@@ -59,7 +59,8 @@ setup(
         'wheel', 'pytest-runner'
     ],
     extras_require={
-        'requests-mock-integration': { 'requests-mock>=1.8.0' }
+        'requests-mocker': ['requests-mock>=1.8.0'],
+        'web-api': ['Werkzeug>=1.0.1']
     },
     tests_require=[
         'pytest>=6.1.1',

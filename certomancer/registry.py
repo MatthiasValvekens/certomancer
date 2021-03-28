@@ -63,6 +63,10 @@ class ArchLabel(LabelString):
     pass
 
 
+class CertomancerObjectNotFoundError(CertomancerServiceError):
+    pass
+
+
 @dataclass(frozen=True)
 class AsymKey:
     """Class representing asymmetric key pairs."""
@@ -177,7 +181,7 @@ class KeySet:
         try:
             return self._dict[name]
         except KeyError as e:
-            raise ConfigurationError(
+            raise CertomancerObjectNotFoundError(
                 f"There is no key labelled '{name}'."
             ) from e
 
@@ -209,7 +213,7 @@ class KeySets:
         try:
             return self._dict[name]
         except KeyError as e:
-            raise ConfigurationError(
+            raise CertomancerObjectNotFoundError(
                 f"There is no registered key set labelled '{name}'."
             ) from e
 
@@ -239,7 +243,7 @@ class EntityRegistry:
         try:
             return self._dict[label]
         except KeyError as e:
-            raise ConfigurationError(
+            raise CertomancerObjectNotFoundError(
                 f"There is no registered entity labelled '{label}'."
             ) from e
 
@@ -655,7 +659,7 @@ class PKIArchitecture:
         try:
             return self._cert_specs[label]
         except KeyError as e:
-            raise ConfigurationError(
+            raise CertomancerObjectNotFoundError(
                 f"There is no registered certificate labelled '{label}'."
             ) from e
 
@@ -915,22 +919,19 @@ class CRLRepoServiceInfo(ServiceInfo):
 @dataclass(frozen=True)
 class CertRepoServiceInfo(ServiceInfo):
     for_issuer: EntityLabel
+    issuer_cert: Optional[CertLabel] = None
     publish_issued_certs: bool = True
 
-    @property
-    def repo_url(self):
-        return f"{self.base_url}/{self.label}"
+    def issuer_cert_url(self, use_pem=True):
+        return f"{self.internal_url}/ca.{'cert.pem' if use_pem else 'crt'}"
 
-    @property
-    def issuer_cert_url(self):
-        return f"{self.repo_url}/ca.cert.pem"
-
-    def issued_cert_url(self, label: CertLabel):
+    def issued_cert_url(self, label: CertLabel, use_pem=True):
         if not self.publish_issued_certs:
             raise ConfigurationError(
                 f"Cert repo '{self.label}' does not make issued certs public"
             )
-        return f"{self.repo_url}/issued/{label}.cert.pem"
+        fname = f"{label}.{'cert.pem' if use_pem else 'crt'}"
+        return f"{self.internal_url}/issued/{fname}"
 
 
 class OCSPInterface(RevocationInfoInterface):
@@ -995,7 +996,7 @@ class ServiceRegistry:
         try:
             return self._ocsp[label]
         except KeyError as e:
-            raise ConfigurationError(
+            raise CertomancerObjectNotFoundError(
                 f"There is no registered OCSP service labelled '{label}'."
             ) from e
 
@@ -1029,7 +1030,7 @@ class ServiceRegistry:
         try:
             return self._crl_repo[label]
         except KeyError as e:
-            raise ConfigurationError(
+            raise CertomancerObjectNotFoundError(
                 f"There is no registered CRL repository labelled '{label}'."
             ) from e
 
@@ -1040,16 +1041,19 @@ class ServiceRegistry:
         try:
             return self._cert_repo[label]
         except KeyError as e:
-            raise ConfigurationError(
+            raise CertomancerObjectNotFoundError(
                 f"There is no registered certificate repository "
                 f"labelled '{label}'."
             ) from e
+
+    def list_cert_repos(self) -> List[CertRepoServiceInfo]:
+        return list(self._cert_repo.values())
 
     def get_tsa_info(self, label: ServiceLabel) -> TSAServiceInfo:
         try:
             return self._tsa[label]
         except KeyError as e:
-            raise ConfigurationError(
+            raise CertomancerObjectNotFoundError(
                 f"There is no registered time stamping service "
                 f"labelled '{label}'."
             ) from e
@@ -1132,6 +1136,29 @@ class ServiceRegistry:
             crl_number=number, this_update=this_update,
             next_update=next_update, revoked_certs=revoked
         )
+
+    def get_cert_from_repo(self, repo_label: ServiceLabel,
+                           cert_label: Optional[CertLabel] = None) \
+            -> Optional[x509.Certificate]:
+
+        repo_info = self.get_cert_repo_info(repo_label)
+        arch = self.pki_arch
+        if cert_label is None:
+            # return the issuer's certificate
+            cert_label = repo_info.issuer_cert
+            if cert_label is None:
+                issuer = repo_info.for_issuer
+                # TODO: Should we return None if the issuer cert can't be
+                #  determined, or let the error propagate?
+                #  Choosing the latter for now.
+                cert_label = arch.get_unique_cert_for_entity(issuer)
+        else:
+            # check if the cert in question actually belongs to the repo
+            # (i.e. whether it is issued by the right entity)
+            cert_spec = arch.get_cert_spec(cert_label)
+            if cert_spec.issuer != repo_info.for_issuer:
+                return None
+        return arch.get_cert(cert_label)
 
 
 class CertomancerConfig:
