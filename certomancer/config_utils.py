@@ -109,29 +109,53 @@ def check_config_keys(config_name, expected_keys, config_dict):
         )
 
 
-duration_regex = re.compile(
-    r"P(?:(?P<years>\d+)Y)?(?:(?P<months>\d+)M)?(?:(?P<weeks>\d+)W)?"
-    r"(?:(?P<days>\d+)D)?"
-    r"(?:T(?:(?P<hours>\d+)H)?(?:(?P<minutes>\d+)M)?(?:(?P<seconds>\d+)S))?"
+DURATION_REGEX_PARTS = re.compile(
+    r"P(?:(?P<days>[0-9YMWD]+))?(?:(?:(?<=P)T?|T)(?P<time>[0-9HMS]+))?"
+)
+DURATION_REGEX_DAYS = re.compile(
+    r"(?:(?P<years>\d+)Y)?(?:(?P<months>\d+)M)?"
+    r"(?:(?P<weeks>\d+)W)?(?:(?P<days>\d+)D)?"
+)
+
+DURATION_REGEX_TIME = re.compile(
+    r"(?:(?P<hours>\d+)H)?(?:(?P<minutes>\d+)M)?(?:(?P<seconds>\d+)S)?"
 )
 
 
 def parse_duration(input_str) -> timedelta:
-    m = duration_regex.fullmatch(input_str)
+    m = DURATION_REGEX_PARTS.fullmatch(input_str)
     if m is None:
         raise ValueError(f"Failed to parse duration string {input_str}")
-    # these designations can't be represented with timedelta objects
-    unsupported = (m.group('years'), m.group('months'))
-    if not all(x is None for x in unsupported):
-        raise ValueError(
-            "ISO 8601 year/month designations cannot be reliably represented "
-            "using timedelta objects, so they aren't allowed."
-        )
-    weeks = int(m.group('weeks') or 0)
-    days = int(m.group('days') or 0) + 7 * weeks
-    hours = int(m.group('hours') or 0)
-    minutes = int(m.group('minutes') or 0)
-    seconds = int(m.group('seconds') or 0)
+    days_part = m.group('days')
+    time_part = m.group('time')
+
+    if days_part is not None:
+        days_m = DURATION_REGEX_DAYS.fullmatch(days_part)
+        if days_m is None:
+            raise ValueError(f"Failed to parse duration string {input_str}")
+            # these designations can't be represented with timedelta objects
+        unsupported = (days_m.group('years'), days_m.group('months'))
+        if not all(x is None for x in unsupported):
+            raise ValueError(
+                "ISO 8601 year/month designations cannot be reliably "
+                "represented using timedelta objects, so they aren't allowed."
+            )
+
+        weeks = int(days_m.group('weeks') or 0)
+        days = int(days_m.group('days') or 0) + 7 * weeks
+    else:
+        days = 0
+
+    if time_part is not None:
+        time_m = DURATION_REGEX_TIME.fullmatch(time_part)
+        if time_m is None:
+            raise ValueError(f"Failed to parse duration string {input_str}")
+
+        hours = int(time_m.group('hours') or 0)
+        minutes = int(time_m.group('minutes') or 0)
+        seconds = int(time_m.group('seconds') or 0)
+    else:
+        hours = minutes = seconds = 0
 
     return timedelta(days=days, hours=hours, minutes=minutes, seconds=seconds)
 
