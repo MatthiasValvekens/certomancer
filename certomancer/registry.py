@@ -1,4 +1,5 @@
 import abc
+import hashlib
 import os
 import os.path
 from collections import defaultdict
@@ -13,11 +14,37 @@ from dateutil.tz import tzlocal
 from oscrypto import keys as oskeys, asymmetric
 from asn1crypto.keys import PrivateKeyInfo, PublicKeyInfo
 
-from .config_utils import ConfigurationError, check_config_keys, \
+from .config_utils import (
+    ConfigurationError, check_config_keys, LabelString,
     ConfigurableMixin, parse_duration, key_dashes_to_underscores, get_and_apply
+)
 from .services import CertomancerServiceError, generic_sign, CRLBuilder, \
-    issuer_match, choose_signed_digest, SimpleOCSPResponder, TimeStamper, \
+    choose_signed_digest, SimpleOCSPResponder, TimeStamper, \
     RevocationInfoInterface, RevocationStatus
+
+
+class KeyLabel(LabelString):
+    pass
+
+
+class CertLabel(LabelString):
+    pass
+
+
+class EntityLabel(LabelString):
+    pass
+
+
+class ServiceLabel(LabelString):
+    pass
+
+
+class ProcessorLabel(LabelString):
+    pass
+
+
+class ArchLabel(LabelString):
+    pass
 
 
 @dataclass(frozen=True)
@@ -32,7 +59,7 @@ class AsymKey:
 
 class KeyFromFile:
 
-    def __init__(self, name: str, path: str, public_only: bool = False,
+    def __init__(self, name: KeyLabel, path: str, public_only: bool = False,
                  password=None):
         self.name = name
         self.path = path
@@ -109,8 +136,8 @@ class KeySet:
             return key_conf
 
         self._dict = {
-            k: KeyFromFile.from_config(
-                k, _prepend(v), lazy=lazy_load_keys
+            KeyLabel(k): KeyFromFile.from_config(
+                KeyLabel(k), _prepend(v), lazy=lazy_load_keys
             )
             for k, v in keys.items()
         }
@@ -164,16 +191,22 @@ class EntityRegistry:
             new_cfg.update(key_dashes_to_underscores(ent_cfg))
             return x509.Name.build(new_cfg)
 
-        self._dict = {k: _prepare_name(v) for k, v in config.items()}
+        self._dict = {
+            EntityLabel(k): _prepare_name(v) for k, v in config.items()
+        }
 
-    def __getitem__(self, name) -> x509.Name:
+    def __getitem__(self, label: EntityLabel) -> x509.Name:
         try:
-            return self._dict[name]
+            return self._dict[label]
         except KeyError as e:
             raise ConfigurationError(
-                f"There is no registered entity labelled '{name}'."
+                f"There is no registered entity labelled '{label}'."
             ) from e
 
+    def get_name_hash(self, label: EntityLabel, hash_algo: str):
+        # TODO cache these
+        ent = self[label]
+        return getattr(hashlib, hash_algo)(ent.dump()).digest()
 
 @dataclass(frozen=True)
 class Validity(ConfigurableMixin):
@@ -204,7 +237,7 @@ class SmartValueProcessor(abc.ABC):
 
 @dataclass(frozen=True)
 class SmartValueSpec(ConfigurableMixin):
-    schema: str
+    schema: ProcessorLabel
     params: dict = field(default_factory=dict)
 
 
@@ -213,7 +246,8 @@ class SmartValueProcessorRegistry:
         self.arch = arch
         self._dict = {}
 
-    def register(self, schema_label: str, processor: SmartValueProcessor):
+    def register(self, schema_label: ProcessorLabel,
+                 processor: SmartValueProcessor):
         self._dict[schema_label] = processor
 
     def process_value(self, spec: SmartValueSpec):
@@ -278,13 +312,14 @@ EXCLUDED_FROM_TEMPLATE = frozenset({'subject', 'subject_key'})
 
 @dataclass(frozen=True)
 class CertificateSpec(ConfigurableMixin):
-    subject: str
-    subject_key: str
-    issuer: str
-    authority_key: str
+    subject: EntityLabel
+    subject_key: KeyLabel
+    issuer: EntityLabel
+    authority_key: KeyLabel
     validity: Validity
     _templatable_config: dict
     signature_algo: Optional[str] = None
+    issuer_cert: Optional[CertLabel] = None  # only needed to resolve AKI ambiguity
     digest_algo: str = 'sha256'
     revocation: Optional[RevocationStatus] = None
     extensions: List[ExtensionSpec] = field(default_factory=list)
@@ -365,6 +400,7 @@ class PKIArchitecture:
         if smart_value_procs is None:
             smart_value_procs = cls.default_smart_value_procs()
         for arch_label, cfg in cfgs.items():
+            arch_label = ArchLabel(arch_label)
             check_config_keys(arch_label, PKIArchitecture.CONFIG_KEYS, cfg)
             service_base_url = cfg.get(
                 'base-url', f"{global_base_url}/{arch_label}"
@@ -402,7 +438,7 @@ class PKIArchitecture:
                 smart_value_procs=smart_value_procs
             )
 
-    def __init__(self, arch_label: str,
+    def __init__(self, arch_label: ArchLabel,
                  key_set: KeySet, entities: EntityRegistry,
                  cert_spec_config, service_config, service_base_url,
                  smart_value_procs=None):
@@ -426,16 +462,20 @@ class PKIArchitecture:
         # Parse certificate specs
         # This only processes the configuration, the actual signing etc.
         # happens on-demand
-        cert_specs: Dict[str, CertificateSpec]  = {}
+        cert_specs: Dict[CertLabel, CertificateSpec] = {}
         self._cert_specs = cert_specs
-        self._cert_labels_by_issuer = defaultdict(list)
-        self._cert_labels_by_subject = defaultdict(list)
+        self._cert_labels_by_issuer: Dict[EntityLabel, List[CertLabel]] \
+            = defaultdict(list)
+        self._cert_labels_by_subject: Dict[EntityLabel, List[CertLabel]] \
+            = defaultdict(list)
         for name, cert_config in cert_spec_config.items():
+            name = CertLabel(name)
             cert_config = key_dashes_to_underscores(cert_config)
             template = cert_config.pop('template', None)
             if template is not None:
                 try:
-                    template_spec: CertificateSpec = cert_specs[template]
+                    template_spec: CertificateSpec = \
+                        cert_specs[CertLabel(template)]
                 except KeyError as e:
                     raise ConfigurationError(
                         f"Cert spec '{name}' refers to '{template}' as a "
@@ -446,7 +486,7 @@ class PKIArchitecture:
             else:
                 effective_cert_config = dict(cert_config)
 
-            effective_cert_config.setdefault('subject', name)
+            effective_cert_config.setdefault('subject', name.value)
             effective_cert_config.setdefault(
                 'subject_key', effective_cert_config['subject']
             )
@@ -466,7 +506,7 @@ class PKIArchitecture:
 
         self._cert_cache = {}
 
-    def get_cert_spec(self, label) -> CertificateSpec:
+    def get_cert_spec(self, label: CertLabel) -> CertificateSpec:
         try:
             return self._cert_specs[label]
         except KeyError as e:
@@ -474,15 +514,19 @@ class PKIArchitecture:
                 f"There is no registered certificate labelled '{label}'."
             ) from e
 
-    def find_cert_label(self, cid: ocsp.CertId, issuer_label=None) -> str:
+    def find_cert_label(self, cid: ocsp.CertId,
+                        issuer_label: Optional[EntityLabel] = None) \
+            -> CertLabel:
         # FIXME this doesn't really scale
         serial = cid['serial_number'].native
         if issuer_label is None:
+            entities = self.entities
+            name_hash = cid['issuer_name_hash'].native
+            hash_algo = cid['hash_algorithm']['algorithm'].native
             try:
                 issuer_label = next(
                     lbl for lbl in self._cert_labels_by_issuer.keys()
-                    # we could go via entities, but this way is safer
-                    if issuer_match(cid, self.get_cert(lbl))
+                    if entities.get_name_hash(lbl, hash_algo) == name_hash
                 )
             except StopIteration as e:
                 raise CertomancerServiceError(
@@ -516,17 +560,18 @@ class PKIArchitecture:
         # start writing only after we know that all certs have been built
         ext = '.cert.pem' if use_pem else '.crt'
         for iss_label, iss_certs in self._cert_labels_by_issuer.items():
-            iss_path = os.path.join(folder_path, iss_label)
+            iss_path = os.path.join(folder_path, iss_label.value)
             os.makedirs(iss_path, exist_ok=True)
             for cert_label in iss_certs:
+                name = cert_label.value
                 cert = self.get_cert(cert_label)
-                with open(os.path.join(iss_path, cert_label + ext), 'wb') as f:
+                with open(os.path.join(iss_path, name + ext), 'wb') as f:
                     data = cert.dump()
                     if use_pem:
                         data = pem.armor('certificate', data)
                     f.write(data)
 
-    def get_cert(self, label) -> x509.Certificate:
+    def get_cert(self, label: CertLabel) -> x509.Certificate:
         try:
             return self._cert_cache[label]
         except KeyError:
@@ -553,18 +598,23 @@ class PKIArchitecture:
         ski_extension = x509.Extension({
             'extn_id': 'key_identifier',
             'critical': False,
-            'extn_value': core.ParsableOctetString(core.OctetString(ski).dump())
+            'extn_value': core.OctetString(ski)
         })
-        aki_value = x509.AuthorityKeyIdentifier({
-            'key_identifier': (
-                ski if spec.self_signed
-                else self.get_cert(spec.issuer).key_identifier_value
-            )
-        })
+        if spec.self_signed:
+            aki = ski
+        else:
+            # read value from issuer certificate (since in principle the
+            #  choice is up to the issuer)
+            issuer_cert_lbl = spec.issuer_cert
+            if issuer_cert_lbl is None:
+                issuer_cert_lbl = self.get_unique_cert_for_entity(spec.issuer)
+            issuer_cert = self.get_cert(issuer_cert_lbl)
+            aki = issuer_cert.key_identifier_value
+        aki_value = x509.AuthorityKeyIdentifier({'key_identifier': aki})
         aki_extension = x509.Extension({
             'extn_id': 'authority_key_identifier',
             'critical': False,
-            'extn_value': core.ParsableOctetString(aki_value.dump())
+            'extn_value': aki_value
         })
         extensions = [ski_extension, aki_extension]
         # add extensions from config
@@ -613,10 +663,12 @@ class PKIArchitecture:
         else:
             return None
 
-    def get_cert_labels_for_entity(self, entity_label: str):
+    def get_cert_labels_for_entity(self, entity_label: EntityLabel) \
+            -> List[CertLabel]:
         return self._cert_labels_by_subject[entity_label]
 
-    def get_unique_cert_for_entity(self, entity_label: str):
+    def get_unique_cert_for_entity(self, entity_label: EntityLabel) \
+            -> CertLabel:
         labels = self.get_cert_labels_for_entity(entity_label)
         if len(labels) != 1:
             raise CertomancerServiceError(
@@ -624,7 +676,8 @@ class PKIArchitecture:
             )
         return labels[0]
 
-    def get_revoked_certs_at_time(self, issuer_label: str, at_time: datetime):
+    def get_revoked_certs_at_time(self, issuer_label: EntityLabel,
+                                  at_time: datetime):
         labels = self._cert_labels_by_issuer[issuer_label]
         for cert_label in labels:
             revo = self.check_revocation_status(cert_label, at_time=at_time)
@@ -635,17 +688,17 @@ class PKIArchitecture:
 
 @dataclass(frozen=True)
 class ServiceInfo(ConfigurableMixin):
-    label: str
+    label: ServiceLabel
     base_url: str
 
 
 @dataclass(frozen=True)
 class OCSPResponderServiceInfo(ServiceInfo):
-    for_issuer: str
-    responder_cert: str
-    signing_key: str = None
+    for_issuer: EntityLabel
+    responder_cert: CertLabel
+    signing_key: Optional[KeyLabel] = None
     signature_algo: Optional[str] = None
-    issuer_cert: Optional[str] = None
+    issuer_cert: Optional[CertLabel] = None
     digest_algo: str = 'sha256'
 
     @classmethod
@@ -662,11 +715,11 @@ class OCSPResponderServiceInfo(ServiceInfo):
 
 @dataclass(frozen=True)
 class TSAServiceInfo(ServiceInfo):
-    signing_cert: str
-    signing_key: str = None
+    signing_cert: CertLabel
+    signing_key: Optional[KeyLabel] = None
     signature_algo: Optional[str] = None
     digest_algo: str = 'sha256'
-    certs_to_embed: List[str] = field(default_factory=list)
+    certs_to_embed: List[CertLabel] = field(default_factory=list)
 
     @classmethod
     def process_entries(cls, config_dict):
@@ -682,10 +735,10 @@ class TSAServiceInfo(ServiceInfo):
 
 @dataclass(frozen=True)
 class CRLRepoServiceInfo(ServiceInfo):
-    for_issuer: str
-    signing_key: str
+    for_issuer: EntityLabel
+    signing_key: KeyLabel
     simulated_update_schedule: timedelta
-    issuer_cert: Optional[str] = None
+    issuer_cert: Optional[CertLabel] = None
     signature_algo: Optional[str] = None
     digest_algo: str = 'sha256'
 
@@ -715,7 +768,7 @@ class CRLRepoServiceInfo(ServiceInfo):
 
 @dataclass(frozen=True)
 class CertRepoServiceInfo(ServiceInfo):
-    for_issuer: str
+    for_issuer: EntityLabel
     publish_issued_certs: bool = True
 
     @property
@@ -726,7 +779,7 @@ class CertRepoServiceInfo(ServiceInfo):
     def issuer_cert_url(self):
         return f"{self.repo_url}/ca.cert.pem"
 
-    def issued_cert_url(self, label: str):
+    def issued_cert_url(self, label: CertLabel):
         if not self.publish_issued_certs:
             raise ConfigurationError(
                 f"Cert repo '{self.label}' does not make issued certs public"
@@ -736,8 +789,8 @@ class CertRepoServiceInfo(ServiceInfo):
 
 class OCSPInterface(RevocationInfoInterface):
 
-    def __init__(self, for_issuer: str, pki_arch: PKIArchitecture,
-                 issuer_cert_label: str):
+    def __init__(self, for_issuer: EntityLabel, pki_arch: PKIArchitecture,
+                 issuer_cert_label: CertLabel):
         self.for_issuer = for_issuer
         self.pki_arch = pki_arch
         self.issuer_cert_label = issuer_cert_label
@@ -790,7 +843,7 @@ class ServiceRegistry:
             in _gen_svc_config('tsa', service_config.get('time-stamping', {}))
         }
 
-    def get_ocsp_info(self, label) -> OCSPResponderServiceInfo:
+    def get_ocsp_info(self, label: ServiceLabel) -> OCSPResponderServiceInfo:
         try:
             return self._ocsp[label]
         except KeyError as e:
@@ -801,7 +854,8 @@ class ServiceRegistry:
     def list_ocsp_responders(self) -> List[OCSPResponderServiceInfo]:
         return list(self._ocsp.values())
 
-    def summon_responder(self, label, at_time=None) -> SimpleOCSPResponder:
+    def summon_responder(self, label: ServiceLabel, at_time=None) \
+            -> SimpleOCSPResponder:
         info = self.get_ocsp_info(label)
         responder_key = self.pki_arch.key_set.get_private_key(info.signing_key)
         issuer_cert_label = info.issuer_cert
@@ -821,7 +875,7 @@ class ServiceRegistry:
             )
         )
 
-    def get_crl_repo_info(self, label) -> CRLRepoServiceInfo:
+    def get_crl_repo_info(self, label: ServiceLabel) -> CRLRepoServiceInfo:
         try:
             return self._crl_repo[label]
         except KeyError as e:
@@ -832,7 +886,7 @@ class ServiceRegistry:
     def list_crl_repos(self) -> List[CRLRepoServiceInfo]:
         return list(self._crl_repo.values())
 
-    def get_cert_repo_info(self, label) -> CertRepoServiceInfo:
+    def get_cert_repo_info(self, label: ServiceLabel) -> CertRepoServiceInfo:
         try:
             return self._cert_repo[label]
         except KeyError as e:
@@ -841,7 +895,7 @@ class ServiceRegistry:
                 f"labelled '{label}'."
             ) from e
 
-    def get_tsa_info(self, label) -> TSAServiceInfo:
+    def get_tsa_info(self, label: ServiceLabel) -> TSAServiceInfo:
         try:
             return self._tsa[label]
         except KeyError as e:
@@ -853,12 +907,13 @@ class ServiceRegistry:
     def list_time_stamping_services(self) -> List[TSAServiceInfo]:
         return list(self._tsa.values())
 
-    def summon_timestamper(self, label, at_time=None) -> TimeStamper:
+    def summon_timestamper(self, label: ServiceLabel, at_time=None) \
+            -> TimeStamper:
         # TODO allow policy parameter to be customised
         info = self.get_tsa_info(label)
         tsa_key = self.pki_arch.key_set.get_private_key(info.signing_key)
         return TimeStamper(
-            tsa_cert=self.pki_arch.get_cert(info.label),
+            tsa_cert=self.pki_arch.get_cert(info.signing_cert),
             tsa_key=tsa_key,
             fixed_dt=at_time,
             signature_algo=choose_signed_digest(
@@ -975,5 +1030,5 @@ class CertomancerConfig:
             )
         }
 
-    def get_pki_arch(self, label) -> PKIArchitecture:
+    def get_pki_arch(self, label: ArchLabel) -> PKIArchitecture:
         return self.pki_archs[label]

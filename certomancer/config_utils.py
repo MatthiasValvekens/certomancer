@@ -8,16 +8,74 @@ user-provided configuration (e.g. from a Yaml file).
 """
 
 import dataclasses
+import re
+from collections.abc import Callable
+
+from datetime import timedelta
+
 
 __all__ = [
     'ConfigurationError', 'ConfigurableMixin', 'check_config_keys',
     'parse_duration', 'key_dashes_to_underscores', 'get_and_apply'
 ]
 
-import re
-from collections import Callable
+from typing import get_args, Optional
 
-from datetime import timedelta
+_noneType = type(None)
+
+
+class LabelString:
+    """
+    Class that can be subclassed to get (somewhat) type-safe label strings.
+    Configurable dataclasses deal with these automagically.
+
+    This wrapper is only intended as a way to help with type hinting,
+    its ``__eq__`` and ``__hash__`` operations delegate to the
+    underlying string.
+    """
+
+    __slots__ = ['value']
+
+    @staticmethod
+    def get_subclass(thing) -> Optional[type]:
+        """
+        Figure out if the annotation 'thing' describes a label type.
+        Used in config ingestion logic to instantiate dataclasses.
+
+        :param thing:
+            A type annotation.
+        """
+
+        if isinstance(thing, type):
+            the_type = thing
+        else:
+            # is it an optional? (i.e. Union[X, None])
+            # if so, retrieve the wrapped type
+            try:
+                type1, type2 = get_args(thing)
+                if type2 is not _noneType:
+                    return None
+            except (ValueError, TypeError):
+                return None
+            the_type = type1
+        return the_type if issubclass(the_type, LabelString) else None
+
+    def __init__(self, value: str):
+        if not isinstance(value, str):
+            raise TypeError
+        self.value = value
+
+    def __str__(self):
+        return self.value
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}('{self.value}')"
+
+    def __hash__(self):
+        return hash(self.value)
+
+    def __eq__(self, other):
+        return str(self) == str(other)
 
 
 class ConfigurationError(ValueError):
@@ -81,6 +139,20 @@ class ConfigurableMixin:
         # in Python we need underscores
         config_dict = key_dashes_to_underscores(config_dict)
         cls.process_entries(config_dict)
+
+        # wrap strings in the appropriate label type where necessary
+        def _label_fields():
+            for f in dataclasses.fields(cls):
+                maybe_label_type = LabelString.get_subclass(f.type)
+                if maybe_label_type is not None:
+                    yield f.name, maybe_label_type
+
+        for fname, label_type in _label_fields():
+            try:
+                label_str = config_dict[fname]
+                config_dict[fname] = label_type(label_str)
+            except KeyError:
+                continue
         try:
             # noinspection PyArgumentList
             return cls(**config_dict)
