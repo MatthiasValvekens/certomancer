@@ -860,7 +860,9 @@ class ServiceRegistry:
         responder_key = self.pki_arch.key_set.get_private_key(info.signing_key)
         issuer_cert_label = info.issuer_cert
         if issuer_cert_label is None:
-            self.pki_arch.get_unique_cert_for_entity(info.for_issuer)
+            issuer_cert_label = self.pki_arch.get_unique_cert_for_entity(
+                info.for_issuer
+            )
         return SimpleOCSPResponder(
             responder_cert=self.pki_arch.get_cert(info.responder_cert),
             responder_key=responder_key,
