@@ -24,40 +24,69 @@ from .services import CertomancerServiceError, generic_sign, CRLBuilder, \
 
 
 class KeyLabel(LabelString):
+    """Label referring to a key or key pair"""
     pass
 
 
 class CertLabel(LabelString):
+    """Label referring to a certificate"""
     pass
 
 
 class EntityLabel(LabelString):
+    """
+    Label referring to an entity (e.g. the subject or issuer of a certificate).
+    Entities more or less correspond to distinguished names.
+    """
     pass
 
 
 class ServiceLabel(LabelString):
+    """
+    Label referring to a service (OCSP, CRL, time stamper, ...).
+    A service is uniquely identified by its type and its label.
+    """
     pass
 
 
 class ProcessorLabel(LabelString):
+    """
+    Label referring to an extension processor (and the corresponding schema).
+    """
     pass
 
 
 class ArchLabel(LabelString):
+    """
+    Label referring to a Certomancer PKI architecture.
+    """
     pass
 
 
 @dataclass(frozen=True)
 class AsymKey:
+    """Class representing asymmetric key pairs."""
+
     public: PublicKeyInfo
     private: Optional[PrivateKeyInfo] = None
 
     @property
     def algorithm(self):
+        """Key algorithm, as a string."""
         return self.public.algorithm
 
 
 class KeyFromFile:
+    """
+    Key backed by data from a file.
+    Can be public or private, DER or PEM encoded.
+    If the file contains a public key, pass ``public_only=True``.
+
+    .. warning::
+        Private keys are decrypted on access and then stored in memory.
+        This shouldn't matter since you aren't supposed to use Certomancer in
+        production environments, but hey, you do you.
+    """
 
     def __init__(self, name: KeyLabel, path: str, public_only: bool = False,
                  password=None):
@@ -115,6 +144,8 @@ class KeyFromFile:
 
 
 class KeySet:
+    """A labelled collection of keys."""
+
     def __init__(self, config, lazy_load_keys=False):
         check_config_keys('KeySet', ('path-prefix', 'keys'), config)
         try:
@@ -166,6 +197,8 @@ class KeySet:
 
 
 class KeySets:
+    """A labelled collection of key sets."""
+
     def __init__(self, config, lazy_load_keys=False):
         self._dict = {
             k: KeySet(v, lazy_load_keys=lazy_load_keys)
@@ -182,6 +215,13 @@ class KeySets:
 
 
 class EntityRegistry:
+    """A registry of entities.
+
+    Entities are internally identified by their labels, which can be converted
+    to distinguished names via the ``__getitem__`` accessor on the entity
+    registry to which they belong.
+    """
+
     def __init__(self, config, defaults=None):
         defaults = {} if defaults is None else \
             key_dashes_to_underscores(defaults)
@@ -204,6 +244,15 @@ class EntityRegistry:
             ) from e
 
     def get_name_hash(self, label: EntityLabel, hash_algo: str):
+        """
+        Compute the hash of an entity's distinguished name.
+
+        :param label:
+            The entity to look up.
+        :param hash_algo:
+            Name of a hash algorithm.
+        :return:
+        """
         # TODO cache these
         ent = self[label]
         return getattr(hashlib, hash_algo)(ent.dump()).digest()
@@ -211,8 +260,19 @@ class EntityRegistry:
 
 @dataclass(frozen=True)
 class Validity(ConfigurableMixin):
+    """Validity period of a certificate."""
+
     valid_from: datetime
+    """
+    Start of validity period. To be specified as an ISO 8601 datetime string
+    (with timezone offset) in the configuration.
+    """
+
     valid_to: datetime
+    """
+    End of validity period. To be specified as an ISO 8601 datetime string
+    (with timezone offset) in the configuration.
+    """
 
     @classmethod
     def process_entries(cls, config_dict):
@@ -232,17 +292,26 @@ class Validity(ConfigurableMixin):
 
 
 class SmartValueProcessor(abc.ABC):
+    """Interface that supplies values for (certificate) extensions."""
+
     def provision(self, arch: 'PKIArchitecture', params):
         raise NotImplementedError
 
 
 @dataclass(frozen=True)
 class SmartValueSpec(ConfigurableMixin):
+    """Class holding configuration for a smart value processor."""
+
     schema: ProcessorLabel
     params: dict = field(default_factory=dict)
 
 
 class SmartValueProcessorRegistry:
+    """
+    Registry of smart value processor implementations for a given PKI
+    architecture.
+    """
+
     def __init__(self, arch: 'PKIArchitecture'):
         self.arch = arch
         self._dict = {}
@@ -264,10 +333,24 @@ class SmartValueProcessorRegistry:
 
 @dataclass(frozen=True)
 class ExtensionSpec(ConfigurableMixin):
+    """Specifies the value of a (certificate) extension."""
+
     id: str
+    """ID of the extension, as a string (see :module:`asn1crypto.x509`)."""
+
     critical: bool = False
+    """Indicates whether the extension is critical or not."""
+
     value: object = None
+    """Provides the value of the extension, in a form that the ``asn1crypto``
+    value class for the extension accepts."""
+
     smart_value: Optional[SmartValueSpec] = None
+    """
+    Provides instructions for the dynamic calculation of an extension value
+    through a smart value processor. Must be omitted if :attr:`value` is
+    present.
+    """
 
     @classmethod
     def process_entries(cls, config_dict):
@@ -295,14 +378,14 @@ class ExtensionSpec(ConfigurableMixin):
             }
         super().process_entries(config_dict)
 
-    def to_asn1(self, proc_registry: SmartValueProcessorRegistry) \
-            -> x509.Extension:
+    def to_asn1(self, proc_registry: SmartValueProcessorRegistry,
+                extn_id_class=x509.ExtensionId) -> x509.Extension:
         value = self.value
         if value is None and self.smart_value is not None:
             value = proc_registry.process_value(self.smart_value)
 
         return x509.Extension({
-            'extn_id': x509.ExtensionId(self.id),
+            'extn_id': extn_id_class(self.id),
             'critical': self.critical,
             'extn_value': value
         })
@@ -313,24 +396,72 @@ EXCLUDED_FROM_TEMPLATE = frozenset({'subject', 'subject_key'})
 
 @dataclass(frozen=True)
 class CertificateSpec(ConfigurableMixin):
+    """Certificate specification."""
     subject: EntityLabel
+    """Certificate subject"""
+
     subject_key: KeyLabel
+    """Subject's (public) key. Defaults to the value of :attr:`subject`."""
+
     issuer: EntityLabel
+    """Certificate issuer"""
+
     authority_key: KeyLabel
+    """Key of the authority issuing the certificate.
+    Private key must be available. Defaults to the value of :attr:`issuer`."""
+
     validity: Validity
+    """Validity period of the certificate."""
+
     _templatable_config: dict
+    """Configuration that can be reused by other certificate specs."""
+
     signature_algo: Optional[str] = None
-    issuer_cert: Optional[CertLabel] = None  # only needed to resolve AKI ambiguity
+    """Signature algorithm designation. Certomancer will try to figure out
+    something sensible if none is given."""
+
+    issuer_cert: Optional[CertLabel] = None
+    """
+    Label of the issuer certificate to use. If the issuer only has one
+    certificate, it is not necessary to provide a value for this field.
+    
+    The certificate is only used to make sure the authority key identifier
+    in the generated certificate matches up with the issuer's subject key
+    identifier. Certomancer calculates these by hashing the public key (as
+    recommended by :rfc:`5280`, but in principle CAs can do whatever they want.
+    """
+
     digest_algo: str = 'sha256'
+    """Digest algorithm to use in the signing process. Defaults to SHA-256."""
+
     revocation: Optional[RevocationStatus] = None
+    """Revocation status of the certificate, if relevant."""
+
     extensions: List[ExtensionSpec] = field(default_factory=list)
+    """Extension settings for the certificate."""
 
     @property
     def self_issued(self) -> bool:
+        """
+        Check whether the corresponding certificate is self-issued,
+        i.e. whether the subject and issuer coincide.
+
+        .. warning::
+            Self-issued and self-signed are two related, but very different
+            notions. Not all self-issued certificates are self-signed (e.g.
+            CA key rollover can be implemented using self-issued certificates),
+            and in principle self-signed certificates need not be self-issued
+            either (although that usually makes little sense in practice).
+        :return:
+        """
         return self.subject == self.issuer
 
     @property
     def self_signed(self) -> bool:
+        """
+        Check whether the produced certificate is self-signed,
+        i.e. whether the signer's (public) key is the same as the subject key.
+        """
         return self.subject_key == self.authority_key
 
     @classmethod
@@ -380,6 +511,11 @@ DEFAULT_FIRST_SERIAL = 0x1001
 
 
 class PKIArchitecture:
+    """
+    A collection of entities, keys, certificates and trust services, as
+    modelled by Certomancer.
+    """
+
     CONFIG_KEYS = (
         'keyset', 'entities', 'certs', 'services', 'entity-defaults'
     )
