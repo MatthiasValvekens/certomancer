@@ -1,4 +1,4 @@
-base-url: "http://ca.example.com"
+external-url-prefix: "http://test.test"
 keysets:
   testing-ca:
     path-prefix: keys-rsa

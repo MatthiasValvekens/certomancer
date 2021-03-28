@@ -532,7 +532,7 @@ class PKIArchitecture:
         }
 
     @classmethod
-    def build_architectures(cls, key_sets: KeySets, cfgs, global_base_url,
+    def build_architectures(cls, key_sets: KeySets, cfgs, external_url_prefix,
                             smart_value_procs=None):
         if smart_value_procs is None:
             smart_value_procs = cls.default_smart_value_procs()
@@ -540,7 +540,7 @@ class PKIArchitecture:
             arch_label = ArchLabel(arch_label)
             check_config_keys(arch_label, PKIArchitecture.CONFIG_KEYS, cfg)
             service_base_url = cfg.get(
-                'base-url', f"{global_base_url}/{arch_label}"
+                'base-url', f"/{arch_label}"
             )
             key_set_label = cfg.get('keyset', arch_label)
             try:
@@ -571,14 +571,22 @@ class PKIArchitecture:
             yield PKIArchitecture(
                 arch_label, key_set=key_set, entities=entities,
                 cert_spec_config=cert_specs,
-                service_config=services, service_base_url=service_base_url,
+                service_config=services,
+                external_url_prefix=external_url_prefix,
+                service_base_url=service_base_url,
                 smart_value_procs=smart_value_procs
             )
 
     def __init__(self, arch_label: ArchLabel,
                  key_set: KeySet, entities: EntityRegistry,
-                 cert_spec_config, service_config, service_base_url,
+                 cert_spec_config, service_config,
+                 external_url_prefix, service_base_url,
                  smart_value_procs=None):
+
+        if not service_base_url.startswith('/'):
+            raise ConfigurationError(
+                "Service base URL should start with '/'."
+            )
         self.arch_label = arch_label
         self.key_set = key_set
         self.entities = entities
@@ -593,7 +601,7 @@ class PKIArchitecture:
         self._serial_by_issuer = defaultdict(lambda: DEFAULT_FIRST_SERIAL)
 
         self.service_registry: ServiceRegistry = ServiceRegistry(
-            self, service_base_url, service_config
+            self, external_url_prefix, service_base_url, service_config
         )
 
         # Parse certificate specs
@@ -826,7 +834,16 @@ class PKIArchitecture:
 @dataclass(frozen=True)
 class ServiceInfo(ConfigurableMixin):
     label: ServiceLabel
+    external_url_prefix: str
     base_url: str
+
+    @property
+    def internal_url(self):
+        return f"{self.base_url}/{self.label}"
+
+    @property
+    def url(self):
+        return f"{self.external_url_prefix}{self.base_url}/{self.label}"
 
 
 @dataclass(frozen=True)
@@ -845,10 +862,6 @@ class OCSPResponderServiceInfo(ServiceInfo):
         except KeyError:
             pass
 
-    @property
-    def url(self):
-        return f"{self.base_url}/{self.label}"
-
 
 @dataclass(frozen=True)
 class TSAServiceInfo(ServiceInfo):
@@ -864,10 +877,6 @@ class TSAServiceInfo(ServiceInfo):
             config_dict.setdefault('signing_key', config_dict['signing_cert'])
         except KeyError:
             pass
-
-    @property
-    def url(self):
-        return f"{self.base_url}/{self.label}"
 
 
 @dataclass(frozen=True)
@@ -892,15 +901,15 @@ class CRLRepoServiceInfo(ServiceInfo):
             pass
 
     @property
-    def repo_url(self):
-        return f"{self.base_url}/{self.label}"
+    def latest_url(self):
+        return f"{self.internal_url}/latest.crl"
 
     @property
-    def latest_url(self):
-        return f"{self.repo_url}/latest.crl"
+    def latest_external_url(self):
+        return f"{self.url}/latest.crl"
 
     def archive_url(self, for_crl_number):
-        return f"{self.repo_url}/archive-{for_crl_number}.crl"
+        return f"{self.internal_url}/archive-{for_crl_number}.crl"
 
 
 @dataclass(frozen=True)
@@ -943,13 +952,15 @@ class OCSPInterface(RevocationInfoInterface):
 
 
 class ServiceRegistry:
-    def __init__(self, pki_arch: PKIArchitecture, base_url, service_config):
+    def __init__(self, pki_arch: PKIArchitecture, external_url_prefix,
+                 base_url, service_config):
         self.services_base_url = base_url
         self.pki_arch = pki_arch
 
         def _gen_svc_config(url_suffix, configs):
             for lbl, cfg in configs.items():
                 cfg = dict(cfg)
+                cfg.setdefault('external-url-prefix', external_url_prefix)
                 cfg.setdefault('base-url', f"{base_url}/{url_suffix}")
                 cfg['label'] = lbl
                 yield lbl, cfg
@@ -1124,7 +1135,7 @@ class ServiceRegistry:
 
 
 class CertomancerConfig:
-    DEFAULT_BASE_URL = 'http://ca.example.com'
+    DEFAULT_EXTERNAL_URL_PREFIX = 'http://ca.example.com'
 
     @classmethod
     def from_yaml(cls, yaml_str) -> 'CertomancerConfig':
@@ -1146,7 +1157,9 @@ class CertomancerConfig:
                 os.chdir(cwd)
 
     def __init__(self, config, lazy_load_keys=False):
-        self.base_url = base_url = config.get('base-url', self.DEFAULT_BASE_URL)
+        self.external_url_prefix = external_url_prefix = config.get(
+            'external-url-prefix', self.DEFAULT_EXTERNAL_URL_PREFIX
+        )
         try:
             key_set_cfg = config['keysets']
         except KeyError as e:
@@ -1166,7 +1179,7 @@ class CertomancerConfig:
         self.pki_archs = {
             arch.arch_label: arch
             for arch in PKIArchitecture.build_architectures(
-                key_sets, arch_cfgs, base_url
+                key_sets, arch_cfgs, external_url_prefix=external_url_prefix
             )
         }
 

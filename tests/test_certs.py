@@ -89,7 +89,7 @@ def test_self_signed(label):
     arch = PKIArchitecture(
         arch_label=ArchLabel('test'), key_set=RSA_KEYS, entities=ENTITIES,
         cert_spec_config=yaml.safe_load(cfg), service_config={},
-        service_base_url='http://test.test',
+        external_url_prefix='http://test.test', service_base_url='/test'
     )
     root_cert = arch.get_cert(CertLabel(label))
     assert root_cert.subject == ENTITIES[EntityLabel('root')]
@@ -139,7 +139,7 @@ def test_issue_intermediate():
     arch = PKIArchitecture(
         arch_label=ArchLabel('test'), key_set=RSA_KEYS, entities=ENTITIES,
         cert_spec_config=yaml.safe_load(cfg), service_config={},
-        service_base_url='http://test.test',
+        external_url_prefix='http://test.test', service_base_url='/test'
     )
     root_cert = arch.get_cert(CertLabel('root-ca'))
     assert root_cert.subject == ENTITIES[EntityLabel('root')]

@@ -46,7 +46,7 @@ class Illusionist:
 
         for crl_repo in services.list_crl_repos():
             mocker.register_uri(
-                'GET', crl_repo.latest_url,
+                'GET', crl_repo.latest_external_url,
                 content=partial(
                     self.serve_crl,
                     label=crl_repo.label

@@ -19,7 +19,7 @@ class CRLDistributionPointsProc(SmartValueProcessor):
         def _distpoints():
             for repo_name in repo_names:
                 repo_info = arch.service_registry.get_crl_repo_info(repo_name)
-                url = repo_info.latest_url
+                url = repo_info.latest_external_url
                 yield {'distribution_point': url_distribution_point_name(url)}
         return list(_distpoints())
 
