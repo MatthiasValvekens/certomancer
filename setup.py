@@ -63,6 +63,7 @@ setup(
     },
     tests_require=[
         'pytest>=6.1.1',
+        'pytz>=2020.1',
     ],
     keywords="pki testing"
 )

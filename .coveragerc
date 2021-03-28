@@ -1,0 +1,13 @@
+[run]
+    omit = *docs*
+           *test*
+           *venv*
+           setup.py
+
+[report]
+exclude_lines =
+    pragma: no cover
+    pragma: nocover
+    raise AssertionError
+    raise NotImplementedError
+precision = 2
