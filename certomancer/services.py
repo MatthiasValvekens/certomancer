@@ -143,12 +143,14 @@ class TimeStamper:
 
 
 class CRLBuilder:
-    def __init__(self, issuer_cert: x509.Certificate,
+    def __init__(self, issuer_name: x509.Name,
                  issuer_key: keys.PrivateKeyInfo,
-                 signature_algo: algos.SignedDigestAlgorithm):
-        self.issuer_cert = issuer_cert
+                 signature_algo: algos.SignedDigestAlgorithm,
+                 authority_key_identifier: core.OctetString):
+        self.issuer_name = issuer_name
         self.issuer_key = issuer_key
         self.signature_algo = signature_algo
+        self.authority_key_identifier = authority_key_identifier
 
     def build_crl(self, crl_number: int,
                   this_update: datetime, next_update: datetime,
@@ -206,9 +208,9 @@ class CRLBuilder:
             }),
             crl.TBSCertListExtension({
                 'extn_id': 'authority_key_identifier',
-                'extn_value': core.ParsableOctetString(
-                    self.issuer_cert.authority_key_identifier_value.dump()
-                ),
+                'extn_value': x509.AuthorityKeyIdentifier({
+                    'key_identifier': self.authority_key_identifier
+                })
             }),
         ]
         if distpoint_url is not None:
@@ -227,7 +229,7 @@ class CRLBuilder:
         return crl.TbsCertList({
             'version': 'v2',
             'signature': self.signature_algo,
-            'issuer': self.issuer_cert.subject,
+            'issuer': self.issuer_name,
             'this_update': x509.Time({'general_time': this_update}),
             'next_update': x509.Time({'general_time': next_update}),
             'revoked_certificates': revoked,

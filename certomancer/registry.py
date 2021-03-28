@@ -4,7 +4,7 @@ import os.path
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Optional, List
+from typing import Optional, List, Dict
 
 import yaml
 from dateutil.parser import parse as parse_dt
@@ -405,7 +405,7 @@ class PKIArchitecture:
     def __init__(self, arch_label: str,
                  key_set: KeySet, entities: EntityRegistry,
                  cert_spec_config, service_config, service_base_url,
-                 smart_value_procs):
+                 smart_value_procs=None):
         self.arch_label = arch_label
         self.key_set = key_set
         self.entities = entities
@@ -426,8 +426,10 @@ class PKIArchitecture:
         # Parse certificate specs
         # This only processes the configuration, the actual signing etc.
         # happens on-demand
-        self._cert_specs = cert_specs = {}
-        self._labels_by_issuer = defaultdict(list)
+        cert_specs: Dict[str, CertificateSpec]  = {}
+        self._cert_specs = cert_specs
+        self._cert_labels_by_issuer = defaultdict(list)
+        self._cert_labels_by_subject = defaultdict(list)
         for name, cert_config in cert_spec_config.items():
             cert_config = key_dashes_to_underscores(cert_config)
             template = cert_config.pop('template', None)
@@ -459,7 +461,8 @@ class PKIArchitecture:
             cert_specs[name] = spec = CertificateSpec.from_config(
                 effective_cert_config
             )
-            self._labels_by_issuer[spec.issuer].append(name)
+            self._cert_labels_by_issuer[spec.issuer].append(name)
+            self._cert_labels_by_subject[spec.subject].append(name)
 
         self._cert_cache = {}
 
@@ -477,7 +480,7 @@ class PKIArchitecture:
         if issuer_label is None:
             try:
                 issuer_label = next(
-                    lbl for lbl in self._labels_by_issuer.keys()
+                    lbl for lbl in self._cert_labels_by_issuer.keys()
                     # we could go via entities, but this way is safer
                     if issuer_match(cid, self.get_cert(lbl))
                 )
@@ -486,7 +489,7 @@ class PKIArchitecture:
                     f"Could not find a suitable issuer for CertID {cid.native}."
                 ) from e
 
-        specs = self._labels_by_issuer[issuer_label]
+        specs = self._cert_labels_by_issuer[issuer_label]
         try:
             return next(
                 lbl for lbl in specs
@@ -512,7 +515,7 @@ class PKIArchitecture:
 
         # start writing only after we know that all certs have been built
         ext = '.cert.pem' if use_pem else '.crt'
-        for iss_label, iss_certs in self._labels_by_issuer.items():
+        for iss_label, iss_certs in self._cert_labels_by_issuer.items():
             iss_path = os.path.join(folder_path, iss_label)
             os.makedirs(iss_path, exist_ok=True)
             for cert_label in iss_certs:
@@ -610,8 +613,19 @@ class PKIArchitecture:
         else:
             return None
 
+    def get_cert_labels_for_entity(self, entity_label: str):
+        return self._cert_labels_by_subject[entity_label]
+
+    def get_unique_cert_for_entity(self, entity_label: str):
+        labels = self.get_cert_labels_for_entity(entity_label)
+        if len(labels) != 1:
+            raise CertomancerServiceError(
+                f"The certificate for the entity '{entity_label}' is unclear."
+            )
+        return labels[0]
+
     def get_revoked_certs_at_time(self, issuer_label: str, at_time: datetime):
-        labels = self._labels_by_issuer[issuer_label]
+        labels = self._cert_labels_by_issuer[issuer_label]
         for cert_label in labels:
             revo = self.check_revocation_status(cert_label, at_time=at_time)
             cert = self.get_cert(cert_label)
@@ -631,6 +645,7 @@ class OCSPResponderServiceInfo(ServiceInfo):
     responder_cert: str
     signing_key: str = None
     signature_algo: Optional[str] = None
+    issuer_cert: Optional[str] = None
     digest_algo: str = 'sha256'
 
     @classmethod
@@ -670,6 +685,7 @@ class CRLRepoServiceInfo(ServiceInfo):
     for_issuer: str
     signing_key: str
     simulated_update_schedule: timedelta
+    issuer_cert: Optional[str] = None
     signature_algo: Optional[str] = None
     digest_algo: str = 'sha256'
 
@@ -720,12 +736,14 @@ class CertRepoServiceInfo(ServiceInfo):
 
 class OCSPInterface(RevocationInfoInterface):
 
-    def __init__(self, for_issuer: str, pki_arch: PKIArchitecture):
+    def __init__(self, for_issuer: str, pki_arch: PKIArchitecture,
+                 issuer_cert_label: str):
         self.for_issuer = for_issuer
         self.pki_arch = pki_arch
+        self.issuer_cert_label = issuer_cert_label
 
     def get_issuer_cert(self) -> x509.Certificate:
-        return self.pki_arch.get_cert(self.for_issuer)
+        return self.pki_arch.get_cert(self.issuer_cert_label)
 
     def check_revocation_status(self, cid: ocsp.CertId, at_time: datetime):
         cert_label = self.pki_arch.find_cert_label(
@@ -786,6 +804,9 @@ class ServiceRegistry:
     def summon_responder(self, label, at_time=None) -> SimpleOCSPResponder:
         info = self.get_ocsp_info(label)
         responder_key = self.pki_arch.key_set.get_private_key(info.signing_key)
+        issuer_cert_label = info.issuer_cert
+        if issuer_cert_label is None:
+            self.pki_arch.get_unique_cert_for_entity(info.for_issuer)
         return SimpleOCSPResponder(
             responder_cert=self.pki_arch.get_cert(info.responder_cert),
             responder_key=responder_key,
@@ -795,7 +816,8 @@ class ServiceRegistry:
             ),
             at_time=at_time,
             revinfo_interface=OCSPInterface(
-                for_issuer=info.for_issuer, pki_arch=self.pki_arch
+                for_issuer=info.for_issuer, pki_arch=self.pki_arch,
+                issuer_cert_label=issuer_cert_label
             )
         )
 
@@ -854,10 +876,17 @@ class ServiceRegistry:
         # TODO support indirect CRLs, delta CRLs, etc.?
 
         crl_info = self.get_crl_repo_info(repo_label)
-        iss_cert = self.pki_arch.get_cert(crl_info.for_issuer)
-        signing_key = self.pki_arch.key_set.get_private_key(
-            crl_info.signing_key
-        )
+        issuer_cert_label = crl_info.issuer_cert
+        signing_key = self.pki_arch.key_set.\
+            get_private_key(crl_info.signing_key)
+
+        if issuer_cert_label is None:
+            # we need a cert to compute the right authority key identifier,
+            # time origin etc.
+            issuer_cert_label = self.pki_arch.get_unique_cert_for_entity(
+                crl_info.for_issuer
+            )
+        iss_cert = self.pki_arch.get_cert(issuer_cert_label)
 
         time_origin = iss_cert.not_valid_before
         time_delta = crl_info.simulated_update_schedule
@@ -879,11 +908,13 @@ class ServiceRegistry:
         next_update = this_update + time_delta
 
         builder = CRLBuilder(
-            issuer_cert=iss_cert, issuer_key=signing_key,
+            issuer_name=self.pki_arch.entities[crl_info.for_issuer],
+            issuer_key=signing_key,
             signature_algo=choose_signed_digest(
                 crl_info.digest_algo, signing_key.algorithm,
                 signature_algo=crl_info.signature_algo
-            )
+            ),
+            authority_key_identifier=iss_cert.key_identifier_value
         )
 
         revoked = list(
