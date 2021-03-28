@@ -22,10 +22,8 @@ DEFAULT_CONFIG_FILE = 'certomancer.yml'
               help='root folder for key material paths [default: CWD]',
               required=False, type=click.Path(readable=True, file_okay=False))
 @click.pass_context
-def cli(ctx, config, key_material_root):
-    cfg = CertomancerConfig.from_file(
-        config or DEFAULT_CONFIG_FILE, key_material_root
-    )
+def cli(ctx, config, key_root):
+    cfg = CertomancerConfig.from_file(config or DEFAULT_CONFIG_FILE, key_root)
 
     ctx.ensure_object(dict)
     ctx.obj['config'] = cfg
