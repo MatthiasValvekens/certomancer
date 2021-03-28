@@ -97,6 +97,8 @@ class KeySet:
                 "The 'keys' entry is mandatory in all key sets"
             ) from e
         path_prefix = config.get('path-prefix', '')
+        if path_prefix and not path_prefix.endswith('/'):
+            path_prefix += '/'
 
         # apply path prefix to key configs
         def _prepend(key_conf):
