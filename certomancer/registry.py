@@ -704,16 +704,15 @@ class PKIArchitecture:
             # noinspection PyStatementEffect
             cert.native
 
-    def zip_certs(self, output_buffer, use_pem=True):
+    def zip_certs(self, output_buffer, use_pem=True, flat=False):
         self._load_all_certs()
         ext = '.cert.pem' if use_pem else '.crt'
         zip_file = ZipFile(output_buffer, 'w')
         lbl = self.arch_label.value
         for iss_label, iss_certs in self._cert_labels_by_issuer.items():
+            prefix = lbl if flat else os.path.join(lbl, iss_label.value)
             for cert_label in iss_certs:
-                fname = os.path.join(
-                    lbl, iss_label.value, cert_label.value + ext
-                )
+                fname = os.path.join(prefix, cert_label.value + ext)
                 cert = self.get_cert(cert_label)
                 data = cert.dump()
                 if use_pem:
@@ -721,18 +720,23 @@ class PKIArchitecture:
                 zip_file.writestr(fname, data)
         zip_file.close()
 
-    def dump_certs(self, folder_path: str, use_pem=True):
+    def dump_certs(self, folder_path: str, use_pem=True, flat=False):
         self._load_all_certs()
 
         # start writing only after we know that all certs have been built
         ext = '.cert.pem' if use_pem else '.crt'
+        os.makedirs(folder_path, exist_ok=True)
         for iss_label, iss_certs in self._cert_labels_by_issuer.items():
-            iss_path = os.path.join(folder_path, iss_label.value)
-            os.makedirs(iss_path, exist_ok=True)
+            if not flat:
+                iss_path = os.path.join(folder_path, iss_label.value)
+                os.makedirs(iss_path, exist_ok=True)
+            else:
+                iss_path = folder_path
             for cert_label in iss_certs:
-                name = cert_label.value
+                name = cert_label.value + ext
                 cert = self.get_cert(cert_label)
-                with open(os.path.join(iss_path, name + ext), 'wb') as f:
+                name = os.path.join(iss_path, name)
+                with open(name, 'wb') as f:
                     data = cert.dump()
                     if use_pem:
                         data = pem.armor('certificate', data)

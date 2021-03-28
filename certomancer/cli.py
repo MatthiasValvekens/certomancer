@@ -58,19 +58,22 @@ def cli(ctx, config, key_root):
 @click.pass_context
 @click.argument('architecture', type=str, metavar='PKI_ARCH')
 @click.argument('output', type=click.Path(writable=True))
+@click.option('--flat',
+              help='do not group certificates by issuer',
+              type=bool, is_flag=True)
 @click.option('--archive',
               help='create a .zip archive instead of individual files',
               type=bool, is_flag=True)
 @click.option('--no-pem', help='use raw DER instead of PEM output',
               required=False, type=bool, is_flag=True)
-def summon(ctx, architecture, output, no_pem, archive):
+def summon(ctx, architecture, output, no_pem, archive, flat):
     cfg: CertomancerConfig = next(ctx.obj['config'])
     pki_arch = cfg.get_pki_arch(architecture)
     if archive:
         with open(output, 'wb') as outf:
-            pki_arch.zip_certs(outf, use_pem=not no_pem)
+            pki_arch.zip_certs(outf, use_pem=not no_pem, flat=flat)
     else:
-        pki_arch.dump_certs(output, use_pem=not no_pem)
+        pki_arch.dump_certs(output, use_pem=not no_pem, flat=flat)
 
 
 @cli.command(help='create a CRL')
