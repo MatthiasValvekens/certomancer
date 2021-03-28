@@ -60,7 +60,7 @@ setup(
     ],
     extras_require={
         'requests-mocker': ['requests-mock>=1.8.0'],
-        'web-api': ['Werkzeug>=1.0.1']
+        'web-api': ['Werkzeug>=1.0.1', 'Jinja2>=2.11.3']
     },
     tests_require=[
         'pytest>=6.1.1',

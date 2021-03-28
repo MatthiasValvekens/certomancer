@@ -7,6 +7,7 @@ from typing import Optional, Dict
 
 import tzlocal
 from asn1crypto import ocsp, tsp, pem
+from jinja2 import FileSystemLoader, Environment
 from werkzeug.wrappers import Request, Response
 from werkzeug.routing import Map, Rule, BaseConverter
 from werkzeug.exceptions import HTTPException, NotFound, InternalServerError
@@ -95,6 +96,39 @@ def service_rules(services: ServiceRegistry):
             )
 
 
+@dataclass(frozen=True)
+class ArchServicesDescription:
+    arch: ArchLabel
+    tsa: list
+    ocsp: list
+    crl: list
+
+
+def gen_index(architectures):
+    template_path = os.path.join(
+        os.path.dirname(__file__), 'animator_templates'
+    )
+
+    def _index_info():
+        pki_arch: PKIArchitecture
+        for pki_arch in architectures:
+            services = pki_arch.service_registry
+            yield ArchServicesDescription(
+                pki_arch.arch_label,
+                tsa=services.list_time_stamping_services(),
+                ocsp=services.list_ocsp_responders(),
+                crl=services.list_crl_repos()
+            )
+
+    # the index is fixed from the moment the server is launched, so
+    #  just go ahead and render it
+    jinja_env = Environment(
+        loader=FileSystemLoader(template_path), autoescape=True
+    )
+    template = jinja_env.get_template('index.html')
+    return template.render(pki_archs=list(_index_info()))
+
+
 class Animator:
 
     def __init__(self, architectures: Dict[ArchLabel, PKIArchitecture],
@@ -103,6 +137,7 @@ class Animator:
         self.architectures = architectures
 
         def _all_rules():
+            yield Rule('/', endpoint='index')
             for pki_arch in architectures.values():
                 yield from service_rules(pki_arch.service_registry)
 
@@ -110,6 +145,7 @@ class Animator:
             list(_all_rules()),
             converters={'label': LabelConverter}
         )
+        self.index_html = gen_index(architectures.values())
 
     @property
     def at_time(self):
@@ -190,6 +226,8 @@ class Animator:
         #  to check request size etc. might be prudent
         try:
             endpoint, values = adapter.match()
+            if endpoint == 'index':
+                return Response(self.index_html, mimetype='text/html')
             assert isinstance(endpoint, Endpoint)
             if endpoint.service_type == ServiceType.OCSP:
                 return self.serve_ocsp_response(

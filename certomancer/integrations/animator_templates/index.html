@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Animator index</title>
+</head>
+<body>
+<h1>Index of Certomancer PKI services</h1>
+This page lists all PKI services provided by this Animator instance. Right-click to copy links.
+<hr/>
+{% for arch_services in pki_archs %}
+    {# TODO make CRL repos and cert repos browsable #}
+    <h2>Architecture: {{ arch_services.arch }}</h2>
+    <h3>Time stamping</h3>
+    {% if arch_services.tsa %}
+        <ul>
+        {% for tsa in arch_services.tsa %}
+            <li><a href="{{ tsa.internal_url }}">{{ tsa.label }}</a></li>
+        {% endfor %}
+        </ul>
+    {% else %}
+        <p>No TSA services</p>
+    {% endif %}
+    <h3>OCSP</h3>
+    {% if arch_services.ocsp %}
+        <ul>
+            {% for ocsp in arch_services.ocsp %}
+                <li><a href="{{ ocsp.internal_url }}">{{ ocsp.label }}</a></li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p>No OCSP services</p>
+    {% endif %}
+    <h3>CRL</h3>
+    {% if arch_services.crl %}
+        <ul>
+            {% for crl in arch_services.crl %}
+                <li><a href="{{ crl.latest_url }}">{{ crl.label }}</a> (latest)</li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p>No CRL repositories</p>
+    {% endif %}
+    <hr/>
+{% endfor %}
+</body>
+</html>
