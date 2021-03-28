@@ -154,11 +154,12 @@ class CRLBuilder:
 
     def build_crl(self, crl_number: int,
                   this_update: datetime, next_update: datetime,
-                  revoked_certs, distpoint_url=None) -> crl.CertificateList:
+                  revoked_certs, distpoint: x509.DistributionPoint = None) \
+            -> crl.CertificateList:
         tbs_crl = self.format_tbs_crl(
             crl_number=crl_number, this_update=this_update,
             revoked_certs=revoked_certs,
-            next_update=next_update, distpoint_url=distpoint_url
+            next_update=next_update, distpoint=distpoint
         )
         return self.sign_crl(tbs_crl)
 
@@ -200,7 +201,8 @@ class CRLBuilder:
 
     def format_tbs_crl(self, crl_number: int, this_update: datetime,
                        revoked_certs, next_update: datetime,
-                       distpoint_url=None) -> crl.TbsCertList:
+                       distpoint: x509.DistributionPoint = None) \
+            -> crl.TbsCertList:
         extensions = [
             crl.TBSCertListExtension({
                 'extn_id': 'crl_number', 'extn_value':
@@ -213,11 +215,8 @@ class CRLBuilder:
                 })
             }),
         ]
-        if distpoint_url is not None:
-            distpoint_name = url_distribution_point_name(distpoint_url)
-            extn_value = crl.IssuingDistributionPoint(
-                {'distribution_point': distpoint_name}
-            )
+        if distpoint is not None:
+            extn_value = crl.IssuingDistributionPoint(distpoint)
             extensions.append(
                 crl.TBSCertListExtension({
                     'extn_id': 'issuing_distribution_point',
@@ -237,9 +236,15 @@ class CRLBuilder:
         })
 
 
-def url_distribution_point_name(url):
+def url_distribution_point(url, extra_urls=()):
+    def _wrap(x):
+        return x509.GeneralName({'uniform_resource_identifier': x})
     return {
-        'full_name': [x509.GeneralName({'uniform_resource_identifier': url})]
+        'distribution_point': {
+            'full_name': [
+                _wrap(url), *(_wrap(x) for x in extra_urls)
+            ]
+        }
     }
 
 

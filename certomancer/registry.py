@@ -21,7 +21,7 @@ from .config_utils import (
 )
 from .services import CertomancerServiceError, generic_sign, CRLBuilder, \
     choose_signed_digest, SimpleOCSPResponder, TimeStamper, \
-    RevocationInfoInterface, RevocationStatus
+    RevocationInfoInterface, RevocationStatus, url_distribution_point
 
 
 class KeyLabel(LabelString):
@@ -911,6 +911,7 @@ class CRLRepoServiceInfo(ServiceInfo):
     signing_key: KeyLabel
     simulated_update_schedule: timedelta
     issuer_cert: Optional[CertLabel] = None
+    extra_urls: List[str] = field(default_factory=list)
     signature_algo: Optional[str] = None
     digest_algo: str = 'sha256'
 
@@ -936,6 +937,11 @@ class CRLRepoServiceInfo(ServiceInfo):
 
     def archive_url(self, for_crl_number):
         return f"{self.internal_url}/archive-{for_crl_number}.crl"
+
+    def format_distpoint(self):
+        return url_distribution_point(
+            self.latest_external_url, self.extra_urls
+        )
 
 
 @dataclass(frozen=True)
@@ -1156,7 +1162,8 @@ class ServiceRegistry:
         )
         return builder.build_crl(
             crl_number=number, this_update=this_update,
-            next_update=next_update, revoked_certs=revoked
+            next_update=next_update, revoked_certs=revoked,
+            distpoint=crl_info.format_distpoint()
         )
 
     def get_cert_from_repo(self, repo_label: ServiceLabel,

@@ -2,7 +2,6 @@ from asn1crypto import x509
 
 from .config_utils import ConfigurationError
 from .registry import SmartValueProcessor, PKIArchitecture
-from .services import url_distribution_point_name
 
 
 class CRLDistributionPointsProc(SmartValueProcessor):
@@ -19,8 +18,7 @@ class CRLDistributionPointsProc(SmartValueProcessor):
         def _distpoints():
             for repo_name in repo_names:
                 repo_info = arch.service_registry.get_crl_repo_info(repo_name)
-                url = repo_info.latest_external_url
-                yield {'distribution_point': url_distribution_point_name(url)}
+                yield repo_info.format_distpoint()
         return list(_distpoints())
 
 
