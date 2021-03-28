@@ -18,7 +18,7 @@ DEFAULT_CONFIG_FILE = 'certomancer.yml'
               help=('YAML file to load configuration from '
                     f'[default: {DEFAULT_CONFIG_FILE}]'),
               required=False, type=click.Path(readable=True, dir_okay=False))
-@click.option('--key-material-root',
+@click.option('--key-root',
               help='root folder for key material paths [default: CWD]',
               required=False, type=click.Path(readable=True, file_okay=False))
 @click.pass_context

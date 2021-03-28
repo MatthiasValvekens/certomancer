@@ -993,13 +993,13 @@ class CertomancerConfig:
 
     @classmethod
     def from_file(cls, cfg_path, working_dir=None) -> 'CertomancerConfig':
+        with open(cfg_path, 'r') as inf:
+            config_dict = yaml.safe_load(inf)
         cwd = None
         if working_dir is not None:
             cwd = os.getcwd()
             os.chdir(working_dir)
         try:
-            with open(cfg_path, 'r') as inf:
-                config_dict = yaml.safe_load(inf)
             return CertomancerConfig(config_dict)
         finally:
             if cwd is not None:
