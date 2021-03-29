@@ -717,22 +717,6 @@ class PKIArchitecture:
         for iss_label, issd_certs in self._cert_labels_by_issuer.items():
             yield iss_label, map(self.get_cert_spec, issd_certs)
 
-    def zip_certs(self, output_buffer, use_pem=True, flat=False):
-        self._load_all_certs()
-        ext = '.cert.pem' if use_pem else '.crt'
-        zip_file = ZipFile(output_buffer, 'w')
-        lbl = self.arch_label.value
-        for iss_label, issd_certs in self._cert_labels_by_issuer.items():
-            prefix = lbl if flat else os.path.join(lbl, iss_label.value)
-            for cert_label in issd_certs:
-                fname = os.path.join(prefix, cert_label.value + ext)
-                cert = self.get_cert(cert_label)
-                data = cert.dump()
-                if use_pem:
-                    data = pem.armor('certificate', data)
-                zip_file.writestr(fname, data)
-        zip_file.close()
-
     def get_chain(self, cert_label: CertLabel) -> Iterable[CertLabel]:
         # TODO support different chaining modes
         #  (e.g. until a cert in a certain list of roots, or until a cert
@@ -789,28 +773,43 @@ class PKIArchitecture:
         key_pair = self.key_set.get_asym_key(key_label)
         return key_pair.private is not None
 
-    def dump_certs(self, folder_path: str, use_pem=True, flat=False):
+    def _dump_certs(self, use_pem=True, flat=False):
         self._load_all_certs()
-
         # start writing only after we know that all certs have been built
         ext = '.cert.pem' if use_pem else '.crt'
-        os.makedirs(folder_path, exist_ok=True)
         for iss_label, iss_certs in self._cert_labels_by_issuer.items():
             if not flat:
-                iss_path = os.path.join(folder_path, iss_label.value)
-                os.makedirs(iss_path, exist_ok=True)
-            else:
-                iss_path = folder_path
+                yield iss_label.value, None
             for cert_label in iss_certs:
                 name = cert_label.value + ext
                 cert = self.get_cert(cert_label)
-                name = os.path.join(iss_path, name)
-                with open(name, 'wb') as f:
-                    data = cert.dump()
-                    if use_pem:
-                        data = pem.armor('certificate', data)
+                if not flat:
+                    name = os.path.join(iss_label.value, name)
+                data = cert.dump()
+                if use_pem:
+                    data = pem.armor('certificate', data)
+                yield name, data
+
+    def dump_certs(self, folder_path: str, use_pem=True, flat=False):
+        self._load_all_certs()
+        os.makedirs(folder_path, exist_ok=True)
+        for name, data in self._dump_certs(use_pem=use_pem, flat=flat):
+            path = os.path.join(folder_path, name)
+            if data is None:  # folder
+                os.makedirs(path, exist_ok=True)
+            else:
+                with open(path, 'wb') as f:
                     f.write(data)
 
+    def zip_certs(self, output_buffer, use_pem=True, flat=False):
+        zip_file = ZipFile(output_buffer, 'w')
+        lbl = self.arch_label.value
+        for name, data in self._dump_certs(use_pem=use_pem, flat=flat):
+            if data is None:
+                continue
+            fname = os.path.join(lbl, name)
+            zip_file.writestr(fname, data)
+        zip_file.close()
 
     def get_cert(self, label: CertLabel) -> x509.Certificate:
         try:
