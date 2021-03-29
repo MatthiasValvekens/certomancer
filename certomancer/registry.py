@@ -17,7 +17,8 @@ from asn1crypto.keys import PrivateKeyInfo, PublicKeyInfo
 
 from .config_utils import (
     ConfigurationError, check_config_keys, LabelString,
-    ConfigurableMixin, parse_duration, key_dashes_to_underscores, get_and_apply
+    ConfigurableMixin, parse_duration, key_dashes_to_underscores, get_and_apply,
+    pyca_cryptography_present
 )
 from .services import CertomancerServiceError, generic_sign, CRLBuilder, \
     choose_signed_digest, SimpleOCSPResponder, TimeStamper, \
@@ -773,7 +774,8 @@ class PKIArchitecture:
         key_pair = self.key_set.get_asym_key(key_label)
         return key_pair.private is not None
 
-    def _dump_certs(self, use_pem=True, flat=False):
+    def _dump_certs(self, use_pem=True, flat=False, include_pkcs12=False):
+        include_pkcs12 &= pyca_cryptography_present()
         self._load_all_certs()
         # start writing only after we know that all certs have been built
         ext = '.cert.pem' if use_pem else '.crt'
@@ -781,19 +783,27 @@ class PKIArchitecture:
             if not flat:
                 yield iss_label.value, None
             for cert_label in iss_certs:
-                name = cert_label.value + ext
                 cert = self.get_cert(cert_label)
+                base_name = cert_label.value
                 if not flat:
-                    name = os.path.join(iss_label.value, name)
+                    base_name = os.path.join(iss_label.value, base_name)
+                name = base_name + ext
                 data = cert.dump()
                 if use_pem:
                     data = pem.armor('certificate', data)
                 yield name, data
 
-    def dump_certs(self, folder_path: str, use_pem=True, flat=False):
+                if include_pkcs12 and self.is_subject_key_available(cert_label):
+                    yield base_name + '.pfx', self.package_pkcs12(cert_label)
+
+    def dump_certs(self, folder_path: str, use_pem=True, flat=False,
+                   include_pkcs12=False):
         self._load_all_certs()
         os.makedirs(folder_path, exist_ok=True)
-        for name, data in self._dump_certs(use_pem=use_pem, flat=flat):
+        itr = self._dump_certs(
+            use_pem=use_pem, flat=flat, include_pkcs12=include_pkcs12
+        )
+        for name, data in itr:
             path = os.path.join(folder_path, name)
             if data is None:  # folder
                 os.makedirs(path, exist_ok=True)
@@ -801,10 +811,14 @@ class PKIArchitecture:
                 with open(path, 'wb') as f:
                     f.write(data)
 
-    def zip_certs(self, output_buffer, use_pem=True, flat=False):
+    def zip_certs(self, output_buffer, use_pem=True, flat=False,
+                  include_pkcs12=False):
         zip_file = ZipFile(output_buffer, 'w')
         lbl = self.arch_label.value
-        for name, data in self._dump_certs(use_pem=use_pem, flat=flat):
+        itr = self._dump_certs(
+            use_pem=use_pem, flat=flat, include_pkcs12=include_pkcs12
+        )
+        for name, data in itr:
             if data is None:
                 continue
             fname = os.path.join(lbl, name)

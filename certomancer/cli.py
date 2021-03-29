@@ -7,21 +7,23 @@ import click
 import tzlocal
 import logging
 
+from .config_utils import pyca_cryptography_present
 from .registry import CertomancerConfig
 from .version import __version__
 
 DEFAULT_CONFIG_FILE = 'certomancer.yml'
+logger = logging.getLogger(__name__)
 
 
 def _log_config():
-    logger = logging.getLogger('certomancer')
-    logger.setLevel(logging.INFO)
+    _logger = logging.getLogger('certomancer')
+    _logger.setLevel(logging.INFO)
     handler = logging.StreamHandler()
     formatter = logging.Formatter(
         '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
     handler.setFormatter(formatter)
-    logger.addHandler(handler)
+    _logger.addHandler(handler)
 
 
 def _lazy_cfg(config, key_root):
@@ -63,16 +65,27 @@ def cli(ctx, config, key_root):
 @click.option('--archive',
               help='create a .zip archive instead of individual files',
               type=bool, is_flag=True)
+@click.option('--no-pfx', help='do not attempt to create PKCS#12 files',
+              type=bool, is_flag=True)
 @click.option('--no-pem', help='use raw DER instead of PEM output',
               required=False, type=bool, is_flag=True)
-def summon(ctx, architecture, output, no_pem, archive, flat):
+def summon(ctx, architecture, output, no_pem, archive, flat, no_pfx):
     cfg: CertomancerConfig = next(ctx.obj['config'])
     pki_arch = cfg.get_pki_arch(architecture)
+    if not no_pfx and not pyca_cryptography_present():
+        no_pfx = True
+        logger.warning(
+            "pyca/cryptography not installed, no PFX files will be created"
+        )
+
+    kwargs = {
+        'use_pem': not no_pem, 'flat': flat, 'include_pkcs12': not no_pfx
+    }
     if archive:
         with open(output, 'wb') as outf:
-            pki_arch.zip_certs(outf, use_pem=not no_pem, flat=flat)
+            pki_arch.zip_certs(outf, **kwargs)
     else:
-        pki_arch.dump_certs(output, use_pem=not no_pem, flat=flat)
+        pki_arch.dump_certs(output, **kwargs)
 
 
 @cli.command(help='create a CRL')
