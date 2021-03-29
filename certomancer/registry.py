@@ -5,7 +5,7 @@ import os.path
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Iterable, Tuple
 from zipfile import ZipFile
 
 import yaml
@@ -186,7 +186,7 @@ class KeySet:
                 f"There is no key labelled '{name}'."
             ) from e
 
-    def retrieve_asym_key(self, name) -> AsymKey:
+    def get_asym_key(self, name) -> AsymKey:
         return self[name].key_pair
 
     def get_public_key(self, name) -> PublicKeyInfo:
@@ -402,6 +402,10 @@ EXCLUDED_FROM_TEMPLATE = frozenset({'subject', 'subject_key'})
 @dataclass(frozen=True)
 class CertificateSpec(ConfigurableMixin):
     """Certificate specification."""
+
+    label: CertLabel
+    """Internal name of the certificate spec."""
+
     subject: EntityLabel
     """Certificate subject"""
 
@@ -510,6 +514,9 @@ class CertificateSpec(ConfigurableMixin):
             if k not in EXCLUDED_FROM_TEMPLATE
         }
         return super().from_config(config_dict)
+
+    def resolve_issuer_cert(self, arch: 'PKIArchitecture') -> CertLabel:
+        return self.issuer_cert or arch.get_unique_cert_for_entity(self.issuer)
 
 
 DEFAULT_FIRST_SERIAL = 0x1001
@@ -636,6 +643,7 @@ class PKIArchitecture:
             else:
                 effective_cert_config = dict(cert_config)
 
+            effective_cert_config['label'] = name.value
             effective_cert_config.setdefault('subject', name.value)
             effective_cert_config.setdefault(
                 'subject_key', effective_cert_config['subject']
@@ -704,14 +712,19 @@ class PKIArchitecture:
             # noinspection PyStatementEffect
             cert.native
 
+    def enumerate_certs_by_issuer(self) \
+            -> Iterable[Tuple[EntityLabel, Iterable[CertificateSpec]]]:
+        for iss_label, issd_certs in self._cert_labels_by_issuer.items():
+            yield iss_label, map(self.get_cert_spec, issd_certs)
+
     def zip_certs(self, output_buffer, use_pem=True, flat=False):
         self._load_all_certs()
         ext = '.cert.pem' if use_pem else '.crt'
         zip_file = ZipFile(output_buffer, 'w')
         lbl = self.arch_label.value
-        for iss_label, iss_certs in self._cert_labels_by_issuer.items():
+        for iss_label, issd_certs in self._cert_labels_by_issuer.items():
             prefix = lbl if flat else os.path.join(lbl, iss_label.value)
-            for cert_label in iss_certs:
+            for cert_label in issd_certs:
                 fname = os.path.join(prefix, cert_label.value + ext)
                 cert = self.get_cert(cert_label)
                 data = cert.dump()
@@ -719,6 +732,62 @@ class PKIArchitecture:
                     data = pem.armor('certificate', data)
                 zip_file.writestr(fname, data)
         zip_file.close()
+
+    def get_chain(self, cert_label: CertLabel) -> Iterable[CertLabel]:
+        # TODO support different chaining modes
+        #  (e.g. until a cert in a certain list of roots, or until a cert
+        #  owned by a particular entity)
+        cur_cert = self.get_cert_spec(cert_label)
+        while not cur_cert.self_signed:
+            next_cert_lbl = cur_cert.resolve_issuer_cert(self)
+            cur_cert = self.get_cert_spec(next_cert_lbl)
+            yield cur_cert.label
+
+    def package_pkcs12(self, cert_label: CertLabel,
+                       key_label: KeyLabel = None,
+                       certs_to_embed: Iterable[CertLabel] = None,
+                       password: bytes = None):
+        try:
+            from cryptography.hazmat.primitives.serialization import (
+                pkcs12, load_der_private_key, NoEncryption,
+                BestAvailableEncryption
+            )
+            from cryptography import x509 as pyca_x509
+        except ImportError as e:  # pragma: nocover
+            raise CertomancerServiceError(
+                "pyca/cryptography is required for PKCS#12 serialisation."
+            ) from e
+
+        cert_spec = self.get_cert_spec(cert_label)
+        cert_der = self.get_cert(cert_label).dump()
+        if key_label is None:
+            key_label = cert_spec.subject_key
+        if certs_to_embed is None:
+            certs_to_embed = list(self.get_chain(cert_label))
+        # We need to convert between asn1crypto objects and pyca/cryptography
+        # objects here.
+        key_der = self.key_set.get_private_key(key_label).dump()
+        chain_der = (self.get_cert(c).dump() for c in certs_to_embed)
+
+        # convert DER to pyca/cryptography internal objects
+        cert = pyca_x509.load_der_x509_certificate(cert_der)
+        key = load_der_private_key(key_der, password=None)
+        chain = [pyca_x509.load_der_x509_certificate(c) for c in chain_der]
+
+        if password is None:
+            encryption_alg = NoEncryption()
+        else:
+            encryption_alg = BestAvailableEncryption(password)
+
+        return pkcs12.serialize_key_and_certificates(
+            name=None, key=key, cert=cert, cas=chain,
+            encryption_algorithm=encryption_alg
+        )
+
+    def is_subject_key_available(self, cert: CertLabel):
+        key_label = self.get_cert_spec(cert).subject_key
+        key_pair = self.key_set.get_asym_key(key_label)
+        return key_pair.private is not None
 
     def dump_certs(self, folder_path: str, use_pem=True, flat=False):
         self._load_all_certs()
@@ -741,6 +810,7 @@ class PKIArchitecture:
                     if use_pem:
                         data = pem.armor('certificate', data)
                     f.write(data)
+
 
     def get_cert(self, label: CertLabel) -> x509.Certificate:
         try:
@@ -774,11 +844,7 @@ class PKIArchitecture:
         if spec.self_signed:
             aki = ski
         else:
-            # read value from issuer certificate (since in principle the
-            #  choice is up to the issuer)
-            issuer_cert_lbl = spec.issuer_cert
-            if issuer_cert_lbl is None:
-                issuer_cert_lbl = self.get_unique_cert_for_entity(spec.issuer)
+            issuer_cert_lbl = spec.resolve_issuer_cert(self)
             issuer_cert = self.get_cert(issuer_cert_lbl)
             aki = issuer_cert.key_identifier_value
         aki_value = x509.AuthorityKeyIdentifier({'key_identifier': aki})
@@ -888,6 +954,10 @@ class OCSPResponderServiceInfo(ServiceInfo):
         except KeyError:
             pass
 
+    def resolve_issuer_cert(self, arch: 'PKIArchitecture') -> CertLabel:
+        return self.issuer_cert or \
+               arch.get_unique_cert_for_entity(self.for_issuer)
+
 
 @dataclass(frozen=True)
 class TSAServiceInfo(ServiceInfo):
@@ -942,6 +1012,10 @@ class CRLRepoServiceInfo(ServiceInfo):
         return url_distribution_point(
             self.latest_external_url, self.extra_urls
         )
+
+    def resolve_issuer_cert(self, arch: 'PKIArchitecture') -> CertLabel:
+        return self.issuer_cert or \
+               arch.get_unique_cert_for_entity(self.for_issuer)
 
 
 @dataclass(frozen=True)
@@ -1035,11 +1109,7 @@ class ServiceRegistry:
             -> SimpleOCSPResponder:
         info = self.get_ocsp_info(label)
         responder_key = self.pki_arch.key_set.get_private_key(info.signing_key)
-        issuer_cert_label = info.issuer_cert
-        if issuer_cert_label is None:
-            issuer_cert_label = self.pki_arch.get_unique_cert_for_entity(
-                info.for_issuer
-            )
+        issuer_cert_label = info.resolve_issuer_cert(self.pki_arch)
         return SimpleOCSPResponder(
             responder_cert=self.pki_arch.get_cert(info.responder_cert),
             responder_key=responder_key,
@@ -1118,12 +1188,10 @@ class ServiceRegistry:
         signing_key = self.pki_arch.key_set.\
             get_private_key(crl_info.signing_key)
 
+        # we need a cert to compute the right authority key identifier,
+        # time origin etc.
         if issuer_cert_label is None:
-            # we need a cert to compute the right authority key identifier,
-            # time origin etc.
-            issuer_cert_label = self.pki_arch.get_unique_cert_for_entity(
-                crl_info.for_issuer
-            )
+            issuer_cert_label = crl_info.resolve_issuer_cert(self.pki_arch)
         iss_cert = self.pki_arch.get_cert(issuer_cert_label)
 
         time_origin = iss_cert.not_valid_before

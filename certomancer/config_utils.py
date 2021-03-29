@@ -17,7 +17,7 @@ from datetime import timedelta
 __all__ = [
     'ConfigurationError', 'ConfigurableMixin', 'check_config_keys',
     'parse_duration', 'key_dashes_to_underscores', 'get_and_apply',
-    'LabelString'
+    'LabelString', 'pyca_cryptography_present'
 ]
 
 from typing import get_args, Optional
@@ -239,3 +239,11 @@ def get_and_apply(dictionary: dict, key, function: Callable, *, default=None):
     except KeyError:
         return default
     return function(value)
+
+
+def pyca_cryptography_present() -> bool:
+    try:
+        import cryptography
+        return True
+    except ImportError:
+        return False

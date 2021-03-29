@@ -4,14 +4,95 @@
     <meta charset="UTF-8">
     <title>Certomancer Animator &mdash; index</title>
 </head>
+<style>
+    td {
+        padding: 5pt;
+        text-align: center;
+    }
+    table {
+        border: 1px solid black;
+    }
+    thead {
+        margin-bottom: 1em;
+    }
+</style>
 <body>
 <h1>Index of Certomancer PKI services</h1>
-This page lists all PKI services provided by this Certomancer Animator instance. Right-click to copy links.
+<p>
+    This page lists all PKI services provided by this Certomancer Animator instance.
+    Right-click to copy links.
+</p>
 <hr/>
 {% for arch_services in pki_archs %}
+    <article>
     {# TODO make CRL repos and cert repos browsable #}
     <h2>Architecture: {{ arch_services.arch }}</h2>
-    All certificates (.zip): <a href="/cert-download/{{ arch_services.arch }}">download</a>
+    All certificates (.zip): <a href="/cert-bundle/{{ arch_services.arch }}">download</a>
+    <section>
+    <h3>Certificates by issuer</h3>
+    {% for iss in arch_services.certs_by_issuer %}
+        <details>
+            <summary>{{ iss }}</summary>
+            <ul>
+                {% for cert_info in arch_services.certs_by_issuer[iss] %}
+                    <li>{{ cert_info.spec.label }} <i>({{ cert_info.subject_dn }})</i></li>
+                {% endfor %}
+            </ul>
+        </details>
+    {% endfor %}
+    </section>
+    <section>
+    {% if pfx_possible %}
+        <h3>Download PKCS&nbsp;#12 (.pfx) bundles</h3>
+        <p>
+            Choose a certificate label that you want to download
+            together with its issuance chain and private key.
+            You can optionally set a passphrase.
+        </p>
+        <form method="post" action="/pfx-download/{{ arch_services.arch }}">
+            <table>
+                <thead>
+                    <tr>
+                        <th>
+                            <label for="certs">Certificate</label>
+                        </th>
+                        <th>
+                            <label for="passphrase">Passphrase</label>
+                        </th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>
+                            <select name="cert" id="certs">
+                                {% for iss in arch_services.certs_by_issuer %}
+                                    <optgroup label="{{ iss }}">
+                                        {% for cert_info in arch_services.certs_by_issuer[iss] %}
+                                            <option value="{{ cert_info.spec.label }}">{{ cert_info.spec.label }}</option>
+                                        {% endfor %}
+                                    </optgroup>
+                                {% endfor %}
+                            </select>
+                        </td>
+                        <td>
+                            <input type="text" name="passphrase" id="passphrase" width="20ch">
+                        </td>
+                    </tr>
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <td colspan="2">
+                            <input type="submit" value="Download">
+                        </td>
+                    </tr>
+                </tfoot>
+            </table>
+        </form>
+    {% else %}
+        <p><i>[PKCS&nbsp;#12 support is unavailable.]</i></p>
+    {% endif %}
+    </section>
+    <section>
     <h3>Time stamping</h3>
     {% if arch_services.tsa %}
         <ul>
@@ -22,6 +103,8 @@ This page lists all PKI services provided by this Certomancer Animator instance.
     {% else %}
         <p>No TSA services</p>
     {% endif %}
+    </section>
+    <section>
     <h3>OCSP</h3>
     {% if arch_services.ocsp %}
         <ul>
@@ -32,6 +115,8 @@ This page lists all PKI services provided by this Certomancer Animator instance.
     {% else %}
         <p>No OCSP services</p>
     {% endif %}
+    </section>
+    <section>
     <h3>CRL</h3>
     {% if arch_services.crl %}
         <ul>
@@ -42,7 +127,9 @@ This page lists all PKI services provided by this Certomancer Animator instance.
     {% else %}
         <p>No CRL repositories</p>
     {% endif %}
+    </section>
     <hr/>
+    </article>
 {% endfor %}
 </body>
 </html>

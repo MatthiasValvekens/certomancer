@@ -4,23 +4,28 @@ import os
 from dataclasses import dataclass
 from datetime import datetime
 from io import BytesIO
-from typing import Optional, Dict
+from typing import Optional, Dict, List
 
 import tzlocal
 from asn1crypto import ocsp, tsp, pem
 from jinja2 import FileSystemLoader, Environment
 from werkzeug.wrappers import Request, Response
 from werkzeug.routing import Map, Rule, BaseConverter
-from werkzeug.exceptions import HTTPException, NotFound, InternalServerError
+from werkzeug.exceptions import HTTPException, NotFound, InternalServerError, \
+    BadRequest
 
+from certomancer.config_utils import pyca_cryptography_present
 from certomancer.registry import (
     PKIArchitecture, ServiceRegistry, ServiceLabel, CertLabel,
-    CertomancerObjectNotFoundError, CertomancerConfig, ArchLabel
+    CertomancerObjectNotFoundError, CertomancerConfig, ArchLabel, EntityLabel,
+    CertificateSpec
 )
 from certomancer.services import CertomancerServiceError
 
 
 logger = logging.getLogger(__name__)
+
+pfx_possible = pyca_cryptography_present()
 
 
 class LabelConverter(BaseConverter):
@@ -98,11 +103,34 @@ def service_rules(services: ServiceRegistry):
 
 
 @dataclass(frozen=True)
+class AnimatorCertInfo:
+    spec: CertificateSpec
+    pfx_available: bool
+    subject_dn: str
+
+    @staticmethod
+    def gather_cert_info(pki_arch: PKIArchitecture):
+
+        def _for_cert(spec: CertificateSpec):
+            pfx = pfx_possible and pki_arch.is_subject_key_available(spec.label)
+            return AnimatorCertInfo(
+                spec=spec, pfx_available=pfx,
+                subject_dn=pki_arch.entities[spec.subject].human_friendly
+            )
+
+        return {
+            iss: list(map(_for_cert, issd_certs))
+            for iss, issd_certs in pki_arch.enumerate_certs_by_issuer()
+        }
+
+
+@dataclass(frozen=True)
 class ArchServicesDescription:
     arch: ArchLabel
     tsa: list
     ocsp: list
     crl: list
+    certs_by_issuer: Dict[EntityLabel, List[AnimatorCertInfo]]
 
 
 def gen_index(architectures):
@@ -114,11 +142,13 @@ def gen_index(architectures):
         pki_arch: PKIArchitecture
         for pki_arch in architectures:
             services = pki_arch.service_registry
+            cert_info = AnimatorCertInfo.gather_cert_info(pki_arch)
             yield ArchServicesDescription(
                 pki_arch.arch_label,
                 tsa=services.list_time_stamping_services(),
                 ocsp=services.list_ocsp_responders(),
-                crl=services.list_crl_repos()
+                crl=services.list_crl_repos(),
+                certs_by_issuer=cert_info,
             )
 
     # the index is fixed from the moment the server is launched, so
@@ -127,7 +157,9 @@ def gen_index(architectures):
         loader=FileSystemLoader(template_path), autoescape=True
     )
     template = jinja_env.get_template('index.html')
-    return template.render(pki_archs=list(_index_info()))
+    return template.render(
+        pki_archs=list(_index_info()), pfx_possible=pfx_possible
+    )
 
 
 class Animator:
@@ -138,8 +170,11 @@ class Animator:
         self.architectures = architectures
 
         def _all_rules():
-            yield Rule('/', endpoint='index')
-            yield Rule('/cert-download/<label:arch>', endpoint='download')
+            yield Rule('/', endpoint='index', methods=('GET',))
+            yield Rule('/cert-bundle/<label:arch>', endpoint='cert-bundle',
+                       methods=('GET',))
+            yield Rule('/pfx-download/<label:arch>',
+                       endpoint='pfx-download', methods=('POST',))
             for pki_arch in architectures.values():
                 yield from service_rules(pki_arch.service_registry)
 
@@ -235,6 +270,27 @@ class Animator:
         return Response(data, mimetype='application/zip',
                         headers={'Content-Disposition': cd_header})
 
+    def serve_pfx(self, request: Request, *, arch):
+        try:
+            pki_arch = self.architectures[ArchLabel(arch)]
+        except KeyError:
+            raise NotFound()
+        try:
+            cert = request.form['cert']
+        except KeyError:
+            raise BadRequest()
+
+        cert = CertLabel(cert)
+        if not (pyca_cryptography_present() and
+                pki_arch.is_subject_key_available(cert)):
+            raise NotFound()
+
+        pass_bytes = request.form.get('passphrase', '').encode('utf8')
+        data = pki_arch.package_pkcs12(cert, password=pass_bytes or None)
+        cd_header = f'attachment; filename="{cert}.pfx"'
+        return Response(data, mimetype='application/x-pkcs12',
+                        headers={'Content-Disposition': cd_header})
+
     def dispatch(self, request: Request):
         adapter = self.url_map.bind_to_environ(request.environ)
         # TODO even though this is a testing tool, inserting some safeguards
@@ -243,8 +299,10 @@ class Animator:
             endpoint, values = adapter.match()
             if endpoint == 'index':
                 return Response(self.index_html, mimetype='text/html')
-            if endpoint == 'download':
+            if endpoint == 'cert-bundle':
                 return self.serve_zip(**values)
+            if endpoint == 'pfx-download':
+                return self.serve_pfx(request, **values)
             assert isinstance(endpoint, Endpoint)
             if endpoint.service_type == ServiceType.OCSP:
                 return self.serve_ocsp_response(
