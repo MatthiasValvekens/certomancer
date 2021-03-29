@@ -178,7 +178,7 @@ class KeySet:
             for k, v in keys.items()
         }
 
-    def __getitem__(self, name) -> KeyFromFile:
+    def __getitem__(self, name: KeyLabel) -> KeyFromFile:
         try:
             return self._dict[name]
         except KeyError as e:
@@ -186,13 +186,13 @@ class KeySet:
                 f"There is no key labelled '{name}'."
             ) from e
 
-    def get_asym_key(self, name) -> AsymKey:
+    def get_asym_key(self, name: KeyLabel) -> AsymKey:
         return self[name].key_pair
 
-    def get_public_key(self, name) -> PublicKeyInfo:
+    def get_public_key(self, name: KeyLabel) -> PublicKeyInfo:
         return self[name].public_key_info
 
-    def get_private_key(self, name) -> PrivateKeyInfo:
+    def get_private_key(self, name: KeyLabel) -> PrivateKeyInfo:
         pki = self[name].private_key_info
         if pki is None:
             raise ConfigurationError(
@@ -819,7 +819,7 @@ class PKIArchitecture:
 
         spec = self.get_cert_spec(label)
         subject_name = self.entities[spec.subject]
-        subject_key = self.key_set[spec.subject]
+        subject_key = self.key_set[spec.subject_key]
         issuer_name = self.entities[spec.issuer]
         authority_key = self.key_set[spec.authority_key]
         serial = self._serial_by_issuer[spec.issuer]
