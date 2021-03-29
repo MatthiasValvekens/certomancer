@@ -152,7 +152,7 @@ class KeyFromFile:
 class KeySet:
     """A labelled collection of keys."""
 
-    def __init__(self, config, lazy_load_keys=False):
+    def __init__(self, config, lazy_load_keys=False, working_dir=None):
         check_config_keys('KeySet', ('path-prefix', 'keys'), config)
         try:
             keys = config['keys']
@@ -163,6 +163,8 @@ class KeySet:
         path_prefix = config.get('path-prefix', '')
         if path_prefix and not path_prefix.endswith('/'):
             path_prefix += '/'
+        if working_dir is not None and not os.path.isabs(path_prefix):
+            path_prefix = os.path.join(working_dir, path_prefix)
 
         # apply path prefix to key configs
         def _prepend(key_conf):
@@ -205,9 +207,9 @@ class KeySet:
 class KeySets:
     """A labelled collection of key sets."""
 
-    def __init__(self, config, lazy_load_keys=False):
+    def __init__(self, config, lazy_load_keys=False, working_dir=None):
         self._dict = {
-            k: KeySet(v, lazy_load_keys=lazy_load_keys)
+            k: KeySet(v, lazy_load_keys=lazy_load_keys, working_dir=working_dir)
             for k, v in config.items()
         }
 
@@ -1275,28 +1277,17 @@ class CertomancerConfig:
     DEFAULT_EXTERNAL_URL_PREFIX = 'http://ca.example.com'
 
     @classmethod
-    def from_yaml(cls, yaml_str) -> 'CertomancerConfig':
+    def from_yaml(cls, yaml_str, working_dir=None) -> 'CertomancerConfig':
         config_dict = yaml.safe_load(yaml_str)
-        return CertomancerConfig(config_dict)
+        return CertomancerConfig(config_dict, working_dir=working_dir)
 
     @classmethod
     def from_file(cls, cfg_path, working_dir=None) -> 'CertomancerConfig':
-        # TODO this is a bit too hacky for my tastes; the key loaders
-        #  should simply be able to refer back to the loading context
-        #  in some way.
         with open(cfg_path, 'r') as inf:
             config_dict = yaml.safe_load(inf)
-        cwd = None
-        if working_dir is not None:
-            cwd = os.getcwd()
-            os.chdir(working_dir)
-        try:
-            return CertomancerConfig(config_dict)
-        finally:
-            if cwd is not None:
-                os.chdir(cwd)
+        return CertomancerConfig(config_dict, working_dir=working_dir)
 
-    def __init__(self, config, lazy_load_keys=False):
+    def __init__(self, config, lazy_load_keys=False, working_dir=None):
         self.external_url_prefix = external_url_prefix = config.get(
             'external-url-prefix', self.DEFAULT_EXTERNAL_URL_PREFIX
         )
@@ -1308,7 +1299,8 @@ class CertomancerConfig:
             ) from e
 
         self.key_sets = key_sets = KeySets(
-            key_set_cfg, lazy_load_keys=lazy_load_keys
+            key_set_cfg, lazy_load_keys=lazy_load_keys,
+            working_dir=working_dir
         )
         try:
             arch_cfgs = config['pki-architectures']
