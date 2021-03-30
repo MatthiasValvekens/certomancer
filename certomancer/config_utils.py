@@ -20,7 +20,7 @@ __all__ = [
     'LabelString', 'pyca_cryptography_present'
 ]
 
-from typing import get_args, Optional
+from typing import Optional
 
 _noneType = type(None)
 
@@ -50,6 +50,15 @@ class LabelString:
         if isinstance(thing, type):
             the_type = thing
         else:
+            try:
+                from typing import get_args
+            except ImportError:
+                def get_args(tp):
+                    try:
+                        return tp.__args__
+                    except AttributeError:
+                        return ()
+
             # is it an optional? (i.e. Union[X, None])
             # if so, retrieve the wrapped type
             try:
