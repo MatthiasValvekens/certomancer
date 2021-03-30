@@ -8,7 +8,7 @@ from typing import Optional, Dict, List
 
 import tzlocal
 from asn1crypto import ocsp, tsp, pem
-from jinja2 import FileSystemLoader, Environment
+from jinja2 import Environment, PackageLoader
 from werkzeug.wrappers import Request, Response
 from werkzeug.routing import Map, Rule, BaseConverter
 from werkzeug.exceptions import HTTPException, NotFound, InternalServerError, \
@@ -147,10 +147,6 @@ class ArchServicesDescription:
 
 
 def gen_index(architectures):
-    template_path = os.path.join(
-        os.path.dirname(__file__), 'animator_templates'
-    )
-
     def _index_info():
         pki_arch: PKIArchitecture
         for pki_arch in architectures:
@@ -168,7 +164,8 @@ def gen_index(architectures):
     # the index is fixed from the moment the server is launched, so
     #  just go ahead and render it
     jinja_env = Environment(
-        loader=FileSystemLoader(template_path), autoescape=True
+        loader=PackageLoader('certomancer.integrations', 'animator_templates'),
+        autoescape=True
     )
     template = jinja_env.get_template('index.html')
     return template.render(

@@ -28,6 +28,7 @@ setup(
     description='PKI testing tool',
     long_description=long_description,
     long_description_content_type='text/markdown',
+    package_data={'certomancer.integrations': ['animator_templates/*.html']},
     classifiers=[
         'Development Status :: 3 - Alpha',
 
