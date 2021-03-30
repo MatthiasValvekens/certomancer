@@ -522,7 +522,7 @@ class CertificateSpec(ConfigurableMixin):
         return self.issuer_cert or arch.get_unique_cert_for_entity(self.issuer)
 
 
-DEFAULT_FIRST_SERIAL = 0x1001
+DEFAULT_FIRST_SERIAL = 0x1000
 
 
 class PKIArchitecture:
