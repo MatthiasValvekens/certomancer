@@ -1039,8 +1039,9 @@ class CertRepoServiceInfo(ServiceInfo):
     issuer_cert: Optional[CertLabel] = None
     publish_issued_certs: bool = True
 
-    def issuer_cert_url(self, use_pem=True):
-        return f"{self.internal_url}/ca.{'cert.pem' if use_pem else 'crt'}"
+    @property
+    def issuer_cert_url(self):
+        return f"{self.internal_url}/ca.cert.pem"
 
     def issued_cert_url(self, label: CertLabel, use_pem=True):
         if not self.publish_issued_certs:

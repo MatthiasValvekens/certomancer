@@ -35,7 +35,13 @@
             <summary>{{ iss }}</summary>
             <ul>
                 {% for cert_info in arch_services.certs_by_issuer[iss] %}
-                    <li>{{ cert_info.spec.label }} <i>({{ cert_info.subject_dn }})</i></li>
+                    <li>
+                        {{ cert_info.spec.label }}<br/>
+                        <i>{{ cert_info.subject_dn }}</i><br/>
+                        <a href="/any-cert/{{ arch_services.arch }}/{{ cert_info.spec.label }}.cert.pem">PEM</a>
+                        &ensp;
+                        <a href="/any-cert/{{ arch_services.arch }}/{{ cert_info.spec.label }}.crt">DER</a>
+                    </li>
                 {% endfor %}
             </ul>
         </details>
@@ -127,6 +133,21 @@
     {% else %}
         <p>No CRL repositories</p>
     {% endif %}
+    </section>
+    <section>
+        <h3>Certificate repositories</h3>
+        {% if arch_services.cert_repo %}
+            <ul>
+                {% for repo in arch_services.cert_repo %}
+                    <li>
+                        <a href="{{ repo.issuer_cert_url }}">{{ repo.label }}</a>
+                        (CA cert{% if repo.publish_issued_certs %}; issued certs available{% endif %})
+                    </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p>No certificate repositories</p>
+        {% endif %}
     </section>
     <hr/>
     </article>

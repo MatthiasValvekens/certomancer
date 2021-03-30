@@ -142,6 +142,7 @@ class ArchServicesDescription:
     tsa: list
     ocsp: list
     crl: list
+    cert_repo: list
     certs_by_issuer: Dict[EntityLabel, List[AnimatorCertInfo]]
 
 
@@ -160,6 +161,7 @@ def gen_index(architectures):
                 tsa=services.list_time_stamping_services(),
                 ocsp=services.list_ocsp_responders(),
                 crl=services.list_crl_repos(),
+                cert_repo=services.list_cert_repos(),
                 certs_by_issuer=cert_info,
             )
 
@@ -183,6 +185,12 @@ class Animator:
 
         def _all_rules():
             yield Rule('/', endpoint='index', methods=('GET',))
+            # convenience endpoint that serves certs without regard for
+            # checking whether they belong to any particular (logical)
+            # cert repo (these URLs aren't part of the "PKI API", for lack
+            # of a better term)
+            yield Rule('/any-cert/<arch>/<label>.<ext:use_pem>',
+                       endpoint='any-cert', methods=('GET',))
             yield Rule('/cert-bundle/<arch>', endpoint='cert-bundle',
                        methods=('GET',))
             yield Rule('/pfx-download/<arch>',
@@ -234,6 +242,19 @@ class Animator:
         data = crl.dump()
         if use_pem:
             data = pem.armor('X509 CRL', data)
+        return Response(data, mimetype=mime)
+
+    def serve_any_cert(self, *, arch, label, use_pem):
+        mime = 'application/x-pem-file' if use_pem else 'application/pkix-cert'
+        try:
+            pki_arch = self.architectures[arch]
+        except KeyError:
+            raise NotFound()
+        cert = pki_arch.get_cert(CertLabel(label))
+
+        data = cert.dump()
+        if use_pem:
+            data = pem.armor('certificate', data)
         return Response(data, mimetype=mime)
 
     def serve_cert(self, *, label: ServiceLabel, arch: ArchLabel,
@@ -295,6 +316,8 @@ class Animator:
             endpoint, values = adapter.match()
             if endpoint == 'index':
                 return Response(self.index_html, mimetype='text/html')
+            if endpoint == 'any-cert':
+                return self.serve_any_cert(**values)
             if endpoint == 'cert-bundle':
                 return self.serve_zip(**values)
             if endpoint == 'pfx-download':
