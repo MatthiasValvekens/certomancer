@@ -28,8 +28,20 @@ logger = logging.getLogger(__name__)
 pfx_possible = pyca_cryptography_present()
 
 
-class LabelConverter(BaseConverter):
-    regex = "[^./]+"
+class PemExtensionConverter(BaseConverter):
+
+    def __init__(self, map, exts=('crt', 'cert', 'cer')):
+        if isinstance(exts, str):
+            exts = (exts,)
+        self.expected_exts = exts
+        self.regex = r"(%s)(\.pem)?" % '|'.join(exts)
+        super().__init__(map)
+
+    def to_python(self, value):
+        return value.endswith('.pem')
+
+    def to_url(self, value):
+        return self.expected_exts[0] + ('.pem' if value else '')
 
 
 class ServiceType(enum.Enum):
@@ -73,13 +85,13 @@ def service_rules(services: ServiceRegistry):
         # latest CRL
         endpoint = srv.endpoint(arch, crl_repo.label)
         yield Rule(
-            f"{crl_repo.internal_url}/latest.<extension>",
+            f"{crl_repo.internal_url}/latest.<ext(exts='crl'):use_pem>",
             defaults={'crl_no': None}, endpoint=endpoint,
             methods=('GET',)
         )
         # CRL archive
         yield Rule(
-            f"{crl_repo.internal_url}/archive-<int:crl_no>.<extension>",
+            f"{crl_repo.internal_url}/archive-<int:crl_no>.<ext(exts='crl'):use_pem>",
             endpoint=endpoint, methods=('GET',)
         )
     srv = ServiceType.CERT_REPO
@@ -91,13 +103,13 @@ def service_rules(services: ServiceRegistry):
         )
         endpoint = srv.endpoint(arch, cert_repo.label)
         yield Rule(
-            f"{cert_repo.internal_url}/ca.<extension>",
+            f"{cert_repo.internal_url}/ca.<ext:use_pem>",
             defaults={'cert_label': None}, endpoint=endpoint, methods=('GET',)
         )
         if publish_issued:
             yield Rule(
                 f"{cert_repo.internal_url}/issued/"
-                f"<label:cert_label>.<extension>",
+                f"<cert_label>.<ext:use_pem>",
                 endpoint=endpoint, methods=('GET',)
             )
 
@@ -171,16 +183,16 @@ class Animator:
 
         def _all_rules():
             yield Rule('/', endpoint='index', methods=('GET',))
-            yield Rule('/cert-bundle/<label:arch>', endpoint='cert-bundle',
+            yield Rule('/cert-bundle/<arch>', endpoint='cert-bundle',
                        methods=('GET',))
-            yield Rule('/pfx-download/<label:arch>',
+            yield Rule('/pfx-download/<arch>',
                        endpoint='pfx-download', methods=('POST',))
             for pki_arch in architectures.values():
                 yield from service_rules(pki_arch.service_registry)
 
         self.url_map = Map(
             list(_all_rules()),
-            converters={'label': LabelConverter}
+            converters={'ext': PemExtensionConverter}
         )
         self.index_html = gen_index(architectures.values())
 
@@ -211,17 +223,9 @@ class Animator:
         return Response(response.dump(), mimetype='application/timestamp-reply')
 
     def serve_crl(self, *, label: ServiceLabel, arch: ArchLabel,
-                  crl_no, extension):
+                  crl_no, use_pem):
         pki_arch = self.architectures[arch]
-        if extension == 'crl.pem':
-            use_pem = True
-            mime = 'application/x-pem-file'
-        elif extension == 'crl':
-            use_pem = False
-            mime = 'application/pkix-crl'
-        else:
-            raise NotFound()
-
+        mime = 'application/x-pem-file' if use_pem else 'application/pkix-crl'
         if crl_no is not None:
             crl = pki_arch.service_registry.get_crl(label, number=crl_no)
         else:
@@ -233,16 +237,8 @@ class Animator:
         return Response(data, mimetype=mime)
 
     def serve_cert(self, *, label: ServiceLabel, arch: ArchLabel,
-                   cert_label: Optional[str], extension):
-        if extension == 'cert.pem':
-            use_pem = True
-            mime = 'application/x-pem-file'
-        elif extension == 'crt':
-            use_pem = False
-            mime = 'application/pkix-cert'
-        else:
-            raise NotFound()
-
+                   cert_label: Optional[str], use_pem):
+        mime = 'application/x-pem-file' if use_pem else 'application/pkix-cert'
         pki_arch = self.architectures[arch]
         cert_label = CertLabel(cert_label) if cert_label is not None else None
 
