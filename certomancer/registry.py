@@ -11,7 +11,7 @@ from zipfile import ZipFile
 import yaml
 from asn1crypto.core import ObjectIdentifier
 from dateutil.parser import parse as parse_dt
-from asn1crypto import x509, core, pem, ocsp
+from asn1crypto import x509, core, pem, ocsp, crl
 from dateutil.tz import tzlocal
 from oscrypto import keys as oskeys, asymmetric
 from asn1crypto.keys import PrivateKeyInfo, PublicKeyInfo
@@ -23,7 +23,7 @@ from .config_utils import (
 )
 from .services import CertomancerServiceError, generic_sign, CRLBuilder, \
     choose_signed_digest, SimpleOCSPResponder, TimeStamper, \
-    RevocationInfoInterface, RevocationStatus, url_distribution_point
+    RevocationInfoInterface, url_distribution_point
 
 
 class KeyLabel(LabelString):
@@ -472,11 +472,12 @@ class ExtensionSpec(ConfigurableMixin):
             }
         super().process_entries(config_dict)
 
-    def to_asn1(self, arch: 'PKIArchitecture', plugins: PluginRegistry,
-                extension_class):
+    def to_asn1(self, arch: 'PKIArchitecture', extension_class):
         value = self.value
         if value is None and self.smart_value is not None:
-            value = plugins.process_value(self.id, arch, self.smart_value)
+            value = arch.plugin_registry.process_value(
+                self.id, arch, self.smart_value
+            )
 
         return extension_class({
             'extn_id': self.id, 'critical': self.critical, 'extn_value': value
@@ -484,6 +485,55 @@ class ExtensionSpec(ConfigurableMixin):
 
 
 EXCLUDED_FROM_TEMPLATE = frozenset({'subject', 'subject_key'})
+
+
+@dataclass(frozen=True)
+class RevocationStatus(ConfigurableMixin):
+    revoked_since: datetime
+    reason: crl.CRLReason = None
+    invalid_since: datetime = None
+    extra_entry_extensions: List[ExtensionSpec] = field(default_factory=list)
+    ocsp_response_extensions: List[ExtensionSpec] = field(default_factory=list)
+
+    @classmethod
+    def process_entries(cls, config_dict):
+        super().process_entries(config_dict)
+        try:
+            revoked_since = config_dict['revoked_since']
+        except KeyError:
+            return
+        config_dict['revoked_since'] = parse_dt(revoked_since)
+
+        invalid_since = config_dict.get('invalid_since', None)
+        if invalid_since is not None:
+            config_dict['invalid_since'] = parse_dt(invalid_since)
+
+        try:
+            reason_spec = config_dict['reason']
+            config_dict['reason'] = crl.CRLReason(reason_spec)
+        except KeyError:
+            pass
+
+        _parse_extension_settings(config_dict, 'extra_entry_extensions')
+        _parse_extension_settings(config_dict, 'ocsp_response_extensions')
+
+    def to_crl_entry_asn1(self, serial_number: int,
+                          extensions: List[crl.CRLEntryExtension]) \
+            -> crl.RevokedCertificate:
+        return CRLBuilder.format_revoked_cert(
+            serial_number, reason=self.reason,
+            revocation_date=self.revoked_since,
+            invalidity_date=self.invalid_since,
+            extensions=extensions
+        )
+
+    def to_ocsp_asn1(self) -> ocsp.CertStatus:
+        return ocsp.CertStatus(
+            name='revoked', value={
+                'revocation_time': self.revoked_since,
+                'revocation_reason': self.reason
+            }
+        )
 
 
 @dataclass(frozen=True)
@@ -534,7 +584,15 @@ class CertificateSpec(ConfigurableMixin):
     """Revocation status of the certificate, if relevant."""
 
     extensions: List[ExtensionSpec] = field(default_factory=list)
-    """Extension settings for the certificate."""
+    """
+    Extension settings for the certificate.
+    
+    .. note::
+        The ``subjectKeyIdentifier`` and ``authorityKeyIdentifier`` extensions
+        are supplied automatically, but any other extensions (including
+        ``basicConstraints`` for CA certificates) need to be explicitly
+        specified in the configuration.
+    """
 
     @property
     def self_issued(self) -> bool:
@@ -572,19 +630,7 @@ class CertificateSpec(ConfigurableMixin):
         if revocation is not None:
             config_dict['revocation'] = RevocationStatus.from_config(revocation)
 
-        try:
-            ext_spec = config_dict['extensions']
-            if not isinstance(ext_spec, list):
-                raise ConfigurationError(
-                    "Applicable certificate extensions must be specified"
-                    "as a list."
-                )
-        except KeyError:
-            ext_spec = ()
-
-        config_dict['extensions'] = [
-            ExtensionSpec.from_config(ext_cfg) for ext_cfg in ext_spec
-        ]
+        _parse_extension_settings(config_dict, 'extensions')
 
         super().process_entries(config_dict)
 
@@ -937,9 +983,8 @@ class PKIArchitecture:
         extensions = [ski_extension, aki_extension]
         # add extensions from config
         extensions.extend(
-            ext_spec.to_asn1(
-                self, self.plugin_registry, x509.Extension
-            ) for ext_spec in spec.extensions
+            ext_spec.to_asn1(self, x509.Extension)
+            for ext_spec in spec.extensions
         )
         tbs = x509.TbsCertificate({
             'version': 'v3',
@@ -1003,7 +1048,11 @@ class PKIArchitecture:
             revo = self.check_revocation_status(cert_label, at_time=at_time)
             cert = self.get_cert(cert_label)
             if revo is not None:
-                yield revo.to_asn1(cert.serial_number)
+                exts = [
+                    ext.to_asn1(self, crl.CRLEntryExtension)
+                    for ext in revo.extra_entry_extensions
+                ]
+                yield revo.to_crl_entry_asn1(cert.serial_number, exts)
 
 
 @dataclass(frozen=True)
@@ -1058,6 +1107,22 @@ class TSAServiceInfo(ServiceInfo):
             pass
 
 
+def _parse_extension_settings(sett_dict, sett_key):
+    try:
+        ext_spec = sett_dict.get(sett_key, ())
+        if not isinstance(ext_spec, (list, tuple)):
+            raise ConfigurationError(
+                "Applicable certificate extensions must be specified "
+                "as a list."
+            )
+        sett_dict[sett_key] = result = [
+            ExtensionSpec.from_config(sett) for sett in ext_spec
+        ]
+        return result
+    except KeyError:
+        return []
+
+
 @dataclass(frozen=True)
 class CRLRepoServiceInfo(ServiceInfo):
     for_issuer: EntityLabel
@@ -1067,6 +1132,7 @@ class CRLRepoServiceInfo(ServiceInfo):
     extra_urls: List[str] = field(default_factory=list)
     signature_algo: Optional[str] = None
     digest_algo: str = 'sha256'
+    crl_extensions: List[ExtensionSpec] = field(default_factory=list)
 
     @classmethod
     def process_entries(cls, config_dict):
@@ -1079,6 +1145,8 @@ class CRLRepoServiceInfo(ServiceInfo):
             config_dict.setdefault('signing_key', config_dict['signing_cert'])
         except KeyError:
             pass
+
+        _parse_extension_settings(config_dict, 'crl_extensions')
 
     @property
     def latest_url(self):
@@ -1131,11 +1199,21 @@ class OCSPInterface(RevocationInfoInterface):
     def get_issuer_cert(self) -> x509.Certificate:
         return self.pki_arch.get_cert(self.issuer_cert_label)
 
-    def check_revocation_status(self, cid: ocsp.CertId, at_time: datetime):
+    def check_revocation_status(self, cid: ocsp.CertId, at_time: datetime) \
+            -> Tuple[ocsp.CertStatus, List[ocsp.SingleResponseExtension]]:
         cert_label = self.pki_arch.find_cert_label(
             cid, issuer_label=self.for_issuer
         )
-        return self.pki_arch.check_revocation_status(cert_label, at_time)
+        revo = self.pki_arch.check_revocation_status(cert_label, at_time)
+
+        if revo is None:
+            return ocsp.CertStatus('good'), []
+        else:
+            exts = [
+                ext.to_asn1(self.pki_arch, ocsp.SingleResponseExtension)
+                for ext in revo.ocsp_response_extensions
+            ]
+            return revo.to_ocsp_asn1(), exts
 
 
 class ServiceRegistry:
@@ -1297,6 +1375,10 @@ class ServiceRegistry:
         this_update = time_origin + number * time_delta
         next_update = this_update + time_delta
 
+        extra_extensions = [
+            ext.to_asn1(self.pki_arch, crl.TBSCertListExtension)
+            for ext in crl_info.crl_extensions
+        ]
         builder = CRLBuilder(
             issuer_name=self.pki_arch.entities[crl_info.for_issuer],
             issuer_key=signing_key,
@@ -1304,7 +1386,8 @@ class ServiceRegistry:
                 crl_info.digest_algo, signing_key.algorithm,
                 signature_algo=crl_info.signature_algo
             ),
-            authority_key_identifier=iss_cert.key_identifier_value
+            authority_key_identifier=iss_cert.key_identifier_value,
+            extra_crl_extensions=extra_extensions
         )
 
         revoked = list(

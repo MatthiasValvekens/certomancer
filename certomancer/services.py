@@ -2,16 +2,14 @@ import abc
 import hashlib
 import os
 import struct
-from dateutil.parser import parse as parse_dt
-from dataclasses import dataclass
+
+from asn1crypto.crl import TBSCertListExtension
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Optional, List, Tuple
 
 from oscrypto import asymmetric
 from asn1crypto import keys, x509, tsp, algos, cms, core, crl, ocsp
 import tzlocal
-
-from certomancer.config_utils import ConfigurableMixin
 
 
 class CertomancerServiceError(Exception):
@@ -146,11 +144,13 @@ class CRLBuilder:
     def __init__(self, issuer_name: x509.Name,
                  issuer_key: keys.PrivateKeyInfo,
                  signature_algo: algos.SignedDigestAlgorithm,
-                 authority_key_identifier: core.OctetString):
+                 authority_key_identifier: core.OctetString,
+                 extra_crl_extensions: List[TBSCertListExtension] = None):
         self.issuer_name = issuer_name
         self.issuer_key = issuer_key
         self.signature_algo = signature_algo
         self.authority_key_identifier = authority_key_identifier
+        self.extra_crl_extensions = extra_crl_extensions or []
 
     def build_crl(self, crl_number: int,
                   this_update: datetime, next_update: datetime,
@@ -175,17 +175,18 @@ class CRLBuilder:
         })
 
     @staticmethod
-    def format_revoked_cert(serial: int, reason: crl.CRLReason,
-                            revocation_date: datetime,
-                            invalidity_date=None, extensions=None) \
+    def format_revoked_cert(serial: int, reason: Optional[crl.CRLReason],
+                            revocation_date: datetime, invalidity_date=None,
+                            extensions: List[crl.CRLEntryExtension] = None) \
             -> crl.RevokedCertificate:
 
         extensions = list(extensions or ())
-        extensions.append(
-            crl.CRLEntryExtension(
-                {'extn_id': 'crl_reason', 'extn_value': reason}
+        if reason is not None:
+            extensions.append(
+                crl.CRLEntryExtension(
+                    {'extn_id': 'crl_reason', 'extn_value': reason}
+                )
             )
-        )
         if invalidity_date:
             extensions.append(
                 crl.CRLEntryExtension({
@@ -205,8 +206,7 @@ class CRLBuilder:
             -> crl.TbsCertList:
         extensions = [
             crl.TBSCertListExtension({
-                'extn_id': 'crl_number', 'extn_value':
-                    core.ParsableOctetString(core.Integer(crl_number).dump())
+                'extn_id': 'crl_number', 'extn_value': core.Integer(crl_number)
             }),
             crl.TBSCertListExtension({
                 'extn_id': 'authority_key_identifier',
@@ -215,6 +215,7 @@ class CRLBuilder:
                 })
             }),
         ]
+        extensions.extend(self.extra_crl_extensions)
         if distpoint is not None:
             extn_value = crl.IssuingDistributionPoint(distpoint)
             extensions.append(
@@ -320,43 +321,13 @@ def issuer_match(cid: ocsp.CertId, candidate: x509.Certificate):
     return key_digest == iss_key_hash
 
 
-@dataclass(frozen=True)
-class RevocationStatus(ConfigurableMixin):
-    revoked_since: datetime
-    reason: crl.CRLReason
-    invalid_since: datetime = None
-
-    @classmethod
-    def process_entries(cls, config_dict):
-        super().process_entries(config_dict)
-        try:
-            revoked_since = config_dict['revoked_since']
-        except KeyError:
-            return
-        config_dict['revoked_since'] = parse_dt(revoked_since)
-
-        invalid_since = config_dict.get('invalid_since', None)
-        if invalid_since is not None:
-            config_dict['invalid_since'] = parse_dt(invalid_since)
-
-        reason_spec = config_dict.get('reason', 'key_compromise')
-        config_dict['reason'] = crl.CRLReason(reason_spec)
-
-    def to_asn1(self, serial_number: int) -> crl.RevokedCertificate:
-        return CRLBuilder.format_revoked_cert(
-            serial_number, reason=self.reason,
-            revocation_date=self.revoked_since,
-            invalidity_date=self.invalid_since
-        )
-
-
 class RevocationInfoInterface(abc.ABC):
 
     def get_issuer_cert(self) -> x509.Certificate:
         raise NotImplementedError
 
     def check_revocation_status(self, cid: ocsp.CertId, at_time: datetime) \
-            -> Optional[RevocationStatus]:
+            -> Tuple[ocsp.CertStatus, List[ocsp.SingleResponseExtension]]:
         raise NotImplementedError
 
 
@@ -395,8 +366,9 @@ class SimpleOCSPResponder:
             if not issuer_match(cid, issuer_cert):
                 return err('unauthorized')
 
+            revinfo_interface = self.revinfo_interface
             try:
-                revo = self.revinfo_interface.check_revocation_status(
+                cert_status, exts = revinfo_interface.check_revocation_status(
                     cid, self.at_time
                 )
             except NotImplementedError:
@@ -404,21 +376,13 @@ class SimpleOCSPResponder:
             except CertomancerServiceError:
                 return err('unauthorized')
 
-            if revo is None:
-                cert_status = ocsp.CertStatus(name='good')
-            else:
-                cert_status = ocsp.CertStatus(
-                    name='revoked', value={
-                        'revocation_time': revo.revoked_since,
-                        'revocation_reason': revo.reason
-                    }
-                )
             responses.append(
                 ocsp.SingleResponse({
                     'cert_id': cid,
                     'cert_status': cert_status,
                     'this_update': self.at_time,
-                    'next_update': self.at_time + self.validity
+                    'next_update': self.at_time + self.validity,
+                    'single_extensions': exts or None
                 })
             )
 
