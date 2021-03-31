@@ -8,7 +8,6 @@ from typing import Optional, Dict, List
 
 import tzlocal
 from asn1crypto import ocsp, tsp, pem
-from jinja2 import Environment, PackageLoader
 from werkzeug.wrappers import Request, Response
 from werkzeug.routing import Map, Rule, BaseConverter
 from werkzeug.exceptions import HTTPException, NotFound, InternalServerError, \
@@ -91,7 +90,8 @@ def service_rules(services: ServiceRegistry):
         )
         # CRL archive
         yield Rule(
-            f"{crl_repo.internal_url}/archive-<int:crl_no>.<ext(exts='crl'):use_pem>",
+            f"{crl_repo.internal_url}"
+            f"/archive-<int:crl_no>.<ext(exts='crl'):use_pem>",
             endpoint=endpoint, methods=('GET',)
         )
     srv = ServiceType.CERT_REPO
@@ -147,6 +147,11 @@ class ArchServicesDescription:
 
 
 def gen_index(architectures):
+    try:
+        from jinja2 import Environment, PackageLoader
+    except ImportError as e:
+        raise CertomancerServiceError("Web UI requires Jinja2 to be installed")
+
     def _index_info():
         pki_arch: PKIArchitecture
         for pki_arch in architectures:
@@ -176,22 +181,24 @@ def gen_index(architectures):
 class Animator:
 
     def __init__(self, architectures: Dict[ArchLabel, PKIArchitecture],
-                 at_time: Optional[datetime] = None):
+                 at_time: Optional[datetime] = None, with_web_ui=True):
         self.fixed_time = at_time
         self.architectures = architectures
+        self.with_web_ui = with_web_ui
 
         def _all_rules():
-            yield Rule('/', endpoint='index', methods=('GET',))
-            # convenience endpoint that serves certs without regard for
-            # checking whether they belong to any particular (logical)
-            # cert repo (these URLs aren't part of the "PKI API", for lack
-            # of a better term)
-            yield Rule('/any-cert/<arch>/<label>.<ext:use_pem>',
-                       endpoint='any-cert', methods=('GET',))
-            yield Rule('/cert-bundle/<arch>', endpoint='cert-bundle',
-                       methods=('GET',))
-            yield Rule('/pfx-download/<arch>',
-                       endpoint='pfx-download', methods=('POST',))
+            if with_web_ui:
+                yield Rule('/', endpoint='index', methods=('GET',))
+                # convenience endpoint that serves certs without regard for
+                # checking whether they belong to any particular (logical)
+                # cert repo (these URLs aren't part of the "PKI API", for lack
+                # of a better term)
+                yield Rule('/any-cert/<arch>/<label>.<ext:use_pem>',
+                           endpoint='any-cert', methods=('GET',))
+                yield Rule('/cert-bundle/<arch>', endpoint='cert-bundle',
+                           methods=('GET',))
+                yield Rule('/pfx-download/<arch>',
+                           endpoint='pfx-download', methods=('POST',))
             for pki_arch in architectures.values():
                 yield from service_rules(pki_arch.service_registry)
 
@@ -199,7 +206,8 @@ class Animator:
             list(_all_rules()),
             converters={'ext': PemExtensionConverter}
         )
-        self.index_html = gen_index(architectures.values())
+        if with_web_ui:
+            self.index_html = gen_index(architectures.values())
 
     @property
     def at_time(self):
@@ -311,14 +319,15 @@ class Animator:
         #  to check request size etc. might be prudent
         try:
             endpoint, values = adapter.match()
-            if endpoint == 'index':
-                return Response(self.index_html, mimetype='text/html')
-            if endpoint == 'any-cert':
-                return self.serve_any_cert(**values)
-            if endpoint == 'cert-bundle':
-                return self.serve_zip(**values)
-            if endpoint == 'pfx-download':
-                return self.serve_pfx(request, **values)
+            if self.with_web_ui:
+                if endpoint == 'index':
+                    return Response(self.index_html, mimetype='text/html')
+                if endpoint == 'any-cert':
+                    return self.serve_any_cert(**values)
+                if endpoint == 'cert-bundle':
+                    return self.serve_zip(**values)
+                if endpoint == 'pfx-download':
+                    return self.serve_pfx(request, **values)
             assert isinstance(endpoint, Endpoint)
             if endpoint.service_type == ServiceType.OCSP:
                 return self.serve_ocsp_response(
@@ -352,6 +361,15 @@ class Animator:
         return resp(environ, start_response)
 
 
+def _check_env_flag(flag_name):
+    env = os.environ
+    val = env.get(flag_name, '0')
+    try:
+        return bool(int(val))
+    except ValueError:
+        return False
+
+
 class LazyAnimator:
     def __init__(self):
         self.animator = None
@@ -362,8 +380,9 @@ class LazyAnimator:
         env = os.environ
         cfg_file = env['CERTOMANCER_CONFIG']
         key_dir = env['CERTOMANCER_KEY_DIR']
+        with_web_ui = not _check_env_flag('CERTOMANCER_NO_WEB_UI')
         cfg = CertomancerConfig.from_file(cfg_file, key_dir)
-        self.animator = Animator(cfg.pki_archs)
+        self.animator = Animator(cfg.pki_archs, with_web_ui=with_web_ui)
 
     def __call__(self, environ, start_response):
         self._load()
