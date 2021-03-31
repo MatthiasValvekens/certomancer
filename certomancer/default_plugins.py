@@ -1,13 +1,16 @@
 from asn1crypto import x509
 
 from .config_utils import ConfigurationError
-from .registry import SmartValueProcessor, PKIArchitecture
+from .registry import Plugin, PKIArchitecture, plugin_registry
 
+__all__ = ['CRLDistributionPointsPlugin', 'KeyUsagePlugin', 'AIAUrlPlugin']
 
-class CRLDistributionPointsProc(SmartValueProcessor):
+@plugin_registry.register
+class CRLDistributionPointsPlugin(Plugin):
     schema_label = 'crl-dist-url'
+    extension_type = x509.ExtensionId
 
-    def provision(self, arch: PKIArchitecture, params):
+    def provision(self, extn_id, arch: PKIArchitecture, params):
         try:
             repo_names = params['crl-repo-names']
         except KeyError:
@@ -22,10 +25,12 @@ class CRLDistributionPointsProc(SmartValueProcessor):
         return list(_distpoints())
 
 
-class AIAUrlProc(SmartValueProcessor):
+@plugin_registry.register
+class AIAUrlPlugin(Plugin):
     schema_label = 'aia-urls'
+    extension_type = x509.ExtensionId
 
-    def provision(self, arch: PKIArchitecture, params):
+    def provision(self, extn_id, arch: PKIArchitecture, params):
         # TODO support other AIA entries: ca_issuers, time_stamping,
         #  ca_repository
         try:
@@ -52,10 +57,12 @@ class AIAUrlProc(SmartValueProcessor):
         return list(_ocsps())
 
 
-class KeyUsageProc(SmartValueProcessor):
+@plugin_registry.register
+class KeyUsagePlugin(Plugin):
     schema_label = 'key-usage'
+    extension_type = x509.ExtensionId
 
-    def provision(self, arch: 'PKIArchitecture', params):
+    def provision(self, extn_id, arch: 'PKIArchitecture', params):
         # asn1crypto doesn't accept a list to construct a bit string object
         return x509.KeyUsage(set(params))
 

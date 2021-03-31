@@ -5,10 +5,11 @@ import os.path
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Optional, List, Dict, Iterable, Tuple
+from typing import Optional, List, Dict, Iterable, Tuple, Type, Union
 from zipfile import ZipFile
 
 import yaml
+from asn1crypto.core import ObjectIdentifier
 from dateutil.parser import parse as parse_dt
 from asn1crypto import x509, core, pem, ocsp
 from dateutil.tz import tzlocal
@@ -51,9 +52,9 @@ class ServiceLabel(LabelString):
     pass
 
 
-class ProcessorLabel(LabelString):
+class PluginLabel(LabelString):
     """
-    Label referring to an extension processor (and the corresponding schema).
+    Label referring to a plugin (and the corresponding schema).
     """
     pass
 
@@ -299,49 +300,135 @@ class Validity(ConfigurableMixin):
             ) from e
 
 
-class SmartValueProcessor(abc.ABC):
-    """Interface that supplies values for (certificate) extensions."""
+class Plugin(abc.ABC):
+    """
+    Interface that supplies values for all sorts of extensions, including but
+    not limited to certificate extensions.
 
-    def provision(self, arch: 'PKIArchitecture', params):
+    The :attr:`schema_label` and :attr:`extension_type` attributes are used
+    to figure out when and how to invoke the plugin in question.
+    The :attr:`schema_label` uniquely identifies the plugin, and the
+    :attr:`extension_type` attribute indicates the type of object identifiers
+    handled by the plugin (e.g. :class:`.x509.ExtensionId` for certificate
+    extensions).
+
+    .. note::
+        If the OID you intend to use is not known to ``asn1crypto``, you should
+        register it in the ``_map`` attribute of the appropriate
+        :class:`~.core.ObjectIdentifier` subclass, and register a binding
+        in the ``_oid_specs`` attribute of the corresponding extension class.
+        This needs to happen while your module is imported, since otherwise
+        ``asn1crypto`` may not pick up on it in time.
+
+    The :meth:`provision` method should produce a value of the ``asn1crypto``
+    type mandated by the extension's object identifier.
+
+    Plugins must be stateless.
+    """
+
+    schema_label: str = None
+    extension_type: Type[ObjectIdentifier] = None
+
+    def provision(self, extn_id: ObjectIdentifier,
+                  arch: 'PKIArchitecture', params):
+        """
+        Produce a value for an extension identified by ``extn_id``.
+
+        :param extn_id:
+            The ID of an extension. Guaranteed to be a subclass of
+            :class:`extension_type`.
+        :param arch:
+            The current :class:`.PKIArchitecture` being operated on.
+        :param params:
+            A parameter object, lifted directly from the input configuration.
+            Plugins are expected to handle any necessary type checking.
+        :return:
+            A value compatible
+        """
         raise NotImplementedError
 
 
 @dataclass(frozen=True)
 class SmartValueSpec(ConfigurableMixin):
-    """Class holding configuration for a smart value processor."""
+    """Class holding configuration for a plugin-generated value."""
 
-    schema: ProcessorLabel
+    schema: PluginLabel
     params: dict = field(default_factory=dict)
 
 
-class SmartValueProcessorRegistry:
+class PluginRegistry:
     """
-    Registry of smart value processor implementations for a given PKI
-    architecture.
+    Registry of plugin implementations.
     """
 
-    def __init__(self, arch: 'PKIArchitecture'):
-        self.arch = arch
+    def __init__(self):
         self._dict = {}
 
-    def register(self, schema_label: ProcessorLabel,
-                 processor: SmartValueProcessor):
-        self._dict[schema_label] = processor
+    def register(self, plugin: Union[Plugin, Type[Plugin]]):
+        """
+        Register a plugin object.
 
-    def process_value(self, spec: SmartValueSpec):
+        As a convenience, you can also use this method as a class decorator
+        on plugin classes. In this case latter case, the plugin class should
+        have a no-arguments ``__init__`` method.
+
+        :param plugin:
+            A subclass of :class:`Plugin`, or an instance of such a subclass.
+        """
+        orig_input = plugin
+
+        if isinstance(plugin, type):
+            cls = plugin
+            # try to instantiate the class
+            try:
+                plugin = cls()
+            except TypeError as e:
+                raise ConfigurationError(
+                    f"Failed to instantiate plugin of type {cls.__name__}"
+                ) from e
+        else:
+            cls = plugin.__class__
+
+        schema_label = plugin.schema_label
+        if not isinstance(schema_label, str):
+            raise ConfigurationError(
+                f"Plugin {cls.__name__} does not declare a string-type "
+                f"'schema_label' attribute."
+            )
+
+        extension_type = plugin.extension_type
+        if not isinstance(extension_type, type) \
+                or not issubclass(extension_type, ObjectIdentifier):
+            raise ConfigurationError(
+                f"Plugin {cls.__name__} does not declare an "
+                f"'extension_type' attribute that is a subclass of "
+                f"ObjectIdentifier."
+            )
+        self._dict[schema_label] = plugin
+        return orig_input
+
+    def process_value(self, extn_id: str,
+                      arch: 'PKIArchitecture', spec: SmartValueSpec):
         try:
-            proc: SmartValueProcessor = self._dict[spec.schema]
+            proc: Plugin = self._dict[spec.schema]
         except KeyError as e:
             raise ConfigurationError(
-                f"There is no registered processor for the schema "
+                f"There is no registered plugin for the schema "
                 f"'{spec.schema}'."
             ) from e
-        return proc.provision(self.arch, spec.params)
+        extn_id = proc.extension_type(extn_id)
+        return proc.provision(extn_id, arch, spec.params)
+
+
+DEFAULT_PLUGIN_REGISTRY = plugin_registry = PluginRegistry()
+"""
+The default plugin registry.
+"""
 
 
 @dataclass(frozen=True)
 class ExtensionSpec(ConfigurableMixin):
-    """Specifies the value of a (certificate) extension."""
+    """Specifies the value of an extension."""
 
     id: str
     """ID of the extension, as a string (see :module:`asn1crypto.x509`)."""
@@ -356,8 +443,7 @@ class ExtensionSpec(ConfigurableMixin):
     smart_value: Optional[SmartValueSpec] = None
     """
     Provides instructions for the dynamic calculation of an extension value
-    through a smart value processor. Must be omitted if :attr:`value` is
-    present.
+    through a plugin. Must be omitted if :attr:`value` is present.
     """
 
     @classmethod
@@ -386,16 +472,14 @@ class ExtensionSpec(ConfigurableMixin):
             }
         super().process_entries(config_dict)
 
-    def to_asn1(self, proc_registry: SmartValueProcessorRegistry,
-                extn_id_class=x509.ExtensionId) -> x509.Extension:
+    def to_asn1(self, arch: 'PKIArchitecture', plugins: PluginRegistry,
+                extension_class):
         value = self.value
         if value is None and self.smart_value is not None:
-            value = proc_registry.process_value(self.smart_value)
+            value = plugins.process_value(self.id, arch, self.smart_value)
 
-        return x509.Extension({
-            'extn_id': extn_id_class(self.id),
-            'critical': self.critical,
-            'extn_value': value
+        return extension_class({
+            'extn_id': self.id, 'critical': self.critical, 'extn_value': value
         })
 
 
@@ -425,7 +509,7 @@ class CertificateSpec(ConfigurableMixin):
     validity: Validity
     """Validity period of the certificate."""
 
-    _templatable_config: dict
+    templatable_config: dict
     """Configuration that can be reused by other certificate specs."""
 
     signature_algo: Optional[str] = None
@@ -512,7 +596,7 @@ class CertificateSpec(ConfigurableMixin):
             )
         # Do this first for consistency, so we don't put processed values
         # into the template
-        config_dict['_templatable_config'] = {
+        config_dict['templatable_config'] = {
             k: v for k, v in config_dict.items()
             if k not in EXCLUDED_FROM_TEMPLATE
         }
@@ -536,21 +620,8 @@ class PKIArchitecture:
     )
 
     @classmethod
-    def default_smart_value_procs(cls):
-        from .smart_values import (
-            AIAUrlProc, CRLDistributionPointsProc, KeyUsageProc
-        )
-        return {
-            AIAUrlProc.schema_label: AIAUrlProc(),
-            CRLDistributionPointsProc.schema_label: CRLDistributionPointsProc(),
-            KeyUsageProc.schema_label: KeyUsageProc()
-        }
-
-    @classmethod
     def build_architectures(cls, key_sets: KeySets, cfgs, external_url_prefix,
-                            smart_value_procs=None):
-        if smart_value_procs is None:
-            smart_value_procs = cls.default_smart_value_procs()
+                            plugins: PluginRegistry = DEFAULT_PLUGIN_REGISTRY):
         for arch_label, cfg in cfgs.items():
             arch_label = ArchLabel(arch_label)
             check_config_keys(arch_label, PKIArchitecture.CONFIG_KEYS, cfg)
@@ -589,14 +660,14 @@ class PKIArchitecture:
                 service_config=services,
                 external_url_prefix=external_url_prefix,
                 service_base_url=service_base_url,
-                smart_value_procs=smart_value_procs
+                plugins=plugins
             )
 
     def __init__(self, arch_label: ArchLabel,
                  key_set: KeySet, entities: EntityRegistry,
                  cert_spec_config, service_config,
                  external_url_prefix, service_base_url,
-                 smart_value_procs=None):
+                 plugins: PluginRegistry = DEFAULT_PLUGIN_REGISTRY):
 
         if not service_base_url.startswith('/'):
             raise ConfigurationError(
@@ -606,12 +677,7 @@ class PKIArchitecture:
         self.key_set = key_set
         self.entities = entities
 
-        # register smart value processors
-        if smart_value_procs is None:
-            smart_value_procs = self.__class__.default_smart_value_procs()
-        self.proc_registry = pr = SmartValueProcessorRegistry(self)
-        for schema, proc in smart_value_procs.items():
-            pr.register(schema, proc)
+        self.plugin_registry = plugins
 
         self._serial_by_issuer = defaultdict(lambda: DEFAULT_FIRST_SERIAL)
 
@@ -641,7 +707,7 @@ class PKIArchitecture:
                         f"Cert spec '{name}' refers to '{template}' as a "
                         f"template, but '{template}' hasn't been declared yet."
                     ) from e
-                effective_cert_config = dict(template_spec._templatable_config)
+                effective_cert_config = dict(template_spec.templatable_config)
                 effective_cert_config.update(cert_config)
             else:
                 effective_cert_config = dict(cert_config)
@@ -871,7 +937,9 @@ class PKIArchitecture:
         extensions = [ski_extension, aki_extension]
         # add extensions from config
         extensions.extend(
-            ext_spec.to_asn1(self.proc_registry) for ext_spec in spec.extensions
+            ext_spec.to_asn1(
+                self, self.plugin_registry, x509.Extension
+            ) for ext_spec in spec.extensions
         )
         tbs = x509.TbsCertificate({
             'version': 'v3',
