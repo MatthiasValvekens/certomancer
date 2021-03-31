@@ -150,7 +150,9 @@ def gen_index(architectures):
     try:
         from jinja2 import Environment, PackageLoader
     except ImportError as e:
-        raise CertomancerServiceError("Web UI requires Jinja2 to be installed")
+        raise CertomancerServiceError(
+            "Web UI requires Jinja2 to be installed"
+        ) from e
 
     def _index_info():
         pki_arch: PKIArchitecture
