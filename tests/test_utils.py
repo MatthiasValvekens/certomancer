@@ -2,7 +2,8 @@ from datetime import timedelta
 
 import pytest
 
-from certomancer.config_utils import parse_duration
+from certomancer.config_utils import parse_duration, SearchDir, \
+    ConfigurationError
 
 
 @pytest.mark.parametrize(
@@ -39,3 +40,30 @@ def test_parse_duration(input_str, expected_out):
 def test_parse_duration_error(input_str, err_msg):
     with pytest.raises(ValueError, match=err_msg or "Failed.*"):
         assert parse_duration(input_str)
+
+
+@pytest.mark.parametrize(
+    'sub_path',
+    [
+        'xyz', '/abc/def/xyz', '../def/xyz', '../../abc/def/xyz',
+        '../def/xyz', '.././././../abc/def/xyz',
+        'xyz/../../def/xyz'
+    ]
+)
+def test_search_dir(sub_path):
+    sd = SearchDir('/abc/def')
+    assert sd.resolve(sub_path) == '/abc/def/xyz'
+
+
+@pytest.mark.parametrize(
+    'sub_path',
+    [
+        '/etc/shadow', '/abc/defc', '/ab', '/abc/de', '../../../etc/shadow',
+        '../../../abc/de', '../../././.././../abc/de',
+        'xyz/../../../etc/shadow'
+    ]
+)
+def test_search_dir_bad(sub_path):
+    sd = SearchDir('/abc/def')
+    with pytest.raises(ConfigurationError, match='.*does not resolve.*'):
+        sd.resolve(sub_path)

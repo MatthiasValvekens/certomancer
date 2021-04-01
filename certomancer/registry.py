@@ -19,7 +19,7 @@ from asn1crypto.keys import PrivateKeyInfo, PublicKeyInfo
 from .config_utils import (
     ConfigurationError, check_config_keys, LabelString,
     ConfigurableMixin, parse_duration, key_dashes_to_underscores, get_and_apply,
-    pyca_cryptography_present
+    pyca_cryptography_present, SearchDir
 )
 from .services import CertomancerServiceError, generic_sign, CRLBuilder, \
     choose_signed_digest, SimpleOCSPResponder, TimeStamper, \
@@ -153,7 +153,7 @@ class KeyFromFile:
 class KeySet:
     """A labelled collection of keys."""
 
-    def __init__(self, config, lazy_load_keys=False, working_dir=None):
+    def __init__(self, config, search_dir: SearchDir, lazy_load_keys=False):
         check_config_keys('KeySet', ('path-prefix', 'keys'), config)
         try:
             keys = config['keys']
@@ -162,15 +162,12 @@ class KeySet:
                 "The 'keys' entry is mandatory in all key sets"
             ) from e
         path_prefix = config.get('path-prefix', '')
-        if path_prefix and not path_prefix.endswith('/'):
-            path_prefix += '/'
-        if working_dir is not None and not os.path.isabs(path_prefix):
-            path_prefix = os.path.join(working_dir, path_prefix)
+        path_prefix = search_dir.search_subdir(path_prefix)
 
         # apply path prefix to key configs
         def _prepend(key_conf):
             try:
-                key_conf['path'] = path_prefix + key_conf['path']
+                key_conf['path'] = path_prefix.resolve(key_conf['path'])
             except KeyError:
                 pass
             return key_conf
@@ -208,9 +205,9 @@ class KeySet:
 class KeySets:
     """A labelled collection of key sets."""
 
-    def __init__(self, config, lazy_load_keys=False, working_dir=None):
+    def __init__(self, config, search_dir, lazy_load_keys=False):
         self._dict = {
-            k: KeySet(v, lazy_load_keys=lazy_load_keys, working_dir=working_dir)
+            k: KeySet(v, lazy_load_keys=lazy_load_keys, search_dir=search_dir)
             for k, v in config.items()
         }
 
@@ -667,8 +664,19 @@ class PKIArchitecture:
 
     @classmethod
     def build_architectures(cls, key_sets: KeySets, cfgs, external_url_prefix,
+                            config_search_dir: Optional[SearchDir],
                             plugins: PluginRegistry = DEFAULT_PLUGIN_REGISTRY):
         for arch_label, cfg in cfgs.items():
+            # external config
+            if isinstance(cfg, str):
+                if config_search_dir is None:
+                    raise ConfigurationError(
+                        f"Could not load external PKI definition with label "
+                        f"'{arch_label}'; external configuration is disabled."
+                    )
+                cfg_path = config_search_dir.resolve(path=cfg)
+                with open(cfg_path, 'r') as external_conf:
+                    cfg = yaml.safe_load(external_conf)
             arch_label = ArchLabel(arch_label)
             check_config_keys(arch_label, PKIArchitecture.CONFIG_KEYS, cfg)
             service_base_url = cfg.get(
@@ -1429,17 +1437,32 @@ class CertomancerConfig:
     DEFAULT_EXTERNAL_URL_PREFIX = 'http://ca.example.com'
 
     @classmethod
-    def from_yaml(cls, yaml_str, working_dir=None) -> 'CertomancerConfig':
+    def from_yaml(cls, yaml_str, key_search_dir,
+                  config_search_dir=None) -> 'CertomancerConfig':
         config_dict = yaml.safe_load(yaml_str)
-        return CertomancerConfig(config_dict, working_dir=working_dir)
+        return CertomancerConfig(
+            config_dict, key_search_dir=key_search_dir,
+            config_search_dir=config_search_dir
+        )
 
     @classmethod
-    def from_file(cls, cfg_path, working_dir=None) -> 'CertomancerConfig':
+    def from_file(cls, cfg_path, key_search_dir=None, config_search_dir=None,
+                  allow_external_config=True) -> 'CertomancerConfig':
+        main_config_dir = os.path.dirname(cfg_path)
+        if not allow_external_config:
+            config_search_dir = None
+        elif config_search_dir is None:
+            config_search_dir = main_config_dir
+        key_search_dir = key_search_dir or main_config_dir
         with open(cfg_path, 'r') as inf:
             config_dict = yaml.safe_load(inf)
-        return CertomancerConfig(config_dict, working_dir=working_dir)
+        return CertomancerConfig(
+            config_dict, key_search_dir=key_search_dir,
+            config_search_dir=config_search_dir
+        )
 
-    def __init__(self, config, lazy_load_keys=False, working_dir=None):
+    def __init__(self, config, key_search_dir: str,
+                 lazy_load_keys=False, config_search_dir: Optional[str] = None):
         self.external_url_prefix = external_url_prefix = config.get(
             'external-url-prefix', self.DEFAULT_EXTERNAL_URL_PREFIX
         )
@@ -1452,7 +1475,7 @@ class CertomancerConfig:
 
         self.key_sets = key_sets = KeySets(
             key_set_cfg, lazy_load_keys=lazy_load_keys,
-            working_dir=working_dir
+            search_dir=SearchDir(key_search_dir)
         )
         try:
             arch_cfgs = config['pki-architectures']
@@ -1460,10 +1483,14 @@ class CertomancerConfig:
             raise ConfigurationError(
                 "'pki-architectures' must be present in configuration"
             ) from e
+
+        if config_search_dir is not None:
+            config_search_dir = SearchDir(config_search_dir)
         self.pki_archs = {
             arch.arch_label: arch
             for arch in PKIArchitecture.build_architectures(
-                key_sets, arch_cfgs, external_url_prefix=external_url_prefix
+                key_sets, arch_cfgs, external_url_prefix=external_url_prefix,
+                config_search_dir=config_search_dir
             )
         }
 

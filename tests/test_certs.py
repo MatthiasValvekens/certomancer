@@ -6,6 +6,7 @@ import pytest
 import pytz
 import yaml
 
+from certomancer.config_utils import SearchDir
 from certomancer.registry import KeySet, EntityRegistry, PKIArchitecture, \
     CertLabel, EntityLabel, ArchLabel
 
@@ -14,17 +15,18 @@ DUMMY_PASSWORD = b'secret'
 
 KEY_NAME_REGEX = re.compile(r'(\w+)\.key\.pem')
 
+TEST_DATA_DIR = 'tests/data'
+
 
 def dir_to_keyset_cfg(dirpath):
     def _keys():
-        for fname in os.listdir(dirpath):
+        for fname in os.listdir(os.path.join(TEST_DATA_DIR, dirpath)):
             m = KEY_NAME_REGEX.fullmatch(fname)
             if not m:
                 continue
             yield m.group(1), {
                 'path': fname, 'password': DUMMY_PASSWORD.decode('ascii')
             }
-
 
     return {
         'path-prefix': dirpath,
@@ -33,11 +35,14 @@ def dir_to_keyset_cfg(dirpath):
 
 
 def dir_to_keyset(dirpath):
-    return KeySet(dir_to_keyset_cfg(dirpath))
+    return KeySet(
+        dir_to_keyset_cfg(dirpath),
+        search_dir=SearchDir(TEST_DATA_DIR)
+    )
 
 
-RSA_KEYS = dir_to_keyset('tests/data/keys-rsa')
-ECDSA_KEYS = dir_to_keyset('tests/data/keys-ecdsa')
+RSA_KEYS = dir_to_keyset('keys-rsa')
+ECDSA_KEYS = dir_to_keyset('keys-ecdsa')
 
 ENTITIES = EntityRegistry(
     yaml.safe_load('''

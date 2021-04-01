@@ -9,6 +9,7 @@ user-provided configuration (e.g. from a Yaml file).
 
 import dataclasses
 import re
+import os.path
 from collections.abc import Callable
 
 from datetime import timedelta
@@ -17,7 +18,7 @@ from datetime import timedelta
 __all__ = [
     'ConfigurationError', 'ConfigurableMixin', 'check_config_keys',
     'parse_duration', 'key_dashes_to_underscores', 'get_and_apply',
-    'LabelString', 'pyca_cryptography_present'
+    'LabelString', 'pyca_cryptography_present', 'SearchDir'
 ]
 
 from typing import Optional
@@ -256,3 +257,29 @@ def pyca_cryptography_present() -> bool:
         return True
     except ImportError:
         return False
+
+
+class SearchDir:
+    root_path: str
+
+    def __init__(self, root_path: str):
+        self.root_path = os.path.abspath(root_path)
+
+    def resolve(self, path):
+        joined = os.path.join(self.root_path, path)
+        abs_path = os.path.abspath(joined)
+        if os.path.commonpath([self.root_path, abs_path]) != self.root_path:
+            raise ConfigurationError(
+                f"Path '{joined}' does not resolve to a directory "
+                f"under '{self.root_path}'."
+            )
+        return abs_path
+
+    def search_subdir(self, path):
+        return SearchDir(self.resolve(path))
+
+    def __repr__(self):
+        return f"SearchDir('{self.root_path}')"
+
+    def __str__(self):
+        return self.root_path
