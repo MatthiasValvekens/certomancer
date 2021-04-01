@@ -1,6 +1,6 @@
 from .registry import (
-    Plugin, plugin_registry, CertomancerConfig, PKIArchitecture
+    ExtensionPlugin, plugin_registry, CertomancerConfig, PKIArchitecture
 )
 from .default_plugins import *
 
-__all__ = ['Plugin', 'plugin_registry', 'PKIArchitecture', 'CertomancerConfig']
+__all__ = ['ExtensionPlugin', 'plugin_registry', 'PKIArchitecture', 'CertomancerConfig']

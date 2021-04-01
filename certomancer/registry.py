@@ -297,7 +297,7 @@ class Validity(ConfigurableMixin):
             ) from e
 
 
-class Plugin(abc.ABC):
+class ExtensionPlugin(abc.ABC):
     """
     Interface that supplies values for all sorts of extensions, including but
     not limited to certificate extensions.
@@ -361,7 +361,7 @@ class PluginRegistry:
     def __init__(self):
         self._dict = {}
 
-    def register(self, plugin: Union[Plugin, Type[Plugin]]):
+    def register(self, plugin: Union[ExtensionPlugin, Type[ExtensionPlugin]]):
         """
         Register a plugin object.
 
@@ -407,7 +407,7 @@ class PluginRegistry:
     def process_value(self, extn_id: str,
                       arch: 'PKIArchitecture', spec: SmartValueSpec):
         try:
-            proc: Plugin = self._dict[spec.schema]
+            proc: ExtensionPlugin = self._dict[spec.schema]
         except KeyError as e:
             raise ConfigurationError(
                 f"There is no registered plugin for the schema "
