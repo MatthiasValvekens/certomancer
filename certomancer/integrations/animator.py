@@ -363,8 +363,7 @@ class Animator:
         return resp(environ, start_response)
 
 
-def _check_env_flag(flag_name):
-    env = os.environ
+def _check_env_flag(env, flag_name):
     val = env.get(flag_name, '0')
     try:
         return bool(int(val))
@@ -382,8 +381,14 @@ class LazyAnimator:
         env = os.environ
         cfg_file = env['CERTOMANCER_CONFIG']
         key_dir = env['CERTOMANCER_KEY_DIR']
-        with_web_ui = not _check_env_flag('CERTOMANCER_NO_WEB_UI')
-        cfg = CertomancerConfig.from_file(cfg_file, key_dir)
+        config_dir = env.get('CERTOMANCER_EXTRA_CONFIG_DIR', None)
+        with_web_ui = not _check_env_flag(env, 'CERTOMANCER_NO_WEB_UI')
+        extl_config = not _check_env_flag(env, 'CERTOMANCER_NO_EXTRA_CONFIG')
+
+        cfg = CertomancerConfig.from_file(
+            cfg_file, key_search_dir=key_dir, config_search_dir=config_dir,
+            allow_external_config=extl_config
+        )
         self.animator = Animator(cfg.pki_archs, with_web_ui=with_web_ui)
 
     def __call__(self, environ, start_response):

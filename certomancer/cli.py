@@ -26,10 +26,13 @@ def _log_config():
     _logger.addHandler(handler)
 
 
-def _lazy_cfg(config, key_root):
+def _lazy_cfg(config, key_root, cfg_root, no_external_config):
     config = config or DEFAULT_CONFIG_FILE
     try:
-        cfg = CertomancerConfig.from_file(config, key_root)
+        cfg = CertomancerConfig.from_file(
+            config, key_search_dir=key_root, config_search_dir=cfg_root,
+            allow_external_config=not no_external_config
+        )
     except IOError as e:
         raise click.ClickException(
             f"I/O Error processing config from {config}: {e}",
@@ -46,13 +49,22 @@ def _lazy_cfg(config, key_root):
                     f'[default: {DEFAULT_CONFIG_FILE}]'),
               required=False, type=click.Path(readable=True, dir_okay=False))
 @click.option('--key-root',
-              help='root folder for key material paths [default: CWD]',
+              help='root folder for key material paths [default: config file '
+                   'location]',
               required=False, type=click.Path(readable=True, file_okay=False))
+@click.option('--extra-config-root',
+              help='root folder for external config paths [default: config '
+                   'file location]',
+              required=False, type=click.Path(readable=True, file_okay=False))
+@click.option('--no-external-config', help='disable external config loading',
+              required=False, type=bool, is_flag=True)
 @click.pass_context
-def cli(ctx, config, key_root):
+def cli(ctx, config, key_root, extra_config_root, no_external_config):
     _log_config()
     ctx.ensure_object(dict)
-    ctx.obj['config'] = _lazy_cfg(config, key_root)
+    ctx.obj['config'] = _lazy_cfg(
+        config, key_root, extra_config_root, no_external_config
+    )
 
 
 @cli.command(help='create and dump all certificates for a PKI architecture')
