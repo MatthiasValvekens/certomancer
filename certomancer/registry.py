@@ -1,5 +1,6 @@
 import abc
 import hashlib
+import importlib
 import os
 import os.path
 from collections import defaultdict
@@ -353,7 +354,7 @@ class SmartValueSpec(ConfigurableMixin):
     params: dict = field(default_factory=dict)
 
 
-class PluginRegistry:
+class ExtensionPluginRegistry:
     """
     Registry of plugin implementations.
     """
@@ -417,9 +418,10 @@ class PluginRegistry:
         return proc.provision(extn_id, arch, spec.params)
 
 
-DEFAULT_PLUGIN_REGISTRY = plugin_registry = PluginRegistry()
+DEFAULT_EXT_PLUGIN_REGISTRY = extension_plugin_registry \
+    = ExtensionPluginRegistry()
 """
-The default plugin registry.
+The default extension plugin registry.
 """
 
 
@@ -665,7 +667,7 @@ class PKIArchitecture:
     @classmethod
     def build_architectures(cls, key_sets: KeySets, cfgs, external_url_prefix,
                             config_search_dir: Optional[SearchDir],
-                            plugins: PluginRegistry = DEFAULT_PLUGIN_REGISTRY):
+                            plugins: ExtensionPluginRegistry = DEFAULT_EXT_PLUGIN_REGISTRY):
         for arch_label, cfg in cfgs.items():
             # external config
             if isinstance(cfg, str):
@@ -721,7 +723,7 @@ class PKIArchitecture:
                  key_set: KeySet, entities: EntityRegistry,
                  cert_spec_config, service_config,
                  external_url_prefix, service_base_url,
-                 plugins: PluginRegistry = DEFAULT_PLUGIN_REGISTRY):
+                 plugins: ExtensionPluginRegistry = DEFAULT_EXT_PLUGIN_REGISTRY):
 
         if not service_base_url.startswith('/'):
             raise ConfigurationError(
@@ -1433,6 +1435,26 @@ class ServiceRegistry:
         return arch.get_cert(cert_label)
 
 
+DEFAULT_PLUGIN_MODULE = "certomancer.default_plugins"
+
+
+def _import_plugin_modules(plugins):
+    if not isinstance(plugins, (list, tuple)):
+        raise ConfigurationError("Plugin modules must be specified as a list")
+
+    def _do_import(module):
+        try:
+            importlib.import_module(module)
+        except ImportError as e:
+            raise ConfigurationError(
+                f"Failed to import plugin module {module}."
+            ) from e
+
+    _do_import(DEFAULT_PLUGIN_MODULE)
+    for plug in plugins:
+        _do_import(plug)
+
+
 class CertomancerConfig:
     DEFAULT_EXTERNAL_URL_PREFIX = 'http://ca.example.com'
 
@@ -1466,6 +1488,10 @@ class CertomancerConfig:
         self.external_url_prefix = external_url_prefix = config.get(
             'external-url-prefix', self.DEFAULT_EXTERNAL_URL_PREFIX
         )
+
+        extn_plugin_list = config.get('plugin-modules', ())
+        _import_plugin_modules(extn_plugin_list)
+
         try:
             key_set_cfg = config['keysets']
         except KeyError as e:

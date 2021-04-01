@@ -1,11 +1,13 @@
 from asn1crypto import x509
 
 from .config_utils import ConfigurationError
-from .registry import ExtensionPlugin, PKIArchitecture, plugin_registry
+from .registry import ExtensionPlugin, PKIArchitecture, \
+    extension_plugin_registry
 
 __all__ = ['CRLDistributionPointsPlugin', 'KeyUsagePlugin', 'AIAUrlPlugin']
 
-@plugin_registry.register
+
+@extension_plugin_registry.register
 class CRLDistributionPointsPlugin(ExtensionPlugin):
     schema_label = 'crl-dist-url'
     extension_type = x509.ExtensionId
@@ -25,7 +27,7 @@ class CRLDistributionPointsPlugin(ExtensionPlugin):
         return list(_distpoints())
 
 
-@plugin_registry.register
+@extension_plugin_registry.register
 class AIAUrlPlugin(ExtensionPlugin):
     schema_label = 'aia-urls'
     extension_type = x509.ExtensionId
@@ -57,7 +59,7 @@ class AIAUrlPlugin(ExtensionPlugin):
         return list(_ocsps())
 
 
-@plugin_registry.register
+@extension_plugin_registry.register
 class KeyUsagePlugin(ExtensionPlugin):
     schema_label = 'key-usage'
     extension_type = x509.ExtensionId
