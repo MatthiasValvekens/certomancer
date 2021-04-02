@@ -12,7 +12,8 @@ from functools import partial
 class Illusionist:
     """
     Register fake PKI services in a request mocker.
-    Supports CRL retrieval (latest only), OCSP, and timestamping.
+    Supports CRL retrieval (latest only), OCSP, timestamping and service
+    plugins.
 
     :param pki_arch:
         A certomancer PKI architecture.
@@ -54,6 +55,16 @@ class Illusionist:
                 headers={'Content-Type': 'application/pkix-crl'}
             )
 
+        for plugin_info in services.list_plugin_services():
+            mocker.register_uri(
+                'POST', plugin_info.internal_url,
+                content=partial(
+                    self.serve_plugin, plugin_label=plugin_info.plugin_label,
+                    label=plugin_info.label
+                ),
+                headers={'Content-Type': plugin_info.content_type}
+            )
+
     @property
     def at_time(self):
         return self.fixed_time or datetime.now(tz=tzlocal.get_localzone())
@@ -77,3 +88,8 @@ class Illusionist:
     def serve_crl(self, _request, _context, *, label):
         crl = self.pki_arch.service_registry.get_crl(label, self.at_time)
         return crl.dump()
+
+    def serve_plugin(self, request, _context, *, label, plugin_label):
+        return self.pki_arch.service_registry.invoke_plugin(
+            plugin_label, label, request.body, at_time=self.at_time
+        )

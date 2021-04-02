@@ -18,7 +18,8 @@ from datetime import timedelta
 __all__ = [
     'ConfigurationError', 'ConfigurableMixin', 'check_config_keys',
     'parse_duration', 'key_dashes_to_underscores', 'get_and_apply',
-    'LabelString', 'pyca_cryptography_present', 'SearchDir'
+    'LabelString', 'pyca_cryptography_present', 'SearchDir',
+    'plugin_instantiate_util'
 ]
 
 from typing import Optional
@@ -283,3 +284,19 @@ class SearchDir:
 
     def __str__(self):
         return self.root_path
+
+
+def plugin_instantiate_util(plugin):
+    if isinstance(plugin, type):
+        cls = plugin
+        # try to instantiate the class
+        try:
+            plugin = cls()
+        except TypeError as e:
+            raise ConfigurationError(
+                f"Failed to instantiate plugin of type {cls.__name__}"
+            ) from e
+    else:
+        cls = plugin.__class__
+
+    return plugin, cls

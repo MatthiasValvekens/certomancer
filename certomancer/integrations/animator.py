@@ -13,11 +13,12 @@ from werkzeug.routing import Map, Rule, BaseConverter
 from werkzeug.exceptions import HTTPException, NotFound, InternalServerError, \
     BadRequest
 
-from certomancer.config_utils import pyca_cryptography_present
+from certomancer.config_utils import pyca_cryptography_present, \
+    ConfigurationError
 from certomancer.registry import (
     PKIArchitecture, ServiceRegistry, ServiceLabel, CertLabel,
     CertomancerObjectNotFoundError, CertomancerConfig, ArchLabel, EntityLabel,
-    CertificateSpec
+    CertificateSpec, PluginLabel, PluginServiceRequestError
 )
 from certomancer.services import CertomancerServiceError
 
@@ -48,6 +49,7 @@ class ServiceType(enum.Enum):
     CRL_REPO = 'crl'
     TSA = 'tsa'
     CERT_REPO = 'certs'
+    PLUGIN = 'plugin'
 
     def endpoint(self, arch: ArchLabel, label: ServiceLabel):
         return Endpoint(arch, self, label)
@@ -58,6 +60,7 @@ class Endpoint:
     arch: ArchLabel
     service_type: ServiceType
     label: ServiceLabel
+    plugin_label: Optional[PluginLabel] = None
 
 
 def service_rules(services: ServiceRegistry):
@@ -112,6 +115,15 @@ def service_rules(services: ServiceRegistry):
                 f"<cert_label>.<ext:use_pem>",
                 endpoint=endpoint, methods=('GET',)
             )
+    srv = ServiceType.PLUGIN
+    for plugin_info in services.list_plugin_services():
+        logger.info(f"PLUG:{plugin_info.internal_url}")
+        endpoint = Endpoint(
+            arch, srv, plugin_info.label, plugin_info.plugin_label
+        )
+        yield Rule(
+            plugin_info.internal_url, methods=('POST',), endpoint=endpoint
+        )
 
 
 @dataclass(frozen=True)
@@ -281,6 +293,29 @@ class Animator:
             data = pem.armor('certificate', data)
         return Response(data, mimetype=mime)
 
+    def serve_plugin(self, request: Request,
+                     plugin_label: PluginLabel, *, label: ServiceLabel,
+                     arch: ArchLabel):
+        try:
+            pki_arch = self.architectures[arch]
+        except KeyError:
+            raise NotFound()
+        services = pki_arch.service_registry
+        try:
+            plugin_info = services.get_plugin_info(plugin_label, label)
+        except ConfigurationError:
+            raise NotFound()
+
+        content_type = plugin_info.content_type
+        req_content = request.stream.read()
+        try:
+            response_bytes = services.invoke_plugin(
+                plugin_label, label, req_content, at_time=self.at_time
+            )
+        except PluginServiceRequestError as e:
+            raise BadRequest(e.user_msg)
+        return Response(response_bytes, mimetype=content_type)
+
     def serve_zip(self, *, arch):
         try:
             pki_arch = self.architectures[ArchLabel(arch)]
@@ -346,6 +381,11 @@ class Animator:
             if endpoint.service_type == ServiceType.CERT_REPO:
                 return self.serve_cert(
                     label=endpoint.label, arch=endpoint.arch, **values
+                )
+            if endpoint.service_type == ServiceType.PLUGIN:
+                return self.serve_plugin(
+                    request, endpoint.plugin_label,
+                    label=endpoint.label, arch=endpoint.arch
                 )
             raise InternalServerError()  # pragma: nocover
         except CertomancerObjectNotFoundError as e:

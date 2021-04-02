@@ -1,12 +1,13 @@
 import abc
 import hashlib
 import importlib
+import logging
 import os
 import os.path
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Optional, List, Dict, Iterable, Tuple, Type, Union
+from typing import Optional, List, Dict, Iterable, Tuple, Type, Union, Any
 from zipfile import ZipFile
 
 import yaml
@@ -20,11 +21,14 @@ from asn1crypto.keys import PrivateKeyInfo, PublicKeyInfo
 from .config_utils import (
     ConfigurationError, check_config_keys, LabelString,
     ConfigurableMixin, parse_duration, key_dashes_to_underscores, get_and_apply,
-    pyca_cryptography_present, SearchDir
+    pyca_cryptography_present, SearchDir, plugin_instantiate_util
 )
 from .services import CertomancerServiceError, generic_sign, CRLBuilder, \
     choose_signed_digest, SimpleOCSPResponder, TimeStamper, \
     RevocationInfoInterface, url_distribution_point
+
+
+logger = logging.getLogger(__name__)
 
 
 class KeyLabel(LabelString):
@@ -356,7 +360,7 @@ class SmartValueSpec(ConfigurableMixin):
 
 class ExtensionPluginRegistry:
     """
-    Registry of plugin implementations.
+    Registry of extension plugin implementations.
     """
 
     def __init__(self):
@@ -371,21 +375,12 @@ class ExtensionPluginRegistry:
         have a no-arguments ``__init__`` method.
 
         :param plugin:
-            A subclass of :class:`Plugin`, or an instance of such a subclass.
+            A subclass of :class:`ExtensionPlugin`, or an instance of
+            such a subclass.
         """
         orig_input = plugin
 
-        if isinstance(plugin, type):
-            cls = plugin
-            # try to instantiate the class
-            try:
-                plugin = cls()
-            except TypeError as e:
-                raise ConfigurationError(
-                    f"Failed to instantiate plugin of type {cls.__name__}"
-                ) from e
-        else:
-            cls = plugin.__class__
+        plugin, cls = plugin_instantiate_util(plugin)
 
         schema_label = plugin.schema_label
         if not isinstance(schema_label, str):
@@ -402,7 +397,7 @@ class ExtensionPluginRegistry:
                 f"'extension_type' attribute that is a subclass of "
                 f"ObjectIdentifier."
             )
-        self._dict[schema_label] = plugin
+        self._dict[PluginLabel(schema_label)] = plugin
         return orig_input
 
     def process_value(self, extn_id: str,
@@ -474,7 +469,7 @@ class ExtensionSpec(ConfigurableMixin):
     def to_asn1(self, arch: 'PKIArchitecture', extension_class):
         value = self.value
         if value is None and self.smart_value is not None:
-            value = arch.plugin_registry.process_value(
+            value = arch.extn_plugin_registry.process_value(
                 self.id, arch, self.smart_value
             )
 
@@ -667,7 +662,8 @@ class PKIArchitecture:
     @classmethod
     def build_architectures(cls, key_sets: KeySets, cfgs, external_url_prefix,
                             config_search_dir: Optional[SearchDir],
-                            plugins: ExtensionPluginRegistry = DEFAULT_EXT_PLUGIN_REGISTRY):
+                            extension_plugins: ExtensionPluginRegistry = None,
+                            service_plugins: 'ServicePluginRegistry' = None):
         for arch_label, cfg in cfgs.items():
             # external config
             if isinstance(cfg, str):
@@ -716,14 +712,16 @@ class PKIArchitecture:
                 service_config=services,
                 external_url_prefix=external_url_prefix,
                 service_base_url=service_base_url,
-                plugins=plugins
+                extension_plugins=extension_plugins,
+                service_plugins=service_plugins
             )
 
     def __init__(self, arch_label: ArchLabel,
                  key_set: KeySet, entities: EntityRegistry,
                  cert_spec_config, service_config,
                  external_url_prefix, service_base_url,
-                 plugins: ExtensionPluginRegistry = DEFAULT_EXT_PLUGIN_REGISTRY):
+                 extension_plugins: ExtensionPluginRegistry = None,
+                 service_plugins: 'ServicePluginRegistry' = None):
 
         if not service_base_url.startswith('/'):
             raise ConfigurationError(
@@ -733,12 +731,14 @@ class PKIArchitecture:
         self.key_set = key_set
         self.entities = entities
 
-        self.plugin_registry = plugins
+        self.extn_plugin_registry = \
+            extension_plugins or DEFAULT_EXT_PLUGIN_REGISTRY
 
         self._serial_by_issuer = defaultdict(lambda: DEFAULT_FIRST_SERIAL)
 
         self.service_registry: ServiceRegistry = ServiceRegistry(
-            self, external_url_prefix, service_base_url, service_config
+            self, external_url_prefix, service_base_url, service_config,
+            plugins=service_plugins
         )
 
         # Parse certificate specs
@@ -1198,6 +1198,13 @@ class CertRepoServiceInfo(ServiceInfo):
         return f"{self.internal_url}/issued/{fname}"
 
 
+@dataclass(frozen=True)
+class PluginServiceInfo(ServiceInfo):
+    plugin_label: PluginLabel
+    plugin_config: Any
+    content_type: str = 'application/octet-stream'
+
+
 class OCSPInterface(RevocationInfoInterface):
 
     def __init__(self, for_issuer: EntityLabel, pki_arch: PKIArchitecture,
@@ -1226,11 +1233,160 @@ class OCSPInterface(RevocationInfoInterface):
             return revo.to_ocsp_asn1(), exts
 
 
+class PluginServiceRequestError(CertomancerServiceError):
+    """
+    Indicates a client error in a plugin.
+
+    Will map to a 400 Bad Request in Animator.
+    """
+
+    def __init__(self, *args, user_msg='Bad request'):
+        self.user_msg = user_msg
+        super().__init__(*args)
+
+
+class ServicePlugin(abc.ABC):
+    """
+    Interface to register simple custom PKI service endpoints that can be set up
+    entirely from within Certomancer configuration files.
+
+    Service plugins of this type integrate automatically with Animator and
+    Illusionist, and are sufficiently abstract to be easily adaptable to
+    other protocol integrations.
+    There are a number of restrictions:
+
+     - Plugins take requests and responses as byte streams, but the content type
+       of the response can be specified.
+     - The URL of the HTTP endpoints provided by Animator and Illusionist is
+       fixed, and there is only one endpoint per plugin / service label
+       combination.
+     - When called over HTTP, plugins receive no request metadata at all, and
+       are only reachable by POST requests.
+       This is to keep things as protocol-agnostic as possible.
+
+    .. note::
+        This API was designed to support simple protocols that do not depend
+        on the feature set of HTTP (or any carrier protocol for that matter).
+
+        Plugin authors that require more advanced HTTP-specific features can of
+        course always implement a no-op :meth:`invoke`, and wrap the Animator
+        WSGI application to intercept requests as necessary.
+    """
+    plugin_label: str = None
+
+    content_type: str = 'application/octet-stream'
+    """
+    Response content type.
+    """
+
+    def process_plugin_config(self, params):
+        """
+        Invoked during config initialisation; this method allows you to hook
+        into that process and parse user-provided configuration if necessary.
+
+        Note that you cannot interact with the PKI architecture model at this
+        stage.
+
+        :param params:
+            Original plugin parameters from the service definition
+            in the configuration file.
+        """
+        return params
+
+    def invoke(self, pki_arch: PKIArchitecture, info: PluginServiceInfo,
+               request: bytes, at_time: Optional[datetime] = None) -> bytes:
+        """
+        Invoke the plugin with the specified PKI architecture and service
+        definition, and feed it data from a request.
+
+        :param pki_arch:
+            PKI architecture context.
+        :param info:
+            Parsed service definition object.
+        :param request:
+            Request bytes.
+        :param at_time:
+            If not ``None``, the plugin should behave as if the current time
+            is given by the provided :class:`.datetime` value.
+        :return:
+            Response bytes
+        """
+        raise NotImplementedError
+
+
+class ServicePluginRegistry:
+    """
+    Registry of service plugin implementations.
+    """
+
+    def __init__(self):
+        self._dict = {}
+
+    def register(self, plugin: Union[ServicePlugin, Type[ServicePlugin]]):
+        """
+        Register a service plugin object.
+
+        As a convenience, you can also use this method as a class decorator
+        on plugin classes. In this case latter case, the plugin class should
+        have a no-arguments ``__init__`` method.
+
+        :param plugin:
+            A subclass of :class:`ServicePlugin`, or an instance of
+            such a subclass.
+        """
+
+        orig_input = plugin
+        plugin, cls = plugin_instantiate_util(plugin)
+        plugin_label = plugin.plugin_label
+        if not isinstance(plugin_label, str):
+            raise ConfigurationError(
+                f"Plugin {cls.__name__} does not declare a string-type "
+                f"'plugin_label' attribute."
+            )
+        self._dict[PluginLabel(plugin_label)] = plugin
+        return orig_input
+
+    def invoke_plugin(self, arch: PKIArchitecture, info: PluginServiceInfo,
+                      request: bytes,
+                      at_time: Optional[datetime] = None) -> bytes:
+        try:
+            plugin: ServicePlugin = self._dict[info.plugin_label]
+        except KeyError as e:
+            raise ConfigurationError(
+                f"There is no registered service plugin with label "
+                f"'{info.plugin_label}'."
+            ) from e
+        return plugin.invoke(arch, info, request, at_time=at_time)
+
+    def __getitem__(self, item: PluginLabel) -> ServicePlugin:
+        try:
+            return self._dict[item]
+        except KeyError as e:
+            raise CertomancerObjectNotFoundError(
+                f"There is no plugin labelled '{item}'."
+            ) from e
+
+    def __contains__(self, item: PluginLabel):
+        return item in self._dict
+
+    def assert_registered(self, item: PluginLabel):
+        if item not in self:
+            raise ConfigurationError(f"Plugin '{item}' is not registered.")
+
+
+DEFAULT_SRV_PLUGIN_REGISTRY = service_plugin_registry = ServicePluginRegistry()
+"""
+The default extension plugin registry.
+"""
+
+
 class ServiceRegistry:
     def __init__(self, pki_arch: PKIArchitecture, external_url_prefix,
-                 base_url, service_config):
+                 base_url, service_config,
+                 plugins: ServicePluginRegistry = None):
         self.services_base_url = base_url
         self.pki_arch = pki_arch
+        self.plugins = plugins or DEFAULT_SRV_PLUGIN_REGISTRY
 
         def _gen_svc_config(url_suffix, configs):
             for lbl, cfg in configs.items():
@@ -1238,10 +1394,12 @@ class ServiceRegistry:
                 cfg.setdefault('external-url-prefix', external_url_prefix)
                 cfg.setdefault('base-url', f"{base_url}/{url_suffix}")
                 cfg['label'] = lbl
-                yield lbl, cfg
+                yield ServiceLabel(lbl), cfg
 
         check_config_keys(
-            'services', ('ocsp', 'crl-repo', 'cert-repo', 'time-stamping'),
+            'services', (
+                'ocsp', 'crl-repo', 'cert-repo', 'time-stamping', 'plugin'
+            ),
             service_config
         )
 
@@ -1264,6 +1422,31 @@ class ServiceRegistry:
             label: TSAServiceInfo.from_config(cfg)
             for label, cfg
             in _gen_svc_config('tsa', service_config.get('time-stamping', {}))
+        }
+
+        plugin_cfg = service_config.get('plugin', {})
+
+        # TODO type checks with better error reporting
+
+        def _cfg_plugin(plugin_label, cfg_for_plugin):
+            plugin = self.plugins[plugin_label]
+            content_type = plugin.content_type
+            svc_configs = _gen_svc_config(
+                f'plugin/{plugin_label}', cfg_for_plugin
+            )
+            for service_label, cfg in svc_configs:
+                yield service_label, PluginServiceInfo(
+                    plugin_label=plugin_label, content_type=content_type,
+                    plugin_config=plugin.process_plugin_config(cfg),
+                    label=service_label,
+                    external_url_prefix=cfg['external-url-prefix'],
+                    base_url=cfg['base-url'],
+                )
+
+        self._plugin_services = {
+            PluginLabel(plugin_label):
+                dict(_cfg_plugin(PluginLabel(plugin_label), cfg))
+            for plugin_label, cfg in plugin_cfg.items()
         }
 
     def get_ocsp_info(self, label: ServiceLabel) -> OCSPResponderServiceInfo:
@@ -1434,6 +1617,40 @@ class ServiceRegistry:
                 return None
         return arch.get_cert(cert_label)
 
+    def invoke_plugin(self, plugin_label: PluginLabel,
+                      label: ServiceLabel, request: bytes,
+                      at_time: Optional[datetime] = None) -> bytes:
+        info = self.get_plugin_info(plugin_label, label)
+        return self.plugins.invoke_plugin(
+            self.pki_arch, info, request, at_time=at_time
+        )
+
+    def get_plugin_info(self, plugin_label: PluginLabel, label: ServiceLabel) \
+            -> PluginServiceInfo:
+        self.plugins.assert_registered(plugin_label)
+        try:
+            svcs_for_plugin = self._plugin_services.get(plugin_label, {})
+            return svcs_for_plugin[label]
+        except KeyError as e:
+            raise ConfigurationError(
+                f"The plugin-service combination '{plugin_label}'-'{label}' "
+                f"does not exist."
+            ) from e
+
+    def list_plugin_services(self, plugin_label: Optional[PluginLabel] = None)\
+            -> List[PluginServiceInfo]:
+        svcs = self._plugin_services
+
+        def _enumerate_svcs(*relevant_plugins):
+            for plg in relevant_plugins:
+                yield from svcs[plg].values()
+
+        if plugin_label is not None:
+            self.plugins.assert_registered(plugin_label)
+            return list(_enumerate_svcs(plugin_label))
+        else:
+            return list(_enumerate_svcs(*svcs.keys()))
+
 
 DEFAULT_PLUGIN_MODULE = "certomancer.default_plugins"
 
@@ -1452,6 +1669,7 @@ def _import_plugin_modules(plugins):
 
     _do_import(DEFAULT_PLUGIN_MODULE)
     for plug in plugins:
+        logger.debug(f"Importing plugins in module {plug}...")
         _do_import(plug)
 
 
