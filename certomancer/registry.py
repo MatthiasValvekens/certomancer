@@ -486,6 +486,7 @@ class ExtensionSpec(ConfigurableMixin):
 
 
 EXCLUDED_FROM_TEMPLATE = frozenset({'subject', 'subject_key'})
+EXTNS_EXCLUDED_FROM_TEMPLATE = frozenset({'subject_alt_name'})
 
 
 @dataclass(frozen=True)
@@ -676,12 +677,24 @@ class CertificateSpec(ConfigurableMixin):
             raise ConfigurationError(
                 f"Cert config should be a dictionary, not {type(config_dict)}."
             )
+
         # Do this first for consistency, so we don't put processed values
         # into the template
-        config_dict['templatable_config'] = {
-            k: v for k, v in config_dict.items()
-            if k not in EXCLUDED_FROM_TEMPLATE
-        }
+
+        def _template_entries():
+            for k, v in config_dict.items():
+                if k.replace('-', '_') in EXCLUDED_FROM_TEMPLATE:
+                    continue
+                elif k == 'extensions':
+                    yield k, [
+                        ext_dict for ext_dict in v
+                        if ext_dict['id'] not in EXTNS_EXCLUDED_FROM_TEMPLATE
+                    ]
+                else:
+                    yield k, v
+
+        config_dict['templatable_config'] = dict(_template_entries())
+
         return super().from_config(config_dict)
 
     def resolve_issuer_cert(self, arch: 'PKIArchitecture') -> CertLabel:
@@ -797,6 +810,8 @@ class PKIArchitecture:
             cert_config = key_dashes_to_underscores(cert_config)
             template = cert_config.pop('template', None)
             if template is not None:
+                # we want to merge extensions from the template
+                extensions = cert_config.pop('extensions', [])
                 try:
                     template_spec: CertificateSpec = \
                         cert_specs[CertLabel(template)]
@@ -806,7 +821,12 @@ class PKIArchitecture:
                         f"template, but '{template}' hasn't been declared yet."
                     ) from e
                 effective_cert_config = dict(template_spec.templatable_config)
+                template_extensions = \
+                    effective_cert_config.get('extensions', [])
                 effective_cert_config.update(cert_config)
+                # add new extensions
+                effective_cert_config['extensions'] \
+                    = extensions + template_extensions
             else:
                 effective_cert_config = dict(cert_config)
 

@@ -273,9 +273,23 @@ def test_dump_zip():
     out.seek(0)
     z = ZipFile(out)
     dumped = set(z.namelist())
-    assert dumped == set(map(lambda n: 'testing-ca/' +n, {
+    assert dumped == set(map(lambda n: 'testing-ca/' + n, {
         'interm/signer1-long.cert.pem', 'interm/signer1.cert.pem',
         'interm/signer2.cert.pem', 'interm/interm-ocsp.cert.pem',
         'root/interm.cert.pem', 'root/tsa.cert.pem',
         'root/tsa2.cert.pem', 'root/root.cert.pem',
     }))
+
+
+def test_subject_alt_names():
+    # test whether SAN extensions are reassigned properly when using
+    # cert specs as templates for other cert specs
+    arch = CONFIG.get_pki_arch(ArchLabel('testing-ca'))
+    signer1 = arch.get_cert(CertLabel('signer1'))
+    signer2 = arch.get_cert(CertLabel('signer2'))
+    signer1_long = arch.get_cert(CertLabel('signer1-long'))
+
+    assert signer1.subject_alt_name_value[0].chosen.native == 'test@example.com'
+    assert signer2.subject_alt_name_value[0].chosen.native \
+           == 'test2@example.com'
+    assert signer1_long.subject_alt_name_value is None

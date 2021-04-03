@@ -2,11 +2,16 @@ import itertools
 
 from asn1crypto import x509
 
-from .config_utils import ConfigurationError, check_config_keys
+from .config_utils import ConfigurationError, check_config_keys, \
+    key_dashes_to_underscores
 from .registry import ExtensionPlugin, PKIArchitecture, \
-    extension_plugin_registry, ServiceLabel, CertLabel
+    extension_plugin_registry, ServiceLabel, CertLabel, EntityRegistry, \
+    EntityLabel
 
-__all__ = ['CRLDistributionPointsPlugin', 'KeyUsagePlugin', 'AIAUrlPlugin']
+__all__ = [
+    'CRLDistributionPointsPlugin', 'KeyUsagePlugin', 'AIAUrlPlugin',
+    'GeneralNamesPlugin'
+]
 
 
 @extension_plugin_registry.register
@@ -126,3 +131,53 @@ class KeyUsagePlugin(ExtensionPlugin):
     def provision(self, extn_id, arch: 'PKIArchitecture', params):
         # asn1crypto doesn't accept a list to construct a bit string object
         return x509.KeyUsage(set(params))
+
+
+# some convenient aliases
+NAME_TYPE_ALIASES = {
+    'email': 'rfc822_name',
+    'uri': 'uniform_resource_identifier',
+    'ip': 'ip_address',
+}
+
+
+def process_general_name(entities: EntityRegistry, params):
+
+    check_config_keys('general name', ('type', 'value'), params)
+    try:
+        name_type = params['type'].replace('-', '_')
+        value = params['value']
+    except KeyError:
+        raise ConfigurationError(
+            "A general name should be specified as a dictionary with a 'type' "
+            "key and a 'value' key."
+        )
+    # resolve convenience abbreviations
+    name_type = NAME_TYPE_ALIASES.get(name_type, name_type)
+
+    if name_type == 'directory_name':
+        # values for directory names get special treatment
+        if isinstance(value, dict):
+            value = x509.Name.build(key_dashes_to_underscores(value))
+        elif isinstance(value, str):
+            value = entities[EntityLabel(value)]
+        else:
+            raise ConfigurationError(
+                "Directory names require a dictionary with fields, or a string "
+                "(interpreted as an entity label)."
+            )
+    return x509.GeneralName(name=name_type, value=value)
+
+
+@extension_plugin_registry.register
+class GeneralNamesPlugin(ExtensionPlugin):
+    schema_label = 'general-names'
+    extension_type = None  # not tied to any particular extension type
+
+    def provision(self, extn_id, arch: 'PKIArchitecture', params):
+        if not isinstance(params, list):
+            raise ConfigurationError(
+                "Parameters for general-names should be specified as a list"
+            )
+
+        return [process_general_name(arch.entities, p) for p in params]

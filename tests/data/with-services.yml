@@ -43,6 +43,9 @@ pki-architectures:
       signer1:
         organizational-unit-name: Signers
         common-name: Alice
+      signer1-alias:
+        organizational-unit-name: Signers
+        common-name: Also Alice
       signer2:
         organizational-unit-name: Signers
         common-name: Bob
@@ -154,11 +157,24 @@ pki-architectures:
                   - repo: root
                     include-repo-authority: false
                     cert-labels: [interm]
+          - id: subject_alt_name
+            smart-value:
+              schema: general-names
+              params:
+                - {type: email, value: test@example.com}
+                - {type: directory-name, value: signer1-alias}
       signer2:
         template: signer1
         revocation:
           revoked-since: "2020-12-01T00:00:00+0000"
           reason: key_compromise
+        extensions:
+          - id: subject_alt_name
+            smart-value:
+              schema: general-names
+              params:
+                - {type: email, value: test2@example.com}
+                - {type: directory-name, value: {country-name: US, common-name: Bob}}
       signer1-long:
         subject: signer1
         template: signer1
