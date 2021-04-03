@@ -483,11 +483,43 @@ EXCLUDED_FROM_TEMPLATE = frozenset({'subject', 'subject_key'})
 
 @dataclass(frozen=True)
 class RevocationStatus(ConfigurableMixin):
+    """
+    Models the revocation status of a certificate.
+
+    .. warning::
+        Currently, "temporary" revocations (a.k.a. certificate holds) cannot be
+        represented properly.
+    """
+
     revoked_since: datetime
+    """
+    Time of revocation.
+    """
+
     reason: crl.CRLReason = None
+    """
+    Revocation reason.
+    """
+
     invalid_since: datetime = None
+    """
+    Time from which the certificate may be considered to be invalid.
+    This extension may be used to indicate the time of (suspected) key
+    compromise. How this value is processed depends on the validator's
+    policies.
+    """
+
     extra_entry_extensions: List[ExtensionSpec] = field(default_factory=list)
+    """
+    CRL entry extensions to add when adding this revocation information to
+    a CRL.
+    """
+
     ocsp_response_extensions: List[ExtensionSpec] = field(default_factory=list)
+    """
+    Response extensions to add when reporting this revocation information
+    via OCSP.
+    """
 
     @classmethod
     def process_entries(cls, config_dict):
@@ -1071,27 +1103,83 @@ class PKIArchitecture:
 
 @dataclass(frozen=True)
 class ServiceInfo(ConfigurableMixin):
+    """Base class to describe a PKI service."""
     label: ServiceLabel
+    """
+    Label by which the service is referred to within Certomancer configuration.
+    """
+
     external_url_prefix: str
+    """
+    Prefix that needs to be prepended to produce a "fully qualified" URL.
+    """
+
     base_url: str
+    """
+    Base URL from which the service's "siblings" branch off.
+    This excludes the service label and external URL prefix.
+    """
 
     @property
-    def internal_url(self):
+    def internal_url(self) -> str:
+        """
+        Internal URL for the service, i.e. without the external URL prefix.
+        """
+
         return f"{self.base_url}/{self.label}"
 
     @property
-    def url(self):
+    def url(self) -> str:
+        """
+        Full URL where the service's main endpoint can be found.
+        """
         return f"{self.external_url_prefix}{self.base_url}/{self.label}"
 
 
 @dataclass(frozen=True)
 class OCSPResponderServiceInfo(ServiceInfo):
+    """Configuration describing an OCSP responder."""
+
     for_issuer: EntityLabel
+    """
+    Issuing entity on behalf of which the responder acts.
+    """
+
     responder_cert: CertLabel
+    """
+    Responder's certificate to use.
+    
+    .. note::
+        This certificate will be embedded in the response's certificate store,
+        and the public key embedded inside will be used to derive the 
+        ``responderId`` entry in the OCSP packet.
+        
+    """
+
     signing_key: Optional[KeyLabel] = None
+    """
+    Key to use to sign the OCSP response.
+    
+    Will be derived from ``responder_cert`` if not specified.
+    
+    .. note::
+        This option exists only to allow invalid OCSP responses to be created.
+    """
+
     signature_algo: Optional[str] = None
+    """
+    Signature algorithm to use. You can use this field to enforce RSASSA-PSS 
+    padding, for example.
+    """
+
     issuer_cert: Optional[CertLabel] = None
+    """
+    Issuer certificate. If the issuing entity has only one certificate, 
+    you don't need to supply a value for this field.
+    """
+
     digest_algo: str = 'sha256'
+    """Digest algorithm to use in the signing process. Defaults to SHA-256."""
 
     @classmethod
     def process_entries(cls, config_dict):
@@ -1107,11 +1195,29 @@ class OCSPResponderServiceInfo(ServiceInfo):
 
 @dataclass(frozen=True)
 class TSAServiceInfo(ServiceInfo):
+    """Configuration describing a time stamping service."""
+
     signing_cert: CertLabel
+    """
+    Label of the signer's certificate.
+    """
+
     signing_key: Optional[KeyLabel] = None
+    """
+    Key to sign responses with. Ordinarily derived from :attr:`signing_cert`.
+    """
+
     signature_algo: Optional[str] = None
+    """
+    Signature algorithm to use. You can use this field to enforce RSASSA-PSS 
+    padding, for example.
+    """
+
     digest_algo: str = 'sha256'
+    """Digest algorithm to use in the signing process. Defaults to SHA-256."""
+
     certs_to_embed: List[CertLabel] = field(default_factory=list)
+    """Extra certificates to embed."""
 
     @classmethod
     def process_entries(cls, config_dict):
@@ -1139,14 +1245,62 @@ def _parse_extension_settings(sett_dict, sett_key):
 
 @dataclass(frozen=True)
 class CRLRepoServiceInfo(ServiceInfo):
+    """
+    Configuration describing a CRL repository/distribution points.
+
+    The main purpose of this service is to model a distribution location
+    that makes the "freshest" CRL available for download, but it can also
+    serve CRL archives.
+
+    .. note::
+        There is currently no support for delta CRLs, but in principle
+        indirect CRLs can be generated if you implement the relevant
+        extensions yourself using plugins and the :attr:`crl_extensions`
+        parameter.
+    """
+
     for_issuer: EntityLabel
+    """
+    Issuing entity for which the CRLs are issued.
+    """
+
     signing_key: KeyLabel
+    """
+    Key to sign CRLs with.
+    """
+
     simulated_update_schedule: timedelta
+    """
+    Time interval for (regular) CRL updates. Used to generate CRL numbers
+    and to populate the ``thisUpdate`` and ``nextUpdate`` fields.
+    
+    The time origin is taken to be the start of the validity period of
+    :attr:`issuer_cert`.
+    """
+
     issuer_cert: Optional[CertLabel] = None
+    """Issuer's certificate."""
+
     extra_urls: List[str] = field(default_factory=list)
+    """
+    Extra URLs to add to the distribution point.
+    
+    These don't have any function within Certomancer.
+    """
+
     signature_algo: Optional[str] = None
+    """
+    Signature algorithm to use. You can use this field to enforce RSASSA-PSS 
+    padding, for example.
+    """
+
     digest_algo: str = 'sha256'
+    """Digest algorithm to use in the signing process. Defaults to SHA-256."""
+
     crl_extensions: List[ExtensionSpec] = field(default_factory=list)
+    """
+    List of additional CRL extensions.
+    """
 
     @classmethod
     def process_entries(cls, config_dict):
@@ -1213,9 +1367,24 @@ class CertRepoServiceInfo(ServiceInfo):
 
 @dataclass(frozen=True)
 class PluginServiceInfo(ServiceInfo):
+    """
+    Configuration describing a service provided by a service plugin.
+    """
+
     plugin_label: PluginLabel
+    """
+    Label of the service plugin.
+    """
+
     plugin_config: Any
+    """
+    Plugin-specific configuration data, as interpreted by the plugin.
+    """
+
     content_type: str = 'application/octet-stream'
+    """
+    The content type of the response returned by the plugin.
+    """
 
 
 class OCSPInterface(RevocationInfoInterface):
@@ -1394,6 +1563,11 @@ The default extension plugin registry.
 
 
 class ServiceRegistry:
+    """
+    Dispatcher class to interact with services associated with a PKI
+    architecture.
+    """
+
     def __init__(self, pki_arch: PKIArchitecture, external_url_prefix,
                  base_url, service_config,
                  plugins: ServicePluginRegistry = None):
@@ -1687,6 +1861,10 @@ def _import_plugin_modules(plugins):
 
 
 class CertomancerConfig:
+    """
+    Helper class to interpret & manage Certomancer configuration information.
+    """
+
     DEFAULT_EXTERNAL_URL_PREFIX = 'http://ca.example.com'
 
     @classmethod
