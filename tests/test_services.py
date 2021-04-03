@@ -1,7 +1,10 @@
+import hashlib
 import importlib
 from datetime import datetime
 
 import pytz
+import requests
+from asn1crypto import tsp, algos, core
 from freezegun import freeze_time
 from pyhanko_certvalidator import ValidationContext, CertificateValidator
 
@@ -83,3 +86,27 @@ def test_validate(requests_mock):
 
     assert len(vc.ocsps)
     assert len(vc.crls)
+
+
+@freeze_time('2020-11-01')
+def test_timestamp(requests_mock):
+    ILLUSIONIST.register(requests_mock)
+    hashed_bytes = hashlib.sha256(b'test').digest()
+    req = tsp.TimeStampReq({
+        'version': 'v2',
+        'message_imprint': tsp.MessageImprint({
+            'hash_algorithm': algos.DigestAlgorithm({'algorithm': 'sha256'}),
+            'hashed_message': hashed_bytes
+        }),
+        'nonce': core.Integer(0x1337),
+        'cert_req': True
+    })
+    response = requests.post(
+        "http://test.test/testing-ca/tsa/tsa", data=req.dump()
+    )
+    resp: tsp.TimeStampResp = tsp.TimeStampResp.load(response.content)
+    sd = resp['time_stamp_token']['content']
+    tst_info: tsp.TSTInfo = sd['encap_content_info']['content'].parsed
+    assert tst_info['nonce'].native == 0x1337
+    assert tst_info['gen_time'].native \
+           == datetime.now().replace(tzinfo=pytz.utc)

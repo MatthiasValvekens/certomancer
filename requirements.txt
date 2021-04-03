@@ -11,3 +11,4 @@ Jinja2>=2.11.3
 cryptography>=3.4.7
 freezegun>=1.1.0
 pyhanko-certvalidator==0.14.1
+requests>=2.0.0
