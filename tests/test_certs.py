@@ -2,6 +2,8 @@ import importlib
 import os
 import re
 from datetime import datetime
+from io import BytesIO
+from zipfile import ZipFile
 
 import pytest
 import pytz
@@ -20,6 +22,10 @@ DUMMY_PASSWORD = b'secret'
 KEY_NAME_REGEX = re.compile(r'([a-zA-Z0-9-]+)\.key\.pem')
 
 TEST_DATA_DIR = 'tests/data'
+
+CONFIG = CertomancerConfig.from_file(
+    'tests/data/with-services.yml', 'tests/data'
+)
 
 
 def dir_to_keyset_cfg(dirpath):
@@ -221,14 +227,55 @@ def test_sign_public_only():
                           ('signer1', 'root', 'interm'),
                           ('root', 'signer1', 'interm')])
 def test_serial_order_indep(order):
-
-    cfg = CertomancerConfig.from_file(
-        'tests/data/with-services.yml', 'tests/data'
-    )
-    arch = cfg.get_pki_arch(ArchLabel('testing-ca'))
+    arch = CONFIG.get_pki_arch(ArchLabel('testing-ca'))
     for lbl in order:
         arch.get_cert(CertLabel(lbl))
 
     assert arch.get_cert(CertLabel('root')).serial_number == 4096
     assert arch.get_cert(CertLabel('interm')).serial_number == 4097
     assert arch.get_cert(CertLabel('signer1')).serial_number == 4097
+
+
+def _collect_files(path):
+    for cur, dirs, files in os.walk(path):
+        for file in files:
+            yield os.path.relpath(os.path.join(cur, file), path)
+
+
+def test_dump_no_pfx(tmp_path):
+    arch = CONFIG.get_pki_arch(ArchLabel('testing-ca'))
+    arch.dump_certs(str(tmp_path), include_pkcs12=False)
+    dumped = set(_collect_files(str(tmp_path)))
+    assert dumped == {
+        'interm/signer1-long.cert.pem', 'interm/signer1.cert.pem',
+        'interm/signer2.cert.pem', 'interm/interm-ocsp.cert.pem',
+        'root/interm.cert.pem', 'root/tsa.cert.pem',
+        'root/tsa2.cert.pem', 'root/root.cert.pem',
+    }
+
+
+def test_dump_flat_no_pfx(tmp_path):
+    arch = CONFIG.get_pki_arch(ArchLabel('testing-ca'))
+    arch.dump_certs(str(tmp_path), include_pkcs12=False, flat=True)
+    dumped = set(_collect_files(str(tmp_path)))
+    assert dumped == {
+        'signer1-long.cert.pem', 'signer1.cert.pem',
+        'signer2.cert.pem', 'interm-ocsp.cert.pem',
+        'interm.cert.pem', 'tsa.cert.pem',
+        'tsa2.cert.pem', 'root.cert.pem',
+    }
+
+
+def test_dump_zip():
+    out = BytesIO()
+    arch = CONFIG.get_pki_arch(ArchLabel('testing-ca'))
+    arch.zip_certs(out)
+    out.seek(0)
+    z = ZipFile(out)
+    dumped = set(z.namelist())
+    assert dumped == set(map(lambda n: 'testing-ca/' +n, {
+        'interm/signer1-long.cert.pem', 'interm/signer1.cert.pem',
+        'interm/signer2.cert.pem', 'interm/interm-ocsp.cert.pem',
+        'root/interm.cert.pem', 'root/tsa.cert.pem',
+        'root/tsa2.cert.pem', 'root/root.cert.pem',
+    }))
