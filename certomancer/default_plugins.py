@@ -60,7 +60,7 @@ class AIAUrlPlugin(ExtensionPlugin):
 
         try:
             ca_issuer_links = params['ca-issuer-links']
-            if not isinstance(ocsp_names, list):
+            if not isinstance(ca_issuer_links, list):
                 raise ConfigurationError(
                     "ca-issuer-links must be a list"
                 )
