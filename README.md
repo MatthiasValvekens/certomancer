@@ -4,6 +4,8 @@
   <img width="300" height="300" src="images/certomancer.svg">
 </p>
 
+![status](https://github.com/MatthiasValvekens/certomancer/workflows/pytest/badge.svg)
+[![Language grade: Python](https://img.shields.io/lgtm/grade/python/g/MatthiasValvekens/certomancer.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/MatthiasValvekens/certomancer/context:python)
 
 Quickly construct, mock & deploy PKI test configurations using simple declarative configuration. Includes CRL, OCSP and time stamping service provisioning.
 
