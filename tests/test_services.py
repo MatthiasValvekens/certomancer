@@ -1,9 +1,12 @@
+import importlib
 from datetime import datetime
 
 import pytz
 
 from certomancer.registry import CertomancerConfig, ArchLabel, ServiceLabel, \
     CertLabel
+
+importlib.import_module('certomancer.default_plugins')
 
 CONFIG = CertomancerConfig.from_file(
     'tests/data/with-services.yml', 'tests/data'
