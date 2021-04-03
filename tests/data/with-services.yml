@@ -49,9 +49,7 @@ pki-architectures:
     certs:
       root:
         subject: root
-        subject-key: root  # note: using the same identifier as "subject" would seem reasonable
         issuer: root
-        authority-key: root  # here, defaulting to "issuer" seems OK too
         validity:
           valid-from: "2000-01-01T00:00:00+0000"
           valid-to: "2500-01-01T00:00:00+0000"
@@ -89,7 +87,6 @@ pki-architectures:
             smart-value:
               schema: aia-urls
               params:
-                ocsp-responder-names: [interm]
                 ca-issuer-links: [{repo: root}]
       interm-ocsp:
         issuer: interm

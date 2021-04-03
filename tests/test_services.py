@@ -2,7 +2,10 @@ import importlib
 from datetime import datetime
 
 import pytz
+from freezegun import freeze_time
+from pyhanko_certvalidator import ValidationContext, CertificateValidator
 
+from certomancer.integrations import illusionist
 from certomancer.registry import CertomancerConfig, ArchLabel, ServiceLabel, \
     CertLabel
 
@@ -13,6 +16,8 @@ CONFIG = CertomancerConfig.from_file(
 )
 
 ARCH = CONFIG.get_pki_arch(ArchLabel('testing-ca'))
+
+ILLUSIONIST = illusionist.Illusionist(pki_arch=ARCH)
 
 
 def _check_crl_cardinality(crl, expected_revoked):
@@ -58,3 +63,23 @@ def test_aia_ca_issuers():
         'http://test.test/testing-ca/certs/interm/ca.crt',
         'http://test.test/testing-ca/certs/root/issued/interm.crt'
     }
+
+
+@freeze_time('2020-11-01')
+def test_validate(requests_mock):
+    ILLUSIONIST.register(requests_mock)
+    signer_cert = ARCH.get_cert(CertLabel('signer1'))
+    root = ARCH.get_cert(CertLabel('root'))
+    interm = ARCH.get_cert(CertLabel('interm'))
+    vc = ValidationContext(
+        trust_roots=[root], allow_fetching=True,
+        revocation_mode='hard-fail', other_certs=[interm]
+    )
+
+    validator = CertificateValidator(
+        signer_cert, intermediate_certs=[], validation_context=vc
+    )
+    validator.validate_usage({'digital_signature'})
+
+    assert len(vc.ocsps)
+    assert len(vc.crls)
