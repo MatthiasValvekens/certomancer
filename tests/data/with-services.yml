@@ -85,6 +85,12 @@ pki-architectures:
             smart-value:
               schema: crl-dist-url
               params: {crl-repo-names: [root]}
+          - id: authority_information_access
+            smart-value:
+              schema: aia-urls
+              params:
+                ocsp-responder-names: [interm]
+                ca-issuer-links: [{repo: root}]
       interm-ocsp:
         issuer: interm
         validity:
@@ -146,6 +152,11 @@ pki-architectures:
               schema: aia-urls
               params:
                 ocsp-responder-names: [interm]
+                ca-issuer-links:
+                  - repo: interm
+                  - repo: root
+                    include-repo-authority: false
+                    cert-labels: [interm]
       signer2:
         template: signer1
         revocation:

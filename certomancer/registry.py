@@ -1185,17 +1185,26 @@ class CertRepoServiceInfo(ServiceInfo):
     issuer_cert: Optional[CertLabel] = None
     publish_issued_certs: bool = True
 
-    @property
-    def issuer_cert_url(self):
-        return f"{self.internal_url}/ca.cert.pem"
+    @staticmethod
+    def issuer_cert_file_name(use_pem=True):
+        fname = f"ca.{'cert.pem' if use_pem else 'crt'}"
+        return f"{fname}"
 
-    def issued_cert_url(self, label: CertLabel, use_pem=True):
+    def issued_cert_url_path(self, label: CertLabel, use_pem=True):
         if not self.publish_issued_certs:
             raise ConfigurationError(
                 f"Cert repo '{self.label}' does not make issued certs public"
             )
         fname = f"{label}.{'cert.pem' if use_pem else 'crt'}"
-        return f"{self.internal_url}/issued/{fname}"
+        return f"issued/{fname}"
+
+    def issuer_cert_url(self, use_pem=True):
+        fname = CertRepoServiceInfo.issuer_cert_file_name(use_pem=use_pem)
+        return f"{self.url}/{fname}"
+
+    def issued_cert_url(self, label: CertLabel, use_pem=True):
+        path = self.issued_cert_url_path(label=label, use_pem=use_pem)
+        return f"{self.url}/{path}"
 
 
 @dataclass(frozen=True)

@@ -2,7 +2,8 @@ from datetime import datetime
 
 import pytz
 
-from certomancer.registry import CertomancerConfig, ArchLabel, ServiceLabel
+from certomancer.registry import CertomancerConfig, ArchLabel, ServiceLabel, \
+    CertLabel
 
 CONFIG = CertomancerConfig.from_file(
     'tests/data/with-services.yml', 'tests/data'
@@ -41,3 +42,16 @@ def test_crl():
     )
     assert reason == 'key_compromise'
 
+
+def test_aia_ca_issuers():
+    signer1 = ARCH.get_cert(CertLabel('signer1'))
+    ca_issuer_urls = {
+        aia_entry['access_location']
+        for aia_entry
+        in signer1.authority_information_access_value.native
+        if aia_entry['access_method'] == 'ca_issuers'
+    }
+    assert ca_issuer_urls == {
+        'http://test.test/testing-ca/certs/interm/ca.crt',
+        'http://test.test/testing-ca/certs/root/issued/interm.crt'
+    }
