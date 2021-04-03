@@ -313,6 +313,8 @@ class ExtensionPlugin(abc.ABC):
     :attr:`extension_type` attribute indicates the type of object identifiers
     handled by the plugin (e.g. :class:`.x509.ExtensionId` for certificate
     extensions).
+    Plugins that handle "generic" configuration that is not bound to any
+    particular class of extensions can leave this parameter set to ``None``.
 
     .. note::
         If the OID you intend to use is not known to ``asn1crypto``, you should
@@ -331,14 +333,15 @@ class ExtensionPlugin(abc.ABC):
     schema_label: str = None
     extension_type: Type[ObjectIdentifier] = None
 
-    def provision(self, extn_id: ObjectIdentifier,
+    def provision(self, extn_id: Optional[Type[ObjectIdentifier]],
                   arch: 'PKIArchitecture', params):
         """
         Produce a value for an extension identified by ``extn_id``.
 
         :param extn_id:
             The ID of an extension. Guaranteed to be a subclass of
-            :class:`extension_type`.
+            :attr:`extension_type` if the latter is not ``None``.
+            Otherwise ``extn_id`` will be ``None``.
         :param arch:
             The current :class:`.PKIArchitecture` being operated on.
         :param params:
@@ -390,8 +393,9 @@ class ExtensionPluginRegistry:
             )
 
         extension_type = plugin.extension_type
-        if not isinstance(extension_type, type) \
-                or not issubclass(extension_type, ObjectIdentifier):
+        if extension_type is not None and \
+                (not isinstance(extension_type, type)
+                 or not issubclass(extension_type, ObjectIdentifier)):
             raise ConfigurationError(
                 f"Plugin {cls.__name__} does not declare an "
                 f"'extension_type' attribute that is a subclass of "
@@ -409,7 +413,10 @@ class ExtensionPluginRegistry:
                 f"There is no registered plugin for the schema "
                 f"'{spec.schema}'."
             ) from e
-        extn_id = proc.extension_type(extn_id)
+        if proc.extension_type is not None:
+            extn_id = proc.extension_type(extn_id)
+        else:
+            extn_id = None
         return proc.provision(extn_id, arch, spec.params)
 
 
