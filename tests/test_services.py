@@ -4,13 +4,14 @@ from datetime import datetime
 
 import pytz
 import requests
-from asn1crypto import tsp, algos, core
+from asn1crypto import tsp, algos, core, cms
 from freezegun import freeze_time
+from oscrypto import asymmetric, symmetric
 from pyhanko_certvalidator import ValidationContext, CertificateValidator
 
 from certomancer.integrations import illusionist
 from certomancer.registry import CertomancerConfig, ArchLabel, ServiceLabel, \
-    CertLabel
+    CertLabel, KeyLabel
 
 importlib.import_module('certomancer.default_plugins')
 
@@ -110,3 +111,42 @@ def test_timestamp(requests_mock):
     assert tst_info['nonce'].native == 0x1337
     assert tst_info['gen_time'].native \
            == datetime.now().replace(tzinfo=pytz.utc)
+
+
+def test_demo_plugin(requests_mock):
+
+    with_plugin_cfg = CertomancerConfig.from_file(
+        'tests/data/with-plugin.yml', 'tests/data'
+    )
+
+    arch = with_plugin_cfg.get_pki_arch(ArchLabel('testing-ca'))
+
+    illusionist.Illusionist(pki_arch=arch).register(requests_mock)
+
+    importlib.import_module('example_plugin.encrypt_echo')
+
+    # make the endpoint encrypt something
+    endpoint = 'http://test.test/testing-ca/plugin/encrypt-echo/test-endpoint'
+    payload = b'test test test'
+    response = requests.post(endpoint, data=payload)
+
+    # decrypt it
+    env_data = cms.ContentInfo.load(response.content)['content']
+    key = arch.key_set.get_private_key(KeyLabel('signer1'))
+    ktri = env_data['recipient_infos'][0].chosen
+    encrypted_key = ktri['encrypted_key'].native
+
+    decrypted_key = asymmetric.rsa_pkcs1v15_decrypt(
+        asymmetric.load_private_key(key.dump()),
+        encrypted_key
+    )
+
+    eci = env_data['encrypted_content_info']
+    cea = eci['content_encryption_algorithm']
+    assert cea['algorithm'].native == 'aes256_cbc'
+    iv = cea['parameters'].native
+    encrypted_content_bytes = eci['encrypted_content'].native
+    decrypted_payload = symmetric.aes_cbc_pkcs7_decrypt(
+        decrypted_key, encrypted_content_bytes, iv
+    )
+    assert decrypted_payload == payload
