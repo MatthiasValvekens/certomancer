@@ -1,3 +1,4 @@
+import sys
 from datetime import datetime
 
 from asn1crypto import pem
@@ -8,7 +9,7 @@ import tzlocal
 import logging
 
 from .config_utils import pyca_cryptography_present
-from .registry import CertomancerConfig
+from .registry import CertomancerConfig, CertLabel
 from .version import __version__
 
 DEFAULT_CONFIG_FILE = 'certomancer.yml'
@@ -81,7 +82,7 @@ def cli(ctx, config, key_root, extra_config_root, no_external_config):
               type=bool, is_flag=True)
 @click.option('--no-pem', help='use raw DER instead of PEM output',
               required=False, type=bool, is_flag=True)
-def summon(ctx, architecture, output, no_pem, archive, flat, no_pfx):
+def mass_summon(ctx, architecture, output, no_pem, archive, flat, no_pfx):
     cfg: CertomancerConfig = next(ctx.obj['config'])
     pki_arch = cfg.get_pki_arch(architecture)
     if not no_pfx and not pyca_cryptography_present():
@@ -98,6 +99,51 @@ def summon(ctx, architecture, output, no_pem, archive, flat, no_pfx):
             pki_arch.zip_certs(outf, **kwargs)
     else:
         pki_arch.dump_certs(output, **kwargs)
+
+
+@cli.command(help='retrieve a single certificate from a PKI architecture')
+@click.pass_context
+@click.argument('architecture', type=str, metavar='PKI_ARCH')
+@click.argument('cert_label', type=click.Path(writable=True), required=False)
+@click.argument('output', type=click.Path(writable=True), required=False)
+@click.option('--ignore-tty', type=bool, is_flag=True,
+              help='never try to prevent binary data from being written '
+                   'to stdout')
+@click.option('--as-pfx', type=bool, is_flag=True,
+              help='output PFX file (with key) instead of a certificate')
+@click.option('--no-pem', help='use raw DER instead of PEM output',
+              required=False, type=bool, is_flag=True)
+def summon(ctx, architecture, cert_label, output, no_pem, as_pfx, ignore_tty):
+    cfg: CertomancerConfig = next(ctx.obj['config'])
+    pki_arch = cfg.get_pki_arch(architecture)
+    if as_pfx and not pyca_cryptography_present():
+        as_pfx = False
+        logger.warning(
+            "pyca/cryptography not installed, no PFX files will be created"
+        )
+
+    output_is_binary = as_pfx or no_pem
+
+    if not ignore_tty and output_is_binary and \
+            output is None and sys.stdout.isatty():
+        raise click.ClickException(
+            "Refusing to write binary output to a TTY. Pass --ignore-tty if "
+            "you really want to ignore this check."
+        )
+
+    if as_pfx:
+        data = pki_arch.package_pkcs12(cert_label)
+    else:
+        data = pki_arch.get_cert(CertLabel(cert_label)).dump()
+        if not no_pem:
+            data = pem.armor('certificate', data)
+
+    if output is None:
+        # we want to write bytes, not strings
+        sys.stdout.buffer.write(data)
+    else:
+        with open(output, 'wb') as outf:
+            outf.write(data)
 
 
 @cli.command(help='create a CRL')
