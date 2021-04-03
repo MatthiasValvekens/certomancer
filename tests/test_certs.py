@@ -10,7 +10,7 @@ from oscrypto import keys as oskeys
 
 from certomancer.config_utils import SearchDir
 from certomancer.registry import KeySet, EntityRegistry, PKIArchitecture, \
-    CertLabel, EntityLabel, ArchLabel
+    CertLabel, EntityLabel, ArchLabel, CertomancerConfig
 
 importlib.import_module('certomancer.default_plugins')
 
@@ -214,3 +214,21 @@ def test_sign_public_only():
     with open('tests/data/keys-rsa/split-key-pub.key.pem', 'rb') as inf:
         pubkey_actual = oskeys.parse_public(inf.read())
     assert pubkey.native == pubkey_actual.native
+
+
+@pytest.mark.parametrize('order',
+                         [('interm', 'root', 'signer1'),
+                          ('signer1', 'root', 'interm'),
+                          ('root', 'signer1', 'interm')])
+def test_serial_order_indep(order):
+
+    cfg = CertomancerConfig.from_file(
+        'tests/data/with-services.yml', 'tests/data'
+    )
+    arch = cfg.get_pki_arch(ArchLabel('testing-ca'))
+    for lbl in order:
+        arch.get_cert(CertLabel(lbl))
+
+    assert arch.get_cert(CertLabel('root')).serial_number == 4096
+    assert arch.get_cert(CertLabel('interm')).serial_number == 4097
+    assert arch.get_cert(CertLabel('signer1')).serial_number == 4097

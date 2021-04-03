@@ -540,6 +540,9 @@ class CertificateSpec(ConfigurableMixin):
     subject: EntityLabel
     """Certificate subject"""
 
+    serial: int
+    """Serial number"""
+
     subject_key: KeyLabel
     """Subject's (public) key. Defaults to the value of :attr:`subject`."""
 
@@ -734,8 +737,6 @@ class PKIArchitecture:
         self.extn_plugin_registry = \
             extension_plugins or DEFAULT_EXT_PLUGIN_REGISTRY
 
-        self._serial_by_issuer = defaultdict(lambda: DEFAULT_FIRST_SERIAL)
-
         self.service_registry: ServiceRegistry = ServiceRegistry(
             self, external_url_prefix, service_base_url, service_config,
             plugins=service_plugins
@@ -750,6 +751,8 @@ class PKIArchitecture:
             = defaultdict(list)
         self._cert_labels_by_subject: Dict[EntityLabel, List[CertLabel]] \
             = defaultdict(list)
+
+        serial_by_issuer = defaultdict(lambda: DEFAULT_FIRST_SERIAL)
         for name, cert_config in cert_spec_config.items():
             name = CertLabel(name)
             cert_config = key_dashes_to_underscores(cert_config)
@@ -780,6 +783,9 @@ class PKIArchitecture:
                     f"Certificate spec {name} does not specify an issuer."
                 ) from e
             effective_cert_config.setdefault('authority_key', issuer)
+            serial = serial_by_issuer[issuer]
+            effective_cert_config.setdefault('serial', serial)
+            serial_by_issuer[issuer] = serial + 1
 
             cert_specs[name] = spec = CertificateSpec.from_config(
                 effective_cert_config
@@ -960,7 +966,6 @@ class PKIArchitecture:
         subject_key = self.key_set[spec.subject_key]
         issuer_name = self.entities[spec.issuer]
         authority_key = self.key_set[spec.authority_key]
-        serial = self._serial_by_issuer[spec.issuer]
 
         signature_algo = spec.signature_algo
         digest_algo = spec.digest_algo
@@ -998,7 +1003,7 @@ class PKIArchitecture:
         )
         tbs = x509.TbsCertificate({
             'version': 'v3',
-            'serial_number': serial,
+            'serial_number': spec.serial,
             'signature': signature_algo_obj,
             'issuer': issuer_name,
             'validity': x509.Validity({
@@ -1025,7 +1030,6 @@ class PKIArchitecture:
             'signature_value': signature
         })
 
-        self._serial_by_issuer[spec.issuer] = serial + 1
         self._cert_cache[label] = cert
         return cert
 
