@@ -1045,9 +1045,16 @@ class PKIArchitecture:
         if spec.self_signed:
             aki = ski
         else:
-            issuer_cert_lbl = spec.resolve_issuer_cert(self)
-            issuer_cert = self.get_cert(issuer_cert_lbl)
-            aki = issuer_cert.key_identifier_value
+            try:
+                issuer_cert_lbl = spec.resolve_issuer_cert(self)
+                issuer_cert = self.get_cert(issuer_cert_lbl)
+                aki = issuer_cert.key_identifier_value
+            except CertomancerServiceError:
+                # use SHA-1 hash of issuer's public key as the default
+                # AKI value (which should be equivalent to the above, unless
+                # the user loaded in certificates that weren't generated
+                # by Certomancer)
+                aki = authority_key.public_key_info.sha1
         aki_value = x509.AuthorityKeyIdentifier({'key_identifier': aki})
         aki_extension = x509.Extension({
             'extn_id': 'authority_key_identifier',
