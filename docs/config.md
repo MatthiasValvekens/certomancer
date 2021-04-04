@@ -260,7 +260,63 @@ Here is an overview of the keys that set basic certificate properties and their 
 
 #### Certificate extensions
 
-*(Under construction)*
+Many features of certificates (including some relatively basic ones) are provided by certificate
+extensions. With the exception of the `subjectKeyIdentifier` and `authorityKeyIdentifier`
+extensions, Certomancer requires all extensions to be explicitly declared under the `extensions`
+key in a certificate definition (see earlier example). The value of this key is an array, with each
+array entry defining another certificate extension and its value.
+Entries in the `extensions` array are themselves dictionaries with the following keys:
+
+* `id` &mdash; Mandatory; given by an OID string, or the name of a certificate extension known to
+  `asn1crypto` (see `x509.ExtensionId`).
+* `critical` &mdash; Indicates whether the extension is critical or not.
+* `value` &mdash; Direct specification of the extension's value, to be fed directly to the
+  `asn1crypto` class that implements the extension. This isn't always feasible in practice:
+  it only works for extensions that are supported in `asn1crypto`, and YAML configuration doesn't
+  always directly translate to input that `asn1crypto` understands.
+* `smart-value` &mdash; Indicates that the value of the certificate extension is to be provided
+  by an extension plugin (more details below).
+  
+If neither `value` nor `smart-value` are defined, the extension value will be `NULL`.
+  
+
+To demonstrate a simple case where `smart-value` is used, consider the following declaration of
+a `keyUsage` extension:
+
+```yaml
+id: key_usage
+critical: true
+smart-value:
+   schema: key-usage
+   params: [digital_signature, key_cert_sign, crl_sign]
+```
+
+The `schema` entry tells Certomancer to invoke the `key-usage` extension plugin, with the
+parameters under `params` as input. The plugin will then compute a value for the certificate
+extension.
+
+For a more involved example, consider the following `subjectAltName` declaration:
+
+```yaml
+id: subject_alt_name
+smart-value:
+   schema: general-names
+   params:
+      - {type: email, value: test@example.com}
+      - {type: directory-name, value: alice}
+```
+
+The `general-names` extension plugin can consume fairly complicated input, and also demonstrates
+how extension plugins can interact with Certomancer in nontrivial ways. More specifically: the
+implementation for `general-names` can look up entities when building values of type
+`directory-name`.
+
+Other extension plugins of this type include `aia-urls` and `crl-dist-url` &mdash; more about those
+in the section on service endpoints below.
+
+Certomancer supplies a number of extension plugins natively, but you can
+[define your own](plugins.md) as well.
+
 
 #### Indicating revocation
 
