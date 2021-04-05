@@ -361,8 +361,187 @@ extensions and `CRLEntry` extensions, respectively. OCSP `ResponseData` extensio
 
 #### Extension plugins available by default
 
-*(Under construction)*
+##### Key usage
 
+| **Schema label** | `key-usage` |
+| --- | --- |
+| **Params type** | list of strings |
+
+As the name implies, the goal of this plugin is to set a value for the key usage (`id: key_usage`)
+extension on a certificate. Strings in the list passed in `params` can be any of the following (see
+`x509.KeyUsage` in `asn1crypto`):
+
+* `digital_signature`
+* `non_repudiation`
+* `key_encipherment`
+* `data_encipherment`
+* `key_agreement`
+* `key_cert_sign`
+* `crl_sign`
+* `encipher_only`
+* `decipher_only`
+
+
+**Example**
+```yaml
+- id: key_usage
+  critical: true
+  smart-value:
+    schema: key-usage
+    params: [digital_signature, key_cert_sign, crl_sign]
+```
+
+
+##### CRL distribution points
+
+| **Schema label** | `crl-dist-url` |
+| --- | --- |
+| **Params type** | dictionary |
+
+Used to populate the CRL distribution points extension (`id: crl_distribution_points`) with URLs
+from a Certomancer certificate repository. The parameter dictionary (for now) only has one key,
+`crl-repo-names`, which takes a list of `crl-repo` service labels as input. The download URLs 
+of the referenced CRLs will be registered in the certificate extension.
+
+**Example**
+```yaml
+- id: crl_distribution_points
+  smart-value:
+    schema: crl-dist-url
+    params: {crl-repo-names: [root]}
+```
+
+
+Note: this example presumes the existence of a `crl-repo` service named `root`, which might have
+been declared under `services` as follows (see further down for details):
+```yaml
+crl-repo:
+  root:
+    for-issuer: root
+    signing-key: root
+    simulated-update-schedule: "P90D"
+```
+
+##### Authority access information URLs
+
+| **Schema label** | `aia-urls` |
+| --- | --- |
+| **Params type** | dictionary |
+
+Plugin to set a value for the authority information access (AIA) extension
+(`id:authority_information_access`). In particular, this is the standard way to indicate where to
+find OCSP responders to check the status of a certificate. Certomancer currently supports two kinds
+of authority access information: OCSP responder endpoints and `caIssuer` URLs. The function of the
+latter is to point to one or more web locations where the issuer's certificate(s) can be downloaded,
+in case the verifying party doesn't have access to it already.
+
+To declare OCSP responder endpoints, pass a list of `ocsp` service labels as the value of the
+`ocsp-responder-names` key in the `params` dictionary.
+AIA entries of type `caIssuer` are populated from Certomancer's certificate repository services.
+This is done by passing a list of dictionaries to the `ca-issuer-links` key in the `params`
+dictionary. Each of these dictionaries can contribute one or more `caIssuer` URLs.
+The keys in these dictionaries have the following meanings. 
+
+| Key | Type | Meaning |
+| --- | --- | --- |
+| `repo` | Certificate repo label | Certificate repository to use. |
+| `include-repo-authority` | boolean | Whether to include a link to the certificate of the repository's issuer. |
+| `cert-labels` | list of certificate labels | Explicit list of certificates from the repo to include. |
+
+The default value for `include-repo-authority` is `true`, and the default for `cert-labels` is the
+empty list.
+
+
+**Example**
+```yaml
+- id: authority_information_access
+  smart-value:
+    schema: aia-urls
+    params:
+      ocsp-responder-names: [interm-ocsp]
+      ca-issuer-links:
+        - repo: interm-repo
+        - repo: root-repo
+          include-repo-authority: false
+          cert-labels: [interm]
+```
+
+Note: this example presumes that there is an OCSP responder service named `interm-ocsp` declared
+in the `services` dictionary of the current PKI architecture, in addition to two certificate
+repositories named `interm-repo` and `root-repo`. These might have been declared as follows
+(see further down):
+
+```yaml
+services:
+  ocsp:
+    interm-ocsp:
+      for-issuer: interm
+      responder-cert: interm-ocsp
+      signing-key: interm-ocsp
+  cert-repo:
+    root-repo:
+      for-issuer: root
+      publish-issued-certs: yes
+    interm-repo:
+      for-issuer: interm
+      publish-issued-certs: no
+```
+
+##### GeneralNames plugin
+
+
+| **Schema label** | `general-names` |
+| --- | --- |
+| **Params type** | list of dictionaries |
+
+This plugin exists to provide values of type `GeneralNames`, and isn't tied to any particular
+certificate extension, but was written with `subject_alt_name` in mind.
+The dictionaries in the list passed to `params` each describe a `GeneralName` of a particular type.
+The keys in these dictionaries have the following meanings.
+
+| Key | Type | Meaning |
+| --- | --- | --- |
+| `type` | string | The type of the name, one of the values in `x509.GeneralName` in `asn`crypto` |
+| `value` | depends | The actual name value, usually a string. |
+
+For convenience, this plugin also defines a number of type aliases:
+`uri` is mapped to `uniform_resource_identifier`, `email` is mapped to `rfc822_name` and
+`ip` to `ip_address`. Hyphens and underscores are interchangeable here.
+
+If the type is `directory_name`, then `value` can be interpreted in two ways:
+
+* if `value` is a string, then the plugin will look for an entity with that label, and substitute
+  that entity's name.
+* if `value` is a dictionary, it is interpreted in the same way as an entity name definition.
+
+**Example**
+
+```yaml
+- id: subject_alt_name
+  smart-value:
+    schema: general-names
+    params:
+      - {type: email, value: test@example.com}
+      - {type: directory-name, value: signer1-alias}
+      - {type: directory-name, value: {country-name: US, common-name: Bob}}
+```
+
+##### ISO timestamp plugin
+
+| **Schema label** | `iso-time` |
+| --- | --- |
+| **Params type** | ISO 8601 timestamp string |
+
+Simple plugin that parses ISO 8601 timestamp strings into `GeneralizedTime` objects. 
+
+**Example**
+
+```yaml
+- id: invalidity_date
+  smart-value:
+    schema: iso-time
+    params: "2020-11-30T00:00:00+0000"
+```
 
 ### Defining service endpoints
 
