@@ -176,7 +176,7 @@ class CRLBuilder:
 
     @staticmethod
     def format_revoked_cert(serial: int, reason: Optional[crl.CRLReason],
-                            revocation_date: datetime, invalidity_date=None,
+                            revocation_date: datetime,
                             extensions: List[crl.CRLEntryExtension] = None) \
             -> crl.RevokedCertificate:
 
@@ -186,13 +186,6 @@ class CRLBuilder:
                 crl.CRLEntryExtension(
                     {'extn_id': 'crl_reason', 'extn_value': reason}
                 )
-            )
-        if invalidity_date:
-            extensions.append(
-                crl.CRLEntryExtension({
-                    'extn_id': 'invalidity_date',
-                    'extn_value': core.GeneralizedTime(invalidity_date)
-                })
             )
         return crl.RevokedCertificate({
             'user_certificate': serial,

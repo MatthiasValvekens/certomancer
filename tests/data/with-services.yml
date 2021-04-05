@@ -168,6 +168,11 @@ pki-architectures:
         revocation:
           revoked-since: "2020-12-01T00:00:00+0000"
           reason: key_compromise
+          crl-entry-extensions:
+            - id: invalidity_date
+              smart-value:
+                schema: iso-time
+                params: "2020-11-30T00:00:00+0000"
         extensions:
           - id: subject_alt_name
             smart-value:

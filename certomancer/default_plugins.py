@@ -1,7 +1,8 @@
 import itertools
 
-from asn1crypto import x509
+from asn1crypto import x509, core
 
+from dateutil.parser import parse as parse_dt
 from .config_utils import ConfigurationError, check_config_keys, \
     key_dashes_to_underscores
 from .registry import ExtensionPlugin, PKIArchitecture, \
@@ -181,3 +182,16 @@ class GeneralNamesPlugin(ExtensionPlugin):
             )
 
         return [process_general_name(arch.entities, p) for p in params]
+
+
+@extension_plugin_registry.register
+class IsoTimePlugin(ExtensionPlugin):
+    schema_label = 'iso-time'
+    extension_type = None
+
+    def provision(self, extn_id, arch: 'PKIArchitecture', params):
+        if not isinstance(params, str):
+            raise ConfigurationError(
+                "'params' entry for iso-time plugin should be a string."
+            )
+        return core.GeneralizedTime(parse_dt(params))

@@ -509,15 +509,7 @@ class RevocationStatus(ConfigurableMixin):
     Revocation reason.
     """
 
-    invalid_since: datetime = None
-    """
-    Time from which the certificate may be considered to be invalid.
-    This extension may be used to indicate the time of (suspected) key
-    compromise. How this value is processed depends on the validator's
-    policies.
-    """
-
-    extra_entry_extensions: List[ExtensionSpec] = field(default_factory=list)
+    crl_entry_extensions: List[ExtensionSpec] = field(default_factory=list)
     """
     CRL entry extensions to add when adding this revocation information to
     a CRL.
@@ -538,17 +530,13 @@ class RevocationStatus(ConfigurableMixin):
             return
         config_dict['revoked_since'] = parse_dt(revoked_since)
 
-        invalid_since = config_dict.get('invalid_since', None)
-        if invalid_since is not None:
-            config_dict['invalid_since'] = parse_dt(invalid_since)
-
         try:
             reason_spec = config_dict['reason']
             config_dict['reason'] = crl.CRLReason(reason_spec)
         except KeyError:
             pass
 
-        _parse_extension_settings(config_dict, 'extra_entry_extensions')
+        _parse_extension_settings(config_dict, 'crl_entry_extensions')
         _parse_extension_settings(config_dict, 'ocsp_response_extensions')
 
     def to_crl_entry_asn1(self, serial_number: int,
@@ -557,7 +545,6 @@ class RevocationStatus(ConfigurableMixin):
         return CRLBuilder.format_revoked_cert(
             serial_number, reason=self.reason,
             revocation_date=self.revoked_since,
-            invalidity_date=self.invalid_since,
             extensions=extensions
         )
 
@@ -1130,7 +1117,7 @@ class PKIArchitecture:
             if revo is not None:
                 exts = [
                     ext.to_asn1(self, crl.CRLEntryExtension)
-                    for ext in revo.extra_entry_extensions
+                    for ext in revo.crl_entry_extensions
                 ]
                 yield revo.to_crl_entry_asn1(cert.serial_number, exts)
 

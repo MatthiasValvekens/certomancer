@@ -54,6 +54,12 @@ def test_crl():
     )
     assert reason == 'key_compromise'
 
+    invalidity_date = next(
+        ext['extn_value'].native for ext in revo['crl_entry_extensions']
+        if ext['extn_id'].native == 'invalidity_date'
+    )
+    assert invalidity_date == datetime(2020, 11, 30, tzinfo=pytz.utc)
+
 
 def test_aia_ca_issuers():
     signer1 = ARCH.get_cert(CertLabel('signer1'))
