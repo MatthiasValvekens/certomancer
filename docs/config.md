@@ -312,7 +312,7 @@ implementation for `general-names` can look up entities when building values of 
 `directory-name`.
 
 Other extension plugins of this type include `aia-urls` and `crl-dist-url` &mdash; more about those
-in the section on service endpoints below.
+below.
 
 Certomancer supplies a number of extension plugins natively, but you can
 [define your own](plugins.md) as well.
@@ -353,6 +353,141 @@ make sure to use the `ocsp-response-extensions` and `crl-entry-extensions` for O
 extensions and `CRLEntry` extensions, respectively. OCSP `ResponseData` extensions and
 `TBSCertificateList` extensions should be configured at the service level.
 
-### Defining service endpoints
+
+#### Using certificate definitions as templates
 
 *(Under construction)*
+
+
+#### Extension plugins available by default
+
+*(Under construction)*
+
+
+### Defining service endpoints
+
+Certomancer's native support for PKI services is perhaps its most powerful feature.
+Under the `services` key of a PKI architecture definition, you can enumerate & configure the
+services to be provided by that architecture. These will be exposed by the Certomancer Animator
+WSGI application, but the endpoint URLs can also be fed back into the certificate generation process
+(e.g. to embed a reference to a CRL distribution point or OCSP responder).
+
+The typical structure of a service listing looks roughly like this:
+
+```yaml
+pki-architectures:
+   testing-ca:
+      keyset: ...  # omitted
+      entities: ...  # omitted
+      certs: ...  # omitted
+      services:
+         ocsp:
+            interm-ocsp-endpoint:
+               for-issuer: interm
+               responder-cert: interm-ocsp
+               signing-key: interm-ocsp
+         crl-repo:
+            root-crl-repo:
+               for-issuer: root
+               signing-key: root
+               simulated-update-schedule: "P90D"
+            interm-crl-repo:
+               for-issuer: interm
+               signing-key: interm
+               simulated-update-schedule: "P30D"
+         time-stamping:
+            tsa-service:
+               signing-key: tsa
+               signing-cert: tsa
+         plugin:
+            some-plugin:
+              endpoint1: ...
+              endpoint2: ...
+            some-other-plugin: ...
+```
+
+Built-in services (`ocsp`, `crl-repo`, `time-stamping`, `cert-repo`) are declared directly under
+the `services` key. Services provided by [plugins](plugins.md) are nested one level deeper, under
+`plugin`.
+Nonetheless, the general structure of a service declaration is the same in both cases
+
+```yaml
+<service-type>:
+  <endpoint1-label>: <endpoint1-params>
+  <endpoint2-label>: <endpoint2-params>
+```
+
+For a built-in service type, `<service-type>` is one of `ocsp`, `crl-repo`, `time-stamping` or 
+`cert-repo`. If the service is provided by a plugin, `<service-type>` is set to the label of the
+service plugin (`some-plugin` or `some-other-plugin` in the example from earlier).
+
+A particular service type can have one or more endpoints, each with a unique URL associated to them.
+This URL is determined by Certomancer, and cannot be configured.
+Typically, such a URL takes the form `/<arch-label>/<service-type>/<endpoint-label>`.
+For example, the OCSP responder in the above example would be assigned the URL 
+`/testing-ca/ocsp/interm-ocsp-endpoint`. The value of the top-level `external-url-prefix` setting is
+prepended to all generated URLs.
+
+Additionally, endpoint namespaces between different service types do not overlap, so endpoint labels
+may be reused for different services (e.g. if you have a CA named `root`, you might want to give
+all its associated services the label `root`).
+
+We briefly explain the most important parameters that each of the built-in service types can take.
+
+#### CRL distribution points
+
+These are defined under `crl-repo` in the `services` dictionary. The following configuration
+settings are available.
+
+* `for-issuer` &mdash; Entity label indicating the issuing CA for which the CRLs are generated.
+* `signing-key` &mdash; Key label to indicate the key that will be used to sign the CRLs. Defaults
+  to the value of `for-issuer`, if a key with the same label exists.
+* `issuer-cert` &mdash; Issuer's certificate. If the issuer only has one certificate, you don't need
+  to bother with this setting.
+* `extra-urls` &mdash; Additional URLs to register with this CRL distribution point. These don't
+  mean anything within Certomancer.
+* `simulated-update-schedule` &mdash; The (simulated) time between CRL updates. This should be
+  specified as an ISO 8601-style duration string, e.g. `P30D` for a 30-day period. Month/year
+  indicators are not allowed. This value affects the way CRL numbers are generated, and also how
+  the `thisUpdate` / `nextUpdate` fields are populated.
+* `crl-extensions` &mdash; Extra CRL extensions to use. These also follow the same format as certificate
+  extensions.
+
+
+#### OCSP responders  
+
+These are defined under `ocsp` in the `services` dictionary. The following configuration
+settings are available.
+
+* `for-issuer` &mdash; Entity label indicating the issuing CA for which the OCSP responses are
+  generated.
+* `responder-cert` &mdash; OCSP responder cert to use.
+* `signing-key` &mdash; Key label to indicate the key that will be used to sign the OCSP responses.
+  Defaults to the value of `responder-cert`, if a key with the same label exists.
+* `issuer-cert` &mdash; Issuer's certificate. If the issuer only has one certificate, you don't need
+  to bother with this setting.
+* `ocsp-extensions` &mdash; Extra OCSP `ResponseData` extensions to use.
+  These also follow the same format as certificate extensions.
+
+
+#### Time stamping services
+
+These are defined under `time-stamping` in the `services` dictionary. The following configuration
+settings are available.
+
+* `signing-cert` &mdash; TSA cert to use.
+* `signing-key` &mdash; Key label to indicate the key that will be used to sign the OCSP responses.
+  Defaults to the value of `signing-cert`, if a key with the same label exists.
+
+
+#### Certificate repositories
+
+These are defined under `cert-repo` in the `services` dictionary. In Certomancer, a certificate
+repository provides an URL at which the (technically, a) certificate of a particular CA can be
+retrieved, and optionally also publishes certificates issued by that CA.
+The following configuration settings are available.
+
+* `for-issuer` &mdash; The issuing authority for which the certificate(s) are hosted.
+* `issuer-cert` &mdash; The issuer's certificate to host. Can usually be inferred automatically.
+* `publish-issued-certs` &mdash; Boolean indicating whether to publish issued certificates through
+  this API. The default is ``true``.
