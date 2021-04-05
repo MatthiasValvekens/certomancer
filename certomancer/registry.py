@@ -1202,12 +1202,25 @@ class OCSPResponderServiceInfo(ServiceInfo):
     digest_algo: str = 'sha256'
     """Digest algorithm to use in the signing process. Defaults to SHA-256."""
 
+    ocsp_extensions: List[ExtensionSpec] = field(default_factory=list)
+    """
+    List of additional OCSP response extensions.
+    
+    Note: only extensions with a fixed value are allowed here, you cannot
+    customise the value based on the request received.
+    
+    For this reason, the ``nonce`` extension is handled automatically by
+    Certomancer.
+    """
+
     @classmethod
     def process_entries(cls, config_dict):
         try:
             config_dict.setdefault('signing_key', config_dict['responder_cert'])
         except KeyError:
             pass
+
+        _parse_extension_settings(config_dict, 'ocsp_extensions')
 
     def resolve_issuer_cert(self, arch: 'PKIArchitecture') -> CertLabel:
         return self.issuer_cert or \
@@ -1673,6 +1686,11 @@ class ServiceRegistry:
         info = self.get_ocsp_info(label)
         responder_key = self.pki_arch.key_set.get_private_key(info.signing_key)
         issuer_cert_label = info.resolve_issuer_cert(self.pki_arch)
+
+        extra_extensions = [
+            ext.to_asn1(self.pki_arch, ocsp.ResponseDataExtension)
+            for ext in info.ocsp_extensions
+        ]
         return SimpleOCSPResponder(
             responder_cert=self.pki_arch.get_cert(info.responder_cert),
             responder_key=responder_key,
@@ -1684,7 +1702,8 @@ class ServiceRegistry:
             revinfo_interface=OCSPInterface(
                 for_issuer=info.for_issuer, pki_arch=self.pki_arch,
                 issuer_cert_label=issuer_cert_label
-            )
+            ),
+            response_extensions=extra_extensions
         )
 
     def get_crl_repo_info(self, label: ServiceLabel) -> CRLRepoServiceInfo:
@@ -1769,8 +1788,8 @@ class ServiceRegistry:
                 raise CertomancerServiceError(
                     "CRL timestamp is before validity period of issuer cert; "
                     "could not deduce a reasonable CRL number. If you are "
-                    "trying to create an invalid CRL on purpose, pass in a CRL "
-                    "number manually."
+                    "trying to create a questionable CRL on purpose, pass in a "
+                    "CRL number manually."
                 )
             number = elapsed // time_delta
         this_update = time_origin + number * time_delta

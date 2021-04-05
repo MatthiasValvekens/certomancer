@@ -331,13 +331,15 @@ class SimpleOCSPResponder:
                  signature_algo: algos.SignedDigestAlgorithm,
                  at_time: datetime,
                  revinfo_interface: RevocationInfoInterface,
-                 validity: timedelta = timedelta(minutes=10)):
+                 validity: timedelta = timedelta(minutes=10),
+                 response_extensions: List[ocsp.ResponseDataExtension] = None):
         self.responder_cert = responder_cert
         self.responder_key = responder_key
         self.signature_algo = signature_algo
         self.at_time = at_time
         self.validity = validity
         self.revinfo_interface = revinfo_interface
+        self.response_extensions = response_extensions or []
 
     @staticmethod
     def build_error_response(error_status):
@@ -386,14 +388,13 @@ class SimpleOCSPResponder:
             'produced_at': self.at_time,
             'responses': responses,
         })
-        # TODO make extensions configurable in general
-        #  (also for single responses)
+        response_extensions = list(self.response_extensions)
         if nonce is not None:
-            rdata['response_extensions'] = [
-                ocsp.ResponseDataExtension({
-                    'extn_id': 'nonce', 'extn_value': nonce
-                })
-            ]
+            nonce_extension = ocsp.ResponseDataExtension({
+                'extn_id': 'nonce', 'extn_value': nonce
+            })
+            response_extensions.append(nonce_extension)
+        rdata['response_extensions'] = response_extensions
 
         signature = generic_sign(
             self.responder_key, rdata.dump(),
