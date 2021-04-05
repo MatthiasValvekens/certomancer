@@ -1344,7 +1344,7 @@ class CRLRepoServiceInfo(ServiceInfo):
         except KeyError:
             pass
         try:
-            config_dict.setdefault('signing_key', config_dict['signing_cert'])
+            config_dict.setdefault('signing_key', config_dict['for_issuer'])
         except KeyError:
             pass
 
