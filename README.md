@@ -13,6 +13,15 @@ Includes CRL, OCSP and time stamping service provisioning.
 Install with `python setup.py install`, and see `example.yml` for an example config file.
 The CLI comes with a built-in help function (although it isn't very helpful at this stage).
 
+## Quick start
+
+```bash
+$ pip install 'certomancer[web-api,pkcs12]' 
+$ certomancer --config example.yml animate
+```
+
+This will run the Certomancer Animator WSGI app on your local machine, behind a development web
+server. Point your browser to `http://localhost:9000` and take a look around.
 
 ## Features
 

@@ -99,7 +99,7 @@
     {% endif %}
     </section>
     <section>
-    <h3>Time stamping</h3>
+    <h3>Time stamping endpoints (RFC 3161 protocol)</h3>
     {% if arch_services.tsa %}
         <ul>
         {% for tsa in arch_services.tsa %}
@@ -111,7 +111,7 @@
     {% endif %}
     </section>
     <section>
-    <h3>OCSP</h3>
+    <h3>OCSP responder endpoints</h3>
     {% if arch_services.ocsp %}
         <ul>
             {% for ocsp in arch_services.ocsp %}
@@ -123,7 +123,7 @@
     {% endif %}
     </section>
     <section>
-    <h3>CRL</h3>
+    <h3>Certificate revocation lists</h3>
     {% if arch_services.crl %}
         <ul>
             {% for crl in arch_services.crl %}
@@ -140,7 +140,7 @@
             <ul>
                 {% for repo in arch_services.cert_repo %}
                     <li>
-                        <a href="{{ repo.issuer_cert_url }}">{{ repo.label }}</a>
+                        <a href="{{ repo.issuer_cert_url() }}">{{ repo.label }}</a>
                         (CA cert{% if repo.publish_issued_certs %}; issued certs available{% endif %})
                     </li>
                 {% endfor %}

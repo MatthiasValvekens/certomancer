@@ -1,13 +1,13 @@
 external-url-prefix: "http://ca.example.com"
 keysets:
   testing-ca:
-    path-prefix: keys/
+    path-prefix: tests/data/keys-rsa
     keys:
       root:
-        path: root_ca.key.pem
+        path: root.key.pem
         password: secret
       interm:
-        path: intermediate_ca.key.pem
+        path: interm.key.pem
         password: secret
       tsa:
         path: tsa.key.pem
@@ -16,7 +16,7 @@ keysets:
         path: tsa2.key.pem
         password: secret
       interm-ocsp:
-        path: ocsp.key.pem
+        path: interm-ocsp.key.pem
         password: secret
       signer1:
         path: signer.key.pem
