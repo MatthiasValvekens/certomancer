@@ -320,8 +320,38 @@ Certomancer supplies a number of extension plugins natively, but you can
 
 #### Indicating revocation
 
-*(Under construction)*
+Certomancer is also capable of simulating certificate revocation. This is accomplished through the
+(optional) `revocation` entry in the certificate specification. See below for an example.
 
+```yaml
+pki-architectures:
+   testing-ca:
+      keyset: some-keyset-label
+      entities: ... # omitted
+      certs:
+         ca: ... # omitted
+         alice:
+            subject: alice
+            issuer: ca
+            revocation:
+               revoked-since: "2020-12-01T00:00:00+0000"
+               reason: key_compromise
+            validity:
+               valid-from: "2020-01-01T00:00:00+0000"
+               valid-to: "2050-01-01T00:00:00+0000"
+            extensions:  ... # omitted
+      services: ... # omitted
+```
+
+Additional CRL entry and/or OCSP extensions may be specified using the `crl-entry-extensions`
+and `ocsp-response-extensions` keys. The syntax & plugin namespace for these are exactly the same
+as for certificate extensions, and the CRL / OCSP response generator will pick up on them.
+
+**Note:** The `crlReason` extension is populated automatically based on the `reason` key,
+because the revocation reason is not usually treated like an extension in OCSP. Additionally,
+make sure to use the `ocsp-response-extensions` and `crl-entry-extensions` for OCSP `SingleResponse`
+extensions and `CRLEntry` extensions, respectively. OCSP `ResponseData` extensions and
+`TBSCertificateList` extensions should be configured at the service level.
 
 ### Defining service endpoints
 
