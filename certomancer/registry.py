@@ -333,7 +333,7 @@ class ExtensionPlugin(abc.ABC):
     schema_label: str = None
     extension_type: Type[ObjectIdentifier] = None
 
-    def provision(self, extn_id: Optional[Type[ObjectIdentifier]],
+    def provision(self, extn_id: Optional[ObjectIdentifier],
                   arch: 'PKIArchitecture', params):
         """
         Produce a value for an extension identified by ``extn_id``.
@@ -348,7 +348,7 @@ class ExtensionPlugin(abc.ABC):
             A parameter object, lifted directly from the input configuration.
             Plugins are expected to handle any necessary type checking.
         :return:
-            A value compatible
+            A value compatible with the targeted extension type.
         """
         raise NotImplementedError
 
@@ -1509,13 +1509,13 @@ class ServicePlugin(abc.ABC):
         """
         return params
 
-    def invoke(self, pki_arch: PKIArchitecture, info: PluginServiceInfo,
+    def invoke(self, arch: PKIArchitecture, info: PluginServiceInfo,
                request: bytes, at_time: Optional[datetime] = None) -> bytes:
         """
         Invoke the plugin with the specified PKI architecture and service
         definition, and feed it data from a request.
 
-        :param pki_arch:
+        :param arch:
             PKI architecture context.
         :param info:
             Parsed service definition object.

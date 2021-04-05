@@ -28,13 +28,13 @@ class EncryptEcho(registry.ServicePlugin):
         logger.info(f"Found endpoint for recipient {recpt}")
         return registry.CertLabel(recpt)
 
-    def invoke(self, pki_arch: registry.PKIArchitecture,
-               info: registry.PluginServiceInfo,
-               request: bytes, at_time: Optional[datetime] = None) -> bytes:
+    def invoke(self, arch: registry.PKIArchitecture,
+               info: registry.PluginServiceInfo, request: bytes,
+               at_time: Optional[datetime] = None) -> bytes:
 
         cfg = info.plugin_config
         assert isinstance(cfg, registry.CertLabel)
-        cert = pki_arch.get_cert(cfg)
+        cert = arch.get_cert(cfg)
         if cert.public_key.algorithm != 'rsa':
             raise registry.CertomancerServiceError(
                 "This test plugin only works with RSA"
