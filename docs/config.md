@@ -347,12 +347,44 @@ extensions and `CRLEntry` extensions, respectively. OCSP `ResponseData` extensio
 
 #### Using certificate definitions as templates
 
-*(Under construction)*
+To avoid repeating large chunks of configuration, you can reuse prior certificate definitions
+(within the same PKI architecture) as templates for newer ones. This will copy over all values
+from the 'templated' certificate, and allow you to override and/or specify new values
+in addition to those copied over.
+Any extensions defined in the new certificate will be appended to the list of extensions of the
+previous one.
 
+There are a number of exceptions to take into account:
 
-#### Extension plugins available by default
+ * The `subject`, `subject-key` and `serial` entries will never be copied.
+ * The `subjectAltName`, `subjectKeyIdentifier` and `authorityKeyIdentifier` extensions are excluded
+   from being copied as well. For the latter two, this is implicit (since these extensions are
+   populated under the hood, without taking configuration into account). On the other hand,
+   `subjectAltName` is explicitly blacklisted, because otherwise there wouldn't be any mechanism to 
+   redefine alternative subject names.
+   
+To derive a new certificate definition from an earlier one, use the `template` key.
 
-##### Key usage
+```yaml
+signer1:
+   ...
+signer2:
+   subject: signer2
+   template: signer1
+   revocation:
+      revoked-since: "2020-12-01T00:00:00+0000"
+      reason: key_compromise
+   extensions:
+      - id: subject_alt_name
+        smart-value:
+           schema: general-names
+           params:
+              - {type: email, value: test2@example.com}
+```
+
+### Extension plugins available by default
+
+#### Key usage
 
 | **Schema label** | `key-usage` |
 | --- | --- |
@@ -383,7 +415,7 @@ extension on a certificate. Strings in the list passed in `params` can be any of
 ```
 
 
-##### CRL distribution points
+#### CRL distribution points
 
 | **Schema label** | `crl-dist-url` |
 | --- | --- |
@@ -413,7 +445,7 @@ crl-repo:
     simulated-update-schedule: "P90D"
 ```
 
-##### Authority access information URLs
+#### Authority access information URLs
 
 | **Schema label** | `aia-urls` |
 | --- | --- |
@@ -478,7 +510,7 @@ services:
       publish-issued-certs: no
 ```
 
-##### GeneralNames plugin
+#### GeneralNames plugin
 
 
 | **Schema label** | `general-names` |
@@ -517,7 +549,7 @@ If the type is `directory_name`, then `value` can be interpreted in two ways:
       - {type: directory-name, value: {country-name: US, common-name: Bob}}
 ```
 
-##### ISO timestamp plugin
+#### ISO timestamp plugin
 
 | **Schema label** | `iso-time` |
 | --- | --- |
@@ -579,7 +611,7 @@ pki-architectures:
 Built-in services (`ocsp`, `crl-repo`, `time-stamping`, `cert-repo`) are declared directly under
 the `services` key. Services provided by [plugins](plugins.md) are nested one level deeper, under
 `plugin`.
-Nonetheless, the general structure of a service declaration is the same in both cases
+Nonetheless, the general structure of a service declaration is the same in both cases:
 
 ```yaml
 <service-type>:
