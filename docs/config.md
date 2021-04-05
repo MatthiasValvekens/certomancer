@@ -235,27 +235,16 @@ pki-architectures:
 
 Here is an overview of the keys that set basic certificate properties and their values.
 
- * `subject` &mdash; The label of the entity to which the certificate is issued.
-   If unspecified, it defaults to the entity with the same label as the certificate
-   (if one exists).
- * `subject-key` &mdash; The key label used to determine the subject's public key for
-   the purposes of the current certificate. Defaults to the value of `subject` if unspecified.
-   Note that this default only makes sense if there exists a key with the same label
-   as the value of `subject`, since entities are not a priori bound to keys in Certomancer.
- * `issuer` &mdash; The label of the entity issuing the certificate.
- * `authority-key` &mdash; The label of the key that will be used to sign the certificate.
-   Defaults to the value of `issuer`; the same caveats as those for `subject-key` also
-   apply here.
- * `validity` &mdash; Takes a dictionary with two keys, `valid-from` and `valid-to`.
-   The values of these should be timestamps specified in ISO 8601 format (including UTC offset).
- * `serial` &mdash; You can manually specify the certificate's serial number if you want.
-   If unspecified, Certomancer will populate this field automatically, making sure that
-   all certificates issued by a given issuer have distinct serial numbers.
- * `issuer-cert` &mdash; You can optionally specify the "preferred" issuer's certificate
-   to use when required by Certomancer's trust services. In principle, this isn't relevant
-   for the certificate signing process itself, but having a preferred issuer certificate lying 
-   around is sometimes convenient for a variety of reasons. If the issuing entity has exactly 
-   one certificate issued to it, you don't need to worry about this setting.
+
+| Key | Type | Meaning |
+| --- | --- | --- |
+| `subject` |Entity label| The label of the entity to which the certificate is issued. If unspecified, it defaults to the entity with the same label as the certificate (if one exists).|
+| `subject-key` |Key label| The key label used to determine the subject's public key for the purposes of the current certificate. Defaults to the value of `subject` if unspecified. Note that this default only makes sense if there exists a key with the same label as the value of `subject`, since entities are not a priori bound to keys in Certomancer.|
+| `issuer` |Entity label| The label of the entity issuing the certificate.|
+| `authority-key` |Key label| The label of the key that will be used to sign the certificate. Defaults to the value of `issuer`; the same caveats as those for `subject-key` also apply here.|
+| `validity` |dictionary| Takes a dictionary with two keys, `valid-from` and `valid-to`. The values of these should be timestamps specified in ISO 8601 format (including UTC offset).|
+| `serial` |integer| You can manually specify the certificate's serial number if you want. If unspecified, Certomancer will populate this field automatically, making sure that all certificates issued by a given issuer have distinct serial numbers.|
+| `issuer-cert` |Cert label| You can optionally specify the "preferred" issuer's certificate to use when required by Certomancer's trust services. In principle, this isn't relevant for the certificate signing process itself, but having a preferred issuer certificate lying around is sometimes convenient for a variety of reasons. If the issuing entity has exactly one certificate issued to it, you don't need to worry about this setting.|
 
 
 #### Certificate extensions
@@ -267,16 +256,18 @@ key in a certificate definition (see earlier example). The value of this key is 
 array entry defining another certificate extension and its value.
 Entries in the `extensions` array are themselves dictionaries with the following keys:
 
-* `id` &mdash; Mandatory; given by an OID string, or the name of a certificate extension known to
-  `asn1crypto` (see `x509.ExtensionId`).
-* `critical` &mdash; Indicates whether the extension is critical or not.
-* `value` &mdash; Direct specification of the extension's value, to be fed directly to the
-  `asn1crypto` class that implements the extension. This isn't always feasible in practice:
-  it only works for extensions that are supported in `asn1crypto`, and YAML configuration doesn't
-  always directly translate to input that `asn1crypto` understands.
-* `smart-value` &mdash; Indicates that the value of the certificate extension is to be provided
-  by an extension plugin (more details below).
-  
+
+| Key | Type | Meaning |
+| --- | --- | --- |
+| `id` |string| Mandatory; given by an OID string, or the name of a certificate extension known to `asn1crypto` (see `x509.ExtensionId`).|
+| `critical` |boolean| Indicates whether the extension is critical or not.|
+| `value` |depends| Direct specification of the extension's value, to be fed directly to the `asn1crypto` class that implements the extension.|
+| `smart-value` |dictionary| Indicates that the value of the certificate extension is to be provided by an extension plugin (more details below).
+
+Using `value` isn't always feasible in practice: it only works for extensions that are supported in
+`asn1crypto`, and YAML configuration doesn't always directly translate to input that
+`asn1crypto` understands. Some certificate extensions will therefore require you to write your own
+extension [plugin](plugins.md).
 If neither `value` nor `smart-value` are defined, the extension value will be `NULL`.
   
 
@@ -600,7 +591,7 @@ For a built-in service type, `<service-type>` is one of `ocsp`, `crl-repo`, `tim
 `cert-repo`. If the service is provided by a plugin, `<service-type>` is set to the label of the
 service plugin (`some-plugin` or `some-other-plugin` in the example from earlier).
 
-A particular service type can have one or more endpoints, each with a unique URL associated to them.
+A particular service type can have one or more endpoints, each with a unique URL associated to it.
 This URL is determined by Certomancer, and cannot be configured.
 Typically, such a URL takes the form `/<arch-label>/<service-type>/<endpoint-label>`.
 For example, the OCSP responder in the above example would be assigned the URL 
@@ -618,19 +609,14 @@ We briefly explain the most important parameters that each of the built-in servi
 These are defined under `crl-repo` in the `services` dictionary. The following configuration
 settings are available.
 
-* `for-issuer` &mdash; Entity label indicating the issuing CA for which the CRLs are generated.
-* `signing-key` &mdash; Key label to indicate the key that will be used to sign the CRLs. Defaults
-  to the value of `for-issuer`, if a key with the same label exists.
-* `issuer-cert` &mdash; Issuer's certificate. If the issuer only has one certificate, you don't need
-  to bother with this setting.
-* `extra-urls` &mdash; Additional URLs to register with this CRL distribution point. These don't
-  mean anything within Certomancer.
-* `simulated-update-schedule` &mdash; The (simulated) time between CRL updates. This should be
-  specified as an ISO 8601-style duration string, e.g. `P30D` for a 30-day period. Month/year
-  indicators are not allowed. This value affects the way CRL numbers are generated, and also how
-  the `thisUpdate` / `nextUpdate` fields are populated.
-* `crl-extensions` &mdash; Extra CRL extensions to use. These also follow the same format as certificate
-  extensions.
+| Key | Type | Meaning |
+| --- | --- | --- |
+| `for-issuer` |Entity label| Entity label indicating the issuing CA for which the CRLs are generated.|
+| `signing-key` |Key label| Key label to indicate the key that will be used to sign the CRLs. Defaults to the value of `for-issuer`, if a key with the same label exists. |
+| `issuer-cert` |Cert label| Issuer's certificate. If the issuer only has one certificate, you don't need to bother with this setting. |
+| `extra-urls` |list of strings| Additional URLs to register with this CRL distribution point. These don't mean anything within Certomancer.
+| `simulated-update-schedule` | duration string | The (simulated) time between CRL updates. This should be specified as an ISO 8601-style duration string, e.g. `P30D` for a 30-day period. Month/year indicators are not allowed. This value affects the way CRL numbers are generated, and also how the `thisUpdate` / `nextUpdate` fields are populated. |
+| `crl-extensions` | list of dictionaries| Extra CRL extensions to use. These also follow the same format as certificate extensions.|
 
 
 #### OCSP responders  
@@ -638,15 +624,14 @@ settings are available.
 These are defined under `ocsp` in the `services` dictionary. The following configuration
 settings are available.
 
-* `for-issuer` &mdash; Entity label indicating the issuing CA for which the OCSP responses are
-  generated.
-* `responder-cert` &mdash; OCSP responder cert to use.
-* `signing-key` &mdash; Key label to indicate the key that will be used to sign the OCSP responses.
-  Defaults to the value of `responder-cert`, if a key with the same label exists.
-* `issuer-cert` &mdash; Issuer's certificate. If the issuer only has one certificate, you don't need
-  to bother with this setting.
-* `ocsp-extensions` &mdash; Extra OCSP `ResponseData` extensions to use.
-  These also follow the same format as certificate extensions.
+
+| Key | Type | Meaning |
+| --- | --- | --- |
+| `for-issuer` |Entity label| Entity label indicating the issuing CA for which the OCSP responses are generated.|
+| `responder-cert` |Cert label| OCSP responder cert to use.|
+| `signing-key` |Key label| Key label to indicate the key that will be used to sign the OCSP responses. <br>Defaults to the value of `responder-cert`, if a key with the same label exists.|
+| `issuer-cert` |Cert label| Issuer's certificate. If the issuer only has one certificate, you don't need to bother with this setting.|
+| `ocsp-extensions` |list of dictionaries| Extra OCSP `ResponseData` extensions to use.<br>These also follow the same format as certificate extensions.|
 
 
 #### Time stamping services
@@ -654,9 +639,10 @@ settings are available.
 These are defined under `time-stamping` in the `services` dictionary. The following configuration
 settings are available.
 
-* `signing-cert` &mdash; TSA cert to use.
-* `signing-key` &mdash; Key label to indicate the key that will be used to sign the OCSP responses.
-  Defaults to the value of `signing-cert`, if a key with the same label exists.
+| Key | Type | Meaning |
+| --- | --- | --- |
+| `signing-cert` |Cert label| TSA cert to use.|
+| `signing-key` |Key label| Key label to indicate the key that will be used to sign the OCSP responses. <br>Defaults to the value of `signing-cert`, if a key with the same label exists.|
 
 
 #### Certificate repositories
@@ -666,7 +652,8 @@ repository provides an URL at which the (technically, a) certificate of a partic
 retrieved, and optionally also publishes certificates issued by that CA.
 The following configuration settings are available.
 
-* `for-issuer` &mdash; The issuing authority for which the certificate(s) are hosted.
-* `issuer-cert` &mdash; The issuer's certificate to host. Can usually be inferred automatically.
-* `publish-issued-certs` &mdash; Boolean indicating whether to publish issued certificates through
-  this API. The default is ``true``.
+| Key | Type | Meaning |
+| --- | --- | --- |
+| `for-issuer` |Entity label| The issuing authority for which the certificate(s) are hosted.|
+| `issuer-cert` |Cert label| The issuer's certificate to host. Can usually be inferred automatically.|
+| `publish-issued-certs` |boolean| Whether to publish issued certificates through this API. The default is ``true``.|
