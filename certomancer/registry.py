@@ -485,7 +485,7 @@ class ExtensionSpec(ConfigurableMixin):
         })
 
 
-EXCLUDED_FROM_TEMPLATE = frozenset({'subject', 'subject_key'})
+EXCLUDED_FROM_TEMPLATE = frozenset({'subject', 'subject_key', 'serial'})
 EXTNS_EXCLUDED_FROM_TEMPLATE = frozenset({'subject_alt_name'})
 
 
