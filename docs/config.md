@@ -51,6 +51,12 @@ that are also used in a production environment.
 
 Here is an example of a `keysets` dictionary defining two key sets named `key-set-a` and
 `key-set-b`, respectively.
+By default, all paths are interpreted relative to the directory in which the configuration file
+is located, but this can be overridden using the `--key-root` command line parameter.
+The `path-prefix` is inserted between the key root and the key's `path` argument.
+In other words, if the configuration file is located in `/opt/certomancer` and `path-prefix` is
+`keydir`, then declaring a key with `path` set to `ca.key.pem` will cause Certomancer to attempt to
+read a key in `/opt/certomancer/keydir/ca.key.pem`.
 
 ```yaml
 keysets:
