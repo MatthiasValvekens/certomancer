@@ -1970,4 +1970,9 @@ class CertomancerConfig:
         }
 
     def get_pki_arch(self, label: ArchLabel) -> PKIArchitecture:
-        return self.pki_archs[label]
+        try:
+            return self.pki_archs[label]
+        except KeyError as e:
+            raise ConfigurationError(
+                f"There is no PKI architecture with label {label}."
+            ) from e
