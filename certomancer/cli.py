@@ -1,4 +1,5 @@
 import sys
+from contextlib import contextmanager
 from datetime import datetime
 
 from asn1crypto import pem
@@ -8,8 +9,9 @@ import click
 import tzlocal
 import logging
 
-from .config_utils import pyca_cryptography_present
+from .config_utils import pyca_cryptography_present, ConfigurationError
 from .registry import CertomancerConfig, CertLabel
+from .services import CertomancerServiceError
 from .version import __version__
 
 DEFAULT_CONFIG_FILE = 'certomancer.yml'
@@ -25,6 +27,25 @@ def _log_config():
     )
     handler.setFormatter(formatter)
     _logger.addHandler(handler)
+
+
+@contextmanager
+def exception_manager():
+    msg = exc = None
+    try:
+        yield
+    except click.ClickException:
+        raise
+    except ConfigurationError as e:
+        msg = f"Configuration problem: {str(e)}"
+        exc = e
+    except CertomancerServiceError as e:
+        msg = f"Service problem: {str(e)}"
+        exc = e
+
+    if exc is not None:
+        logger.error(msg, exc_info=exc)
+        raise click.ClickException(msg)
 
 
 def _lazy_cfg(config, key_root, cfg_root, no_external_config):
@@ -60,6 +81,7 @@ def _lazy_cfg(config, key_root, cfg_root, no_external_config):
 @click.option('--no-external-config', help='disable external config loading',
               required=False, type=bool, is_flag=True)
 @click.pass_context
+@exception_manager()
 def cli(ctx, config, key_root, extra_config_root, no_external_config):
     _log_config()
     ctx.ensure_object(dict)
@@ -82,6 +104,7 @@ def cli(ctx, config, key_root, extra_config_root, no_external_config):
               type=bool, is_flag=True)
 @click.option('--no-pem', help='use raw DER instead of PEM output',
               required=False, type=bool, is_flag=True)
+@exception_manager()
 def mass_summon(ctx, architecture, output, no_pem, archive, flat, no_pfx):
     cfg: CertomancerConfig = next(ctx.obj['config'])
     pki_arch = cfg.get_pki_arch(architecture)
@@ -113,6 +136,7 @@ def mass_summon(ctx, architecture, output, no_pem, archive, flat, no_pfx):
               help='output PFX file (with key) instead of a certificate')
 @click.option('--no-pem', help='use raw DER instead of PEM output',
               required=False, type=bool, is_flag=True)
+@exception_manager()
 def summon(ctx, architecture, cert_label, output, no_pem, as_pfx, ignore_tty):
     cfg: CertomancerConfig = next(ctx.obj['config'])
     pki_arch = cfg.get_pki_arch(architecture)
@@ -156,6 +180,7 @@ def summon(ctx, architecture, cert_label, output, no_pem, as_pfx, ignore_tty):
 @click.option('--at-time', required=False, type=str,
               help=('ISO 8601 timestamp at which to evaluate '
                     'revocation status [default: now]'))
+@exception_manager()
 def necronomicon(ctx, architecture, crl_repo, output, no_pem, at_time):
     cfg: CertomancerConfig = next(ctx.obj['config'])
     pki_arch = cfg.get_pki_arch(architecture)
@@ -180,6 +205,7 @@ def necronomicon(ctx, architecture, crl_repo, output, no_pem, at_time):
 @click.option('--no-web-ui', help='disable the web UI',
               required=False, type=bool, is_flag=True)
 @click.pass_context
+@exception_manager()
 def animate(ctx, port, no_web_ui):
     try:
         from .integrations.animator import Animator
