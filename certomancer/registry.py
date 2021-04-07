@@ -979,7 +979,6 @@ class PKIArchitecture:
 
     def dump_certs(self, folder_path: str, use_pem=True, flat=False,
                    include_pkcs12=False):
-        self._load_all_certs()
         os.makedirs(folder_path, exist_ok=True)
         itr = self._dump_certs(
             use_pem=use_pem, flat=flat, include_pkcs12=include_pkcs12
