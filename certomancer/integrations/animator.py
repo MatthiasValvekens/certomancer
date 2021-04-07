@@ -1,4 +1,3 @@
-import enum
 import logging
 import os
 from dataclasses import dataclass
@@ -9,14 +8,14 @@ from typing import Optional, Dict, List
 import tzlocal
 from asn1crypto import ocsp, tsp, pem
 from werkzeug.wrappers import Request, Response
-from werkzeug.routing import Map, Rule, BaseConverter
+from werkzeug.routing import Map, Rule, BaseConverter, Submount
 from werkzeug.exceptions import HTTPException, NotFound, InternalServerError, \
     BadRequest
 
 from certomancer.config_utils import pyca_cryptography_present, \
     ConfigurationError
 from certomancer.registry import (
-    PKIArchitecture, ServiceRegistry, ServiceLabel, CertLabel,
+    PKIArchitecture, ServiceLabel, CertLabel,
     CertomancerObjectNotFoundError, CertomancerConfig, ArchLabel, EntityLabel,
     CertificateSpec, PluginLabel, PluginServiceRequestError
 )
@@ -42,88 +41,6 @@ class PemExtensionConverter(BaseConverter):
 
     def to_url(self, value):
         return self.expected_exts[0] + ('.pem' if value else '')
-
-
-class ServiceType(enum.Enum):
-    OCSP = 'ocsp'
-    CRL_REPO = 'crl'
-    TSA = 'tsa'
-    CERT_REPO = 'certs'
-    PLUGIN = 'plugin'
-
-    def endpoint(self, arch: ArchLabel, label: ServiceLabel):
-        return Endpoint(arch, self, label)
-
-
-@dataclass(frozen=True)
-class Endpoint:
-    arch: ArchLabel
-    service_type: ServiceType
-    label: ServiceLabel
-    plugin_label: Optional[PluginLabel] = None
-
-
-def service_rules(services: ServiceRegistry):
-    arch = services.pki_arch.arch_label
-    srv = ServiceType.OCSP
-    for ocsp_info in services.list_ocsp_responders():
-        logger.info("OCSP:" + ocsp_info.internal_url)
-        yield Rule(
-            ocsp_info.internal_url,
-            endpoint=srv.endpoint(arch, ocsp_info.label),
-            methods=('POST',)
-        )
-    srv = ServiceType.TSA
-    for tsa_info in services.list_time_stamping_services():
-        logger.info("TSA:" + tsa_info.internal_url)
-        yield Rule(
-            tsa_info.internal_url, endpoint=srv.endpoint(
-                arch, tsa_info.label
-            ), methods=('POST',)
-        )
-    srv = ServiceType.CRL_REPO
-    for crl_repo in services.list_crl_repos():
-        logger.info("CRLs:" + crl_repo.internal_url)
-        # latest CRL
-        endpoint = srv.endpoint(arch, crl_repo.label)
-        yield Rule(
-            f"{crl_repo.internal_url}/latest.<ext(exts='crl'):use_pem>",
-            defaults={'crl_no': None}, endpoint=endpoint,
-            methods=('GET',)
-        )
-        # CRL archive
-        yield Rule(
-            f"{crl_repo.internal_url}"
-            f"/archive-<int:crl_no>.<ext(exts='crl'):use_pem>",
-            endpoint=endpoint, methods=('GET',)
-        )
-    srv = ServiceType.CERT_REPO
-    for cert_repo in services.list_cert_repos():
-        publish_issued = cert_repo.publish_issued_certs
-        logger.info(
-            f"CERT:{cert_repo.internal_url} "
-            f"({'all certs' if publish_issued else 'CA only'})"
-        )
-        endpoint = srv.endpoint(arch, cert_repo.label)
-        yield Rule(
-            f"{cert_repo.internal_url}/ca.<ext:use_pem>",
-            defaults={'cert_label': None}, endpoint=endpoint, methods=('GET',)
-        )
-        if publish_issued:
-            yield Rule(
-                f"{cert_repo.internal_url}/issued/"
-                f"<cert_label>.<ext:use_pem>",
-                endpoint=endpoint, methods=('GET',)
-            )
-    srv = ServiceType.PLUGIN
-    for plugin_info in services.list_plugin_services():
-        logger.info(f"PLUG:{plugin_info.internal_url}")
-        endpoint = Endpoint(
-            arch, srv, plugin_info.label, plugin_info.plugin_label
-        )
-        yield Rule(
-            plugin_info.internal_url, methods=('POST',), endpoint=endpoint
-        )
 
 
 @dataclass(frozen=True)
@@ -157,6 +74,61 @@ class ArchServicesDescription:
     cert_repo: list
     certs_by_issuer: Dict[EntityLabel, List[AnimatorCertInfo]]
 
+    @classmethod
+    def compile(cls, pki_arch: PKIArchitecture):
+        services = pki_arch.service_registry
+        cert_info = AnimatorCertInfo.gather_cert_info(pki_arch)
+        return ArchServicesDescription(
+            pki_arch.arch_label,
+            tsa=services.list_time_stamping_services(),
+            ocsp=services.list_ocsp_responders(),
+            crl=services.list_crl_repos(),
+            cert_repo=services.list_cert_repos(),
+            certs_by_issuer=cert_info,
+        )
+
+
+WEB_UI_URL_PREFIX = '/_certomancer'
+
+
+WEB_UI_URLS = [
+    Rule('/', endpoint='index', methods=('GET',)),
+    Submount(WEB_UI_URL_PREFIX, [
+        # convenience endpoint that serves certs without regard for
+        # checking whether they belong to any particular (logical)
+        # cert repo (these URLs aren't part of the "PKI API", for lack
+        # of a better term)
+        Rule('/any-cert/<arch>/<label>.<ext:use_pem>',
+             endpoint='any-cert', methods=('GET',)),
+        Rule('/cert-bundle/<arch>', endpoint='cert-bundle', methods=('GET',)),
+        Rule('/pfx-download/<arch>', endpoint='pfx-download',
+             methods=('POST',)),
+    ])
+]
+
+
+SERVICE_RULES = [
+    # OCSP responder pattern
+    Rule('/<arch>/ocsp/<label>', endpoint='ocsp', methods=('POST',)),
+    # Time stamping service pattern
+    Rule('/<arch>/tsa/<label>', endpoint='tsa', methods=('POST',)),
+    # Plugin endpoint pattern
+    Rule('/<arch>/plugin/<plugin_label>/<label>', endpoint='plugin',
+         methods=('POST',)),
+    # latest CRL pattern
+    Rule("/<arch>/crls/<label>/latest.<ext(exts='crl'):use_pem>",
+         endpoint='crls', methods=('GET',), defaults={'crl_no': None}),
+    # CRL archive pattern
+    Rule("/<arch>/crls/<label>/archive-<int:crl_no>.<ext(exts='crl'):use_pem>",
+         endpoint='crls', methods=('GET',)),
+    # Cert repo authority pattern
+    Rule('/<arch>/certs/<label>/ca.<ext:use_pem>',
+         defaults={'cert_label': None}, endpoint='certs', methods=('GET',)),
+    # Cert repo generic pattern
+    Rule(f"/<arch>/certs/<label>/issued/<cert_label>.<ext:use_pem>",
+         endpoint='certs', methods=('GET',))
+]
+
 
 def gen_index(architectures):
     try:
@@ -166,20 +138,6 @@ def gen_index(architectures):
             "Web UI requires Jinja2 to be installed"
         ) from e
 
-    def _index_info():
-        pki_arch: PKIArchitecture
-        for pki_arch in architectures:
-            services = pki_arch.service_registry
-            cert_info = AnimatorCertInfo.gather_cert_info(pki_arch)
-            yield ArchServicesDescription(
-                pki_arch.arch_label,
-                tsa=services.list_time_stamping_services(),
-                ocsp=services.list_ocsp_responders(),
-                crl=services.list_crl_repos(),
-                cert_repo=services.list_cert_repos(),
-                certs_by_issuer=cert_info,
-            )
-
     # the index is fixed from the moment the server is launched, so
     #  just go ahead and render it
     jinja_env = Environment(
@@ -188,70 +146,70 @@ def gen_index(architectures):
     )
     template = jinja_env.get_template('index.html')
     return template.render(
-        pki_archs=list(_index_info()), pfx_possible=pfx_possible
+        pki_archs=[
+            ArchServicesDescription.compile(arch) for arch in architectures
+        ],
+        pfx_possible=pfx_possible, web_ui_prefix=WEB_UI_URL_PREFIX
     )
+
+
+class AnimatorArchStore:
+
+    def __init__(self, architectures: Dict[ArchLabel, PKIArchitecture]):
+        self.architectures = architectures
+
+    def __getitem__(self, arch: ArchLabel) -> PKIArchitecture:
+        try:
+            return self.architectures[arch]
+        except KeyError:
+            raise NotFound()
+
+    def __iter__(self):
+        return iter(self.architectures.values())
 
 
 class Animator:
 
-    def __init__(self, architectures: Dict[ArchLabel, PKIArchitecture],
+    def __init__(self, architectures: AnimatorArchStore,
                  at_time: Optional[datetime] = None, with_web_ui=True):
         self.fixed_time = at_time
         self.architectures = architectures
         self.with_web_ui = with_web_ui
-
-        def _all_rules():
-            if with_web_ui:
-                yield Rule('/', endpoint='index', methods=('GET',))
-                # convenience endpoint that serves certs without regard for
-                # checking whether they belong to any particular (logical)
-                # cert repo (these URLs aren't part of the "PKI API", for lack
-                # of a better term)
-                yield Rule('/any-cert/<arch>/<label>.<ext:use_pem>',
-                           endpoint='any-cert', methods=('GET',))
-                yield Rule('/cert-bundle/<arch>', endpoint='cert-bundle',
-                           methods=('GET',))
-                yield Rule('/pfx-download/<arch>',
-                           endpoint='pfx-download', methods=('POST',))
-            for pki_arch in architectures.values():
-                yield from service_rules(pki_arch.service_registry)
+        self.url_map = None
 
         self.url_map = Map(
-            list(_all_rules()),
+            SERVICE_RULES + WEB_UI_URLS if with_web_ui else [],
             converters={'ext': PemExtensionConverter}
         )
         if with_web_ui:
-            self.index_html = gen_index(architectures.values())
+            self.index_html = gen_index(iter(architectures))
 
     @property
     def at_time(self):
         return self.fixed_time or datetime.now(tz=tzlocal.get_localzone())
 
-    def serve_ocsp_response(self, request: Request, *, label: ServiceLabel,
-                            arch: ArchLabel):
-        pki_arch = self.architectures[arch]
+    def serve_ocsp_response(self, request: Request, *, label: str, arch: str):
+        pki_arch = self.architectures[ArchLabel(arch)]
         ocsp_resp = pki_arch.service_registry.summon_responder(
-            label, self.at_time
+            ServiceLabel(label), self.at_time
         )
         data = request.stream.read()
         req: ocsp.OCSPRequest = ocsp.OCSPRequest.load(data)
         response = ocsp_resp.build_ocsp_response(req)
         return Response(response.dump(), mimetype='application/ocsp-response')
 
-    def serve_timestamp_response(self, request, *, label: ServiceLabel,
-                                 arch: ArchLabel):
-        pki_arch = self.architectures[arch]
+    def serve_timestamp_response(self, request, *, label: str, arch: str):
+        pki_arch = self.architectures[ArchLabel(arch)]
         tsa = pki_arch.service_registry.summon_timestamper(
-            label, self.at_time
+            ServiceLabel(label), self.at_time
         )
         data = request.stream.read()
         req: tsp.TimeStampReq = tsp.TimeStampReq.load(data)
         response = tsa.request_tsa_response(req)
         return Response(response.dump(), mimetype='application/timestamp-reply')
 
-    def serve_crl(self, *, label: ServiceLabel, arch: ArchLabel,
-                  crl_no, use_pem):
-        pki_arch = self.architectures[arch]
+    def serve_crl(self, *, label: ServiceLabel, arch: str, crl_no, use_pem):
+        pki_arch = self.architectures[ArchLabel(arch)]
         mime = 'application/x-pem-file' if use_pem else 'application/pkix-crl'
         if crl_no is not None:
             crl = pki_arch.service_registry.get_crl(label, number=crl_no)
@@ -263,12 +221,9 @@ class Animator:
             data = pem.armor('X509 CRL', data)
         return Response(data, mimetype=mime)
 
-    def serve_any_cert(self, *, arch, label, use_pem):
+    def serve_any_cert(self, *, arch: str, label: str, use_pem):
         mime = 'application/x-pem-file' if use_pem else 'application/pkix-cert'
-        try:
-            pki_arch = self.architectures[arch]
-        except KeyError:
-            raise NotFound()
+        pki_arch = self.architectures[ArchLabel(arch)]
         cert = pki_arch.get_cert(CertLabel(label))
 
         data = cert.dump()
@@ -276,14 +231,14 @@ class Animator:
             data = pem.armor('certificate', data)
         return Response(data, mimetype=mime)
 
-    def serve_cert(self, *, label: ServiceLabel, arch: ArchLabel,
+    def serve_cert(self, *, label: str, arch: str,
                    cert_label: Optional[str], use_pem):
         mime = 'application/x-pem-file' if use_pem else 'application/pkix-cert'
-        pki_arch = self.architectures[arch]
+        pki_arch = self.architectures[ArchLabel(arch)]
         cert_label = CertLabel(cert_label) if cert_label is not None else None
 
         cert = pki_arch.service_registry.get_cert_from_repo(
-            label, cert_label
+            ServiceLabel(label), cert_label
         )
         if cert is None:
             raise NotFound()
@@ -293,14 +248,12 @@ class Animator:
             data = pem.armor('certificate', data)
         return Response(data, mimetype=mime)
 
-    def serve_plugin(self, request: Request,
-                     plugin_label: PluginLabel, *, label: ServiceLabel,
-                     arch: ArchLabel):
-        try:
-            pki_arch = self.architectures[arch]
-        except KeyError:
-            raise NotFound()
+    def serve_plugin(self, request: Request, plugin_label: str, *, label: str,
+                     arch: str):
+        pki_arch = self.architectures[ArchLabel(arch)]
         services = pki_arch.service_registry
+        plugin_label = PluginLabel(plugin_label)
+        label = ServiceLabel(label)
         try:
             plugin_info = services.get_plugin_info(plugin_label, label)
         except ConfigurationError:
@@ -330,10 +283,7 @@ class Animator:
                         headers={'Content-Disposition': cd_header})
 
     def serve_pfx(self, request: Request, *, arch):
-        try:
-            pki_arch = self.architectures[ArchLabel(arch)]
-        except KeyError:
-            raise NotFound()
+        pki_arch = self.architectures[ArchLabel(arch)]
         try:
             cert = request.form['cert']
         except KeyError:
@@ -356,6 +306,7 @@ class Animator:
         #  to check request size etc. might be prudent
         try:
             endpoint, values = adapter.match()
+            assert isinstance(endpoint, str)
             if self.with_web_ui:
                 if endpoint == 'index':
                     return Response(self.index_html, mimetype='text/html')
@@ -365,28 +316,16 @@ class Animator:
                     return self.serve_zip(**values)
                 if endpoint == 'pfx-download':
                     return self.serve_pfx(request, **values)
-            assert isinstance(endpoint, Endpoint)
-            if endpoint.service_type == ServiceType.OCSP:
-                return self.serve_ocsp_response(
-                    request, label=endpoint.label, arch=endpoint.arch
-                )
-            if endpoint.service_type == ServiceType.TSA:
-                return self.serve_timestamp_response(
-                    request, label=endpoint.label, arch=endpoint.arch
-                )
-            if endpoint.service_type == ServiceType.CRL_REPO:
-                return self.serve_crl(
-                    label=endpoint.label, arch=endpoint.arch, **values
-                )
-            if endpoint.service_type == ServiceType.CERT_REPO:
-                return self.serve_cert(
-                    label=endpoint.label, arch=endpoint.arch, **values
-                )
-            if endpoint.service_type == ServiceType.PLUGIN:
-                return self.serve_plugin(
-                    request, endpoint.plugin_label,
-                    label=endpoint.label, arch=endpoint.arch
-                )
+            if endpoint == 'ocsp':
+                return self.serve_ocsp_response(request, **values)
+            if endpoint == 'tsa':
+                return self.serve_timestamp_response(request, **values)
+            if endpoint == 'crls':
+                return self.serve_crl(**values)
+            if endpoint == 'certs':
+                return self.serve_cert(**values)
+            if endpoint == 'plugin':
+                return self.serve_plugin(request, **values)
             raise InternalServerError()  # pragma: nocover
         except CertomancerObjectNotFoundError as e:
             logger.info(e)
@@ -429,7 +368,9 @@ class LazyAnimator:
             cfg_file, key_search_dir=key_dir, config_search_dir=config_dir,
             allow_external_config=extl_config
         )
-        self.animator = Animator(cfg.pki_archs, with_web_ui=with_web_ui)
+        self.animator = Animator(
+            AnimatorArchStore(cfg.pki_archs), with_web_ui=with_web_ui
+        )
 
     def __call__(self, environ, start_response):
         self._load()

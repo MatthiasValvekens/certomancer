@@ -113,7 +113,7 @@ def test_self_signed(label):
     arch = PKIArchitecture(
         arch_label=ArchLabel('test'), key_set=RSA_KEYS, entities=ENTITIES,
         cert_spec_config=yaml.safe_load(cfg), service_config={},
-        external_url_prefix='http://test.test', service_base_url='/test'
+        external_url_prefix='http://test.test',
     )
     root_cert = arch.get_cert(CertLabel(label))
     assert root_cert.subject == ENTITIES[EntityLabel('root')]
@@ -163,7 +163,7 @@ def test_issue_intermediate():
     arch = PKIArchitecture(
         arch_label=ArchLabel('test'), key_set=RSA_KEYS, entities=ENTITIES,
         cert_spec_config=yaml.safe_load(cfg), service_config={},
-        external_url_prefix='http://test.test', service_base_url='/test'
+        external_url_prefix='http://test.test',
     )
     root_cert = arch.get_cert(CertLabel('root-ca'))
     assert root_cert.subject == ENTITIES[EntityLabel('root')]
@@ -214,7 +214,7 @@ def test_sign_public_only():
     arch = PKIArchitecture(
         arch_label=ArchLabel('test'), key_set=RSA_KEYS, entities=ENTITIES,
         cert_spec_config=yaml.safe_load(cfg), service_config={},
-        external_url_prefix='http://test.test', service_base_url='/test'
+        external_url_prefix='http://test.test',
     )
     pubkey = arch.get_cert(CertLabel('leaf')).public_key
     with open('tests/data/keys-rsa/split-key-pub.key.pem', 'rb') as inf:

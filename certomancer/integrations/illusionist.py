@@ -57,7 +57,7 @@ class Illusionist:
 
         for plugin_info in services.list_plugin_services():
             mocker.register_uri(
-                'POST', plugin_info.internal_url,
+                'POST', plugin_info.url,
                 content=partial(
                     self.serve_plugin, plugin_label=plugin_info.plugin_label,
                     label=plugin_info.label

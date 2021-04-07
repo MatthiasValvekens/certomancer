@@ -1,0 +1,127 @@
+<article>
+    {# TODO make CRL repos and cert repos browsable #}
+    <h2>Architecture: {{ arch_services.arch }}</h2>
+    All certificates (.zip): <a href="{{ web_ui_prefix }}/cert-bundle/{{ arch_services.arch }}">download</a>
+    <section>
+        <h3>Certificates by issuer</h3>
+        {% for iss in arch_services.certs_by_issuer %}
+            <details>
+                <summary>{{ iss }}</summary>
+                <ul>
+                    {% for cert_info in arch_services.certs_by_issuer[iss] %}
+                        <li>
+                            {{ cert_info.spec.label }}<br/>
+                            <i>{{ cert_info.subject_dn }}</i><br/>
+                            <a href="{{ web_ui_prefix }}/any-cert/{{ arch_services.arch }}/{{ cert_info.spec.label }}.cert.pem">PEM</a>
+                            &ensp;
+                            <a href="{{ web_ui_prefix }}/any-cert/{{ arch_services.arch }}/{{ cert_info.spec.label }}.crt">DER</a>
+                        </li>
+                    {% endfor %}
+                </ul>
+            </details>
+        {% endfor %}
+    </section>
+    <section>
+        {% if pfx_possible %}
+            <h3>Download PKCS&nbsp;#12 (.pfx) bundles</h3>
+            <p>
+                Choose a certificate label that you want to download
+                together with its issuance chain and private key.
+                You can optionally set a passphrase.
+            </p>
+            <form method="post" action="{{ web_ui_prefix }}/pfx-download/{{ arch_services.arch }}">
+                <table>
+                    <thead>
+                    <tr>
+                        <th>
+                            <label for="certs">Certificate</label>
+                        </th>
+                        <th>
+                            <label for="passphrase">Passphrase</label>
+                        </th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <tr>
+                        <td>
+                            <select name="cert" id="certs">
+                                {% for iss in arch_services.certs_by_issuer %}
+                                    <optgroup label="{{ iss }}">
+                                        {% for cert_info in arch_services.certs_by_issuer[iss] %}
+                                            <option value="{{ cert_info.spec.label }}">{{ cert_info.spec.label }}</option>
+                                        {% endfor %}
+                                    </optgroup>
+                                {% endfor %}
+                            </select>
+                        </td>
+                        <td>
+                            <input type="text" name="passphrase" id="passphrase" width="20ch">
+                        </td>
+                    </tr>
+                    </tbody>
+                    <tfoot>
+                    <tr>
+                        <td colspan="2">
+                            <input type="submit" value="Download">
+                        </td>
+                    </tr>
+                    </tfoot>
+                </table>
+            </form>
+        {% else %}
+            <p><i>[PKCS&nbsp;#12 support is unavailable.]</i></p>
+        {% endif %}
+    </section>
+    <section>
+        <h3>Time stamping endpoints (RFC 3161 protocol)</h3>
+        {% if arch_services.tsa %}
+            <ul>
+                {% for tsa in arch_services.tsa %}
+                    <li><a href="/{{ arch_services.arch }}{{ tsa.internal_url }}">{{ tsa.label }}</a></li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p>No TSA services</p>
+        {% endif %}
+    </section>
+    <section>
+        <h3>OCSP responder endpoints</h3>
+        {% if arch_services.ocsp %}
+            <ul>
+                {% for ocsp in arch_services.ocsp %}
+                    <li><a href="/{{ arch_services.arch }}{{ ocsp.internal_url }}">{{ ocsp.label }}</a></li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p>No OCSP services</p>
+        {% endif %}
+    </section>
+    <section>
+        <h3>Certificate revocation lists</h3>
+        {% if arch_services.crl %}
+            <ul>
+                {% for crl in arch_services.crl %}
+                    <li><a href="/{{ arch_services.arch }}{{ crl.latest_url }}">{{ crl.label }}</a> (latest)</li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p>No CRL repositories</p>
+        {% endif %}
+    </section>
+    <section>
+        <h3>Certificate repositories</h3>
+        {% if arch_services.cert_repo %}
+            <ul>
+                {% for repo in arch_services.cert_repo %}
+                    <li>
+                        <a href="/{{ arch_services.arch }}{{ repo.issuer_cert_internal_url }}">{{ repo.label }}</a>
+                        (CA cert{% if repo.publish_issued_certs %}; issued certs available{% endif %})
+                    </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p>No certificate repositories</p>
+        {% endif %}
+    </section>
+    <hr/>
+</article>

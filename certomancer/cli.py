@@ -208,7 +208,7 @@ def necronomicon(ctx, architecture, crl_repo, output, no_pem, at_time):
 @exception_manager()
 def animate(ctx, port, no_web_ui):
     try:
-        from .integrations.animator import Animator
+        from .integrations.animator import Animator, AnimatorArchStore
     except ImportError as e:
         raise click.ClickException(
             "'animate' requires additional dependencies."
@@ -217,5 +217,5 @@ def animate(ctx, port, no_web_ui):
         ) from e
     cfg: CertomancerConfig = next(ctx.obj['config'])
     from werkzeug.serving import run_simple
-    app = Animator(cfg.pki_archs, with_web_ui=not no_web_ui)
+    app = Animator(AnimatorArchStore(cfg.pki_archs), with_web_ui=not no_web_ui)
     run_simple('127.0.0.1', port, app)

@@ -7,7 +7,8 @@ import os.path
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Optional, List, Dict, Iterable, Tuple, Type, Union, Any
+from typing import Optional, List, Dict, Iterable, Tuple, Type, Union, Any, \
+    ClassVar
 from zipfile import ZipFile
 
 import yaml
@@ -708,9 +709,6 @@ class PKIArchitecture:
                            service_plugins: 'ServicePluginRegistry' = None,
                            cert_cache=None) -> 'PKIArchitecture':
         check_config_keys(arch_label, PKIArchitecture.CONFIG_KEYS, cfg)
-        service_base_url = cfg.get(
-            'base-url', f"/{arch_label}"
-        )
         key_set_label = cfg.get('keyset', arch_label)
         try:
             key_set = key_sets[key_set_label]
@@ -741,7 +739,6 @@ class PKIArchitecture:
             arch_label, key_set=key_set, entities=entities,
             cert_spec_config=cert_specs, service_config=services,
             external_url_prefix=external_url_prefix,
-            service_base_url=service_base_url,
             extension_plugins=extension_plugins,
             service_plugins=service_plugins, cert_cache=cert_cache
         )
@@ -772,16 +769,11 @@ class PKIArchitecture:
 
     def __init__(self, arch_label: ArchLabel,
                  key_set: KeySet, entities: EntityRegistry,
-                 cert_spec_config, service_config,
-                 external_url_prefix, service_base_url,
+                 cert_spec_config, service_config, external_url_prefix,
                  extension_plugins: ExtensionPluginRegistry = None,
                  service_plugins: 'ServicePluginRegistry' = None,
                  cert_cache=None):
 
-        if not service_base_url.startswith('/'):
-            raise ConfigurationError(
-                "Service base URL should start with '/'."
-            )
         self.arch_label = arch_label
         self.key_set = key_set
         self.entities = entities
@@ -790,7 +782,7 @@ class PKIArchitecture:
             extension_plugins or DEFAULT_EXT_PLUGIN_REGISTRY
 
         self.service_registry: ServiceRegistry = ServiceRegistry(
-            self, external_url_prefix, service_base_url, service_config,
+            self, external_url_prefix, service_config,
             plugins=service_plugins
         )
 
@@ -1138,6 +1130,10 @@ class PKIArchitecture:
 @dataclass(frozen=True)
 class ServiceInfo(ConfigurableMixin):
     """Base class to describe a PKI service."""
+
+    arch_label: ArchLabel
+    """Architecture to which the service belongs. """
+
     label: ServiceLabel
     """
     Label by which the service is referred to within Certomancer configuration.
@@ -1148,16 +1144,13 @@ class ServiceInfo(ConfigurableMixin):
     Prefix that needs to be prepended to produce a "fully qualified" URL.
     """
 
-    base_url: str
-    """
-    Base URL from which the service's "siblings" branch off.
-    This excludes the service label and external URL prefix.
-    """
+    base_url: ClassVar[str]
 
     @property
     def internal_url(self) -> str:
         """
-        Internal URL for the service, i.e. without the external URL prefix.
+        Internal URL for the service, i.e. without the external URL prefix
+        or the arch_label prefix
         """
 
         return f"{self.base_url}/{self.label}"
@@ -1167,12 +1160,15 @@ class ServiceInfo(ConfigurableMixin):
         """
         Full URL where the service's main endpoint can be found.
         """
-        return f"{self.external_url_prefix}{self.base_url}/{self.label}"
+        return \
+            f"{self.external_url_prefix}/{self.arch_label}{self.internal_url}"
 
 
 @dataclass(frozen=True)
 class OCSPResponderServiceInfo(ServiceInfo):
     """Configuration describing an OCSP responder."""
+
+    base_url = '/ocsp'
 
     for_issuer: EntityLabel
     """
@@ -1244,6 +1240,8 @@ class OCSPResponderServiceInfo(ServiceInfo):
 class TSAServiceInfo(ServiceInfo):
     """Configuration describing a time stamping service."""
 
+    base_url = '/tsa'
+
     signing_cert: CertLabel
     """
     Label of the signer's certificate.
@@ -1305,6 +1303,8 @@ class CRLRepoServiceInfo(ServiceInfo):
         extensions yourself using plugins and the :attr:`crl_extensions`
         parameter.
     """
+
+    base_url = '/crls'
 
     for_issuer: EntityLabel
     """
@@ -1386,6 +1386,7 @@ class CRLRepoServiceInfo(ServiceInfo):
 
 @dataclass(frozen=True)
 class CertRepoServiceInfo(ServiceInfo):
+    base_url = '/certs'
     for_issuer: EntityLabel
     issuer_cert: Optional[CertLabel] = None
     publish_issued_certs: bool = True
@@ -1407,6 +1408,11 @@ class CertRepoServiceInfo(ServiceInfo):
         fname = CertRepoServiceInfo.issuer_cert_file_name(use_pem=use_pem)
         return f"{self.url}/{fname}"
 
+    @property
+    def issuer_cert_internal_url(self):
+        fname = CertRepoServiceInfo.issuer_cert_file_name(use_pem=True)
+        return f"{self.internal_url}/{fname}"
+
     def issued_cert_url(self, label: CertLabel, use_pem=True):
         path = self.issued_cert_url_path(label=label, use_pem=use_pem)
         return f"{self.url}/{path}"
@@ -1417,6 +1423,8 @@ class PluginServiceInfo(ServiceInfo):
     """
     Configuration describing a service provided by a service plugin.
     """
+
+    base_url = '/plugin'
 
     plugin_label: PluginLabel
     """
@@ -1432,6 +1440,15 @@ class PluginServiceInfo(ServiceInfo):
     """
     The content type of the response returned by the plugin.
     """
+
+    @property
+    def internal_url(self) -> str:
+        """
+        Internal URL for the service, i.e. without the external URL prefix
+        or the arch_label prefix
+        """
+
+        return f"{self.base_url}/{self.plugin_label}/{self.label}"
 
 
 class OCSPInterface(RevocationInfoInterface):
@@ -1616,18 +1633,16 @@ class ServiceRegistry:
     """
 
     def __init__(self, pki_arch: PKIArchitecture, external_url_prefix,
-                 base_url, service_config,
-                 plugins: ServicePluginRegistry = None):
-        self.services_base_url = base_url
+                 service_config, plugins: ServicePluginRegistry = None):
         self.pki_arch = pki_arch
         self.plugins = plugins or DEFAULT_SRV_PLUGIN_REGISTRY
 
-        def _gen_svc_config(url_suffix, configs):
+        def _gen_svc_config(configs):
             for lbl, cfg in configs.items():
                 cfg = dict(cfg)
                 cfg.setdefault('external-url-prefix', external_url_prefix)
-                cfg.setdefault('base-url', f"{base_url}/{url_suffix}")
                 cfg['label'] = lbl
+                cfg['arch_label'] = pki_arch.arch_label.value
                 yield ServiceLabel(lbl), cfg
 
         check_config_keys(
@@ -1640,22 +1655,22 @@ class ServiceRegistry:
         self._ocsp = {
             label: OCSPResponderServiceInfo.from_config(cfg)
             for label, cfg
-            in _gen_svc_config('ocsp', service_config.get('ocsp', {}))
+            in _gen_svc_config(service_config.get('ocsp', {}))
         }
         self._crl_repo = {
             label: CRLRepoServiceInfo.from_config(cfg)
             for label, cfg
-            in _gen_svc_config('crls', service_config.get('crl-repo', {}))
+            in _gen_svc_config(service_config.get('crl-repo', {}))
         }
         self._cert_repo = {
             label: CertRepoServiceInfo.from_config(cfg)
             for label, cfg
-            in _gen_svc_config('certs', service_config.get('cert-repo', {}))
+            in _gen_svc_config(service_config.get('cert-repo', {}))
         }
         self._tsa = {
             label: TSAServiceInfo.from_config(cfg)
             for label, cfg
-            in _gen_svc_config('tsa', service_config.get('time-stamping', {}))
+            in _gen_svc_config(service_config.get('time-stamping', {}))
         }
 
         plugin_cfg = service_config.get('plugin', {})
@@ -1665,16 +1680,14 @@ class ServiceRegistry:
         def _cfg_plugin(plugin_label, cfg_for_plugin):
             plugin = self.plugins[plugin_label]
             content_type = plugin.content_type
-            svc_configs = _gen_svc_config(
-                f'plugin/{plugin_label}', cfg_for_plugin
-            )
+            svc_configs = _gen_svc_config(cfg_for_plugin)
             for service_label, cfg in svc_configs:
                 yield service_label, PluginServiceInfo(
                     plugin_label=plugin_label, content_type=content_type,
                     plugin_config=plugin.process_plugin_config(cfg),
                     label=service_label,
                     external_url_prefix=cfg['external-url-prefix'],
-                    base_url=cfg['base-url'],
+                    arch_label=pki_arch.arch_label
                 )
 
         self._plugin_services = {
