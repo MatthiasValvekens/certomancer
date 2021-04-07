@@ -178,7 +178,7 @@ class Animator:
         self.url_map = None
 
         self.url_map = Map(
-            SERVICE_RULES + WEB_UI_URLS if with_web_ui else [],
+            SERVICE_RULES + (WEB_UI_URLS if with_web_ui else []),
             converters={'ext': PemExtensionConverter}
         )
         if with_web_ui:
