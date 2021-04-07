@@ -702,11 +702,57 @@ class PKIArchitecture:
     )
 
     @classmethod
+    def build_architecture(cls, arch_label: ArchLabel, cfg: dict,
+                           key_sets: KeySets, external_url_prefix,
+                           extension_plugins: ExtensionPluginRegistry = None,
+                           service_plugins: 'ServicePluginRegistry' = None,
+                           cert_cache=None) -> 'PKIArchitecture':
+        check_config_keys(arch_label, PKIArchitecture.CONFIG_KEYS, cfg)
+        service_base_url = cfg.get(
+            'base-url', f"/{arch_label}"
+        )
+        key_set_label = cfg.get('keyset', arch_label)
+        try:
+            key_set = key_sets[key_set_label]
+        except KeyError as e:
+            raise ConfigurationError(
+                f"There is no registered key set with label {key_set_label}"
+            ) from e
+
+        try:
+            entity_cfg = cfg['entities']
+        except KeyError as e:
+            raise ConfigurationError(
+                "The 'entities' key is required in all PKI architecture "
+                "specifications."
+            ) from e
+        try:
+            cert_specs = cfg['certs']
+        except KeyError as e:
+            raise ConfigurationError(
+                "The 'certs' key is required in all PKI architecture "
+                "specifications."
+            ) from e
+        entities = EntityRegistry(
+            entity_cfg, cfg.get('entity-defaults', None)
+        )
+        services = cfg.get('services', {})
+        return PKIArchitecture(
+            arch_label, key_set=key_set, entities=entities,
+            cert_spec_config=cert_specs, service_config=services,
+            external_url_prefix=external_url_prefix,
+            service_base_url=service_base_url,
+            extension_plugins=extension_plugins,
+            service_plugins=service_plugins, cert_cache=cert_cache
+        )
+
+    @classmethod
     def build_architectures(cls, key_sets: KeySets, cfgs, external_url_prefix,
                             config_search_dir: Optional[SearchDir],
                             extension_plugins: ExtensionPluginRegistry = None,
                             service_plugins: 'ServicePluginRegistry' = None):
         for arch_label, cfg in cfgs.items():
+            arch_label = ArchLabel(arch_label)
             # external config
             if isinstance(cfg, str):
                 if config_search_dir is None:
@@ -717,43 +763,9 @@ class PKIArchitecture:
                 cfg_path = config_search_dir.resolve(path=cfg)
                 with open(cfg_path, 'r') as external_conf:
                     cfg = yaml.safe_load(external_conf)
-            arch_label = ArchLabel(arch_label)
-            check_config_keys(arch_label, PKIArchitecture.CONFIG_KEYS, cfg)
-            service_base_url = cfg.get(
-                'base-url', f"/{arch_label}"
-            )
-            key_set_label = cfg.get('keyset', arch_label)
-            try:
-                key_set = key_sets[key_set_label]
-            except KeyError as e:
-                raise ConfigurationError(
-                    f"There is no registered key set with label {key_set_label}"
-                ) from e
-
-            try:
-                entity_cfg = cfg['entities']
-            except KeyError as e:
-                raise ConfigurationError(
-                    "The 'entities' key is required in all PKI architecture "
-                    "specifications."
-                ) from e
-            try:
-                cert_specs = cfg['certs']
-            except KeyError as e:
-                raise ConfigurationError(
-                    "The 'certs' key is required in all PKI architecture "
-                    "specifications."
-                ) from e
-            entities = EntityRegistry(
-                entity_cfg, cfg.get('entity-defaults', None)
-            )
-            services = cfg.get('services', {})
-            yield PKIArchitecture(
-                arch_label, key_set=key_set, entities=entities,
-                cert_spec_config=cert_specs,
-                service_config=services,
+            yield cls.build_architecture(
+                arch_label=arch_label, cfg=cfg, key_sets=key_sets,
                 external_url_prefix=external_url_prefix,
-                service_base_url=service_base_url,
                 extension_plugins=extension_plugins,
                 service_plugins=service_plugins
             )
@@ -764,7 +776,7 @@ class PKIArchitecture:
                  external_url_prefix, service_base_url,
                  extension_plugins: ExtensionPluginRegistry = None,
                  service_plugins: 'ServicePluginRegistry' = None,
-                 cert_cache = None):
+                 cert_cache=None):
 
         if not service_base_url.startswith('/'):
             raise ConfigurationError(
