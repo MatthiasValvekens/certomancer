@@ -763,7 +763,8 @@ class PKIArchitecture:
                  cert_spec_config, service_config,
                  external_url_prefix, service_base_url,
                  extension_plugins: ExtensionPluginRegistry = None,
-                 service_plugins: 'ServicePluginRegistry' = None):
+                 service_plugins: 'ServicePluginRegistry' = None,
+                 cert_cache = None):
 
         if not service_base_url.startswith('/'):
             raise ConfigurationError(
@@ -839,7 +840,7 @@ class PKIArchitecture:
             self._cert_labels_by_issuer[spec.issuer].append(name)
             self._cert_labels_by_subject[spec.subject].append(name)
 
-        self._cert_cache = {}
+        self._cert_cache = cert_cache if cert_cache is not None else {}
 
     def get_cert_spec(self, label: CertLabel) -> CertificateSpec:
         try:
