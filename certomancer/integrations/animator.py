@@ -8,6 +8,7 @@ from typing import Optional, Dict, List
 import tzlocal
 from asn1crypto import ocsp, tsp, pem
 from werkzeug.wrappers import Request, Response
+from dateutil.parser import parse as parse_dt
 from werkzeug.routing import Map, Rule, BaseConverter, Submount
 from werkzeug.exceptions import HTTPException, NotFound, InternalServerError, \
     BadRequest
@@ -25,6 +26,13 @@ from certomancer.services import CertomancerServiceError
 logger = logging.getLogger(__name__)
 
 pfx_possible = pyca_cryptography_present()
+
+
+def _now():
+    return datetime.now(tz=tzlocal.get_localzone())
+
+
+FAKE_TIME_HEADER = 'X-Certomancer-Fake-Time'
 
 
 class PemExtensionConverter(BaseConverter):
@@ -171,11 +179,13 @@ class AnimatorArchStore:
 class Animator:
 
     def __init__(self, architectures: AnimatorArchStore,
-                 at_time: Optional[datetime] = None, with_web_ui=True):
+                 at_time: Optional[datetime] = None, with_web_ui=True,
+                 allow_time_override=True):
         self.fixed_time = at_time
         self.architectures = architectures
         self.with_web_ui = with_web_ui
         self.url_map = None
+        self.allow_time_override = allow_time_override
 
         self.url_map = Map(
             SERVICE_RULES + (WEB_UI_URLS if with_web_ui else []),
@@ -184,14 +194,17 @@ class Animator:
         if with_web_ui:
             self.index_html = gen_index(iter(architectures))
 
-    @property
-    def at_time(self):
-        return self.fixed_time or datetime.now(tz=tzlocal.get_localzone())
+    def at_time(self, request):
+        fake_time = None
+        if self.allow_time_override:
+            fake_time = request.headers.get(FAKE_TIME_HEADER, type=parse_dt)
+
+        return fake_time or self.fixed_time or _now()
 
     def serve_ocsp_response(self, request: Request, *, label: str, arch: str):
         pki_arch = self.architectures[ArchLabel(arch)]
         ocsp_resp = pki_arch.service_registry.summon_responder(
-            ServiceLabel(label), self.at_time
+            ServiceLabel(label), self.at_time(request)
         )
         data = request.stream.read()
         req: ocsp.OCSPRequest = ocsp.OCSPRequest.load(data)
@@ -201,20 +214,23 @@ class Animator:
     def serve_timestamp_response(self, request, *, label: str, arch: str):
         pki_arch = self.architectures[ArchLabel(arch)]
         tsa = pki_arch.service_registry.summon_timestamper(
-            ServiceLabel(label), self.at_time
+            ServiceLabel(label), self.at_time(request)
         )
         data = request.stream.read()
         req: tsp.TimeStampReq = tsp.TimeStampReq.load(data)
         response = tsa.request_tsa_response(req)
         return Response(response.dump(), mimetype='application/timestamp-reply')
 
-    def serve_crl(self, *, label: ServiceLabel, arch: str, crl_no, use_pem):
+    def serve_crl(self, request: Request, *,
+                  label: ServiceLabel, arch: str, crl_no, use_pem):
         pki_arch = self.architectures[ArchLabel(arch)]
         mime = 'application/x-pem-file' if use_pem else 'application/pkix-crl'
         if crl_no is not None:
             crl = pki_arch.service_registry.get_crl(label, number=crl_no)
         else:
-            crl = pki_arch.service_registry.get_crl(label, self.at_time)
+            crl = pki_arch.service_registry.get_crl(
+                label, self.at_time(request)
+            )
 
         data = crl.dump()
         if use_pem:
@@ -263,7 +279,7 @@ class Animator:
         req_content = request.stream.read()
         try:
             response_bytes = services.invoke_plugin(
-                plugin_label, label, req_content, at_time=self.at_time
+                plugin_label, label, req_content, at_time=self.at_time(request)
             )
         except PluginServiceRequestError as e:
             raise BadRequest(e.user_msg)
@@ -321,7 +337,7 @@ class Animator:
             if endpoint == 'tsa':
                 return self.serve_timestamp_response(request, **values)
             if endpoint == 'crls':
-                return self.serve_crl(**values)
+                return self.serve_crl(request, **values)
             if endpoint == 'certs':
                 return self.serve_cert(**values)
             if endpoint == 'plugin':
