@@ -2,9 +2,10 @@ import hashlib
 import importlib
 from datetime import datetime
 
+import pytest
 import pytz
 import requests
-from asn1crypto import tsp, algos, core, cms
+from asn1crypto import tsp, algos, core, cms, ocsp
 from freezegun import freeze_time
 from oscrypto import asymmetric, symmetric
 from pyhanko_certvalidator import ValidationContext, CertificateValidator
@@ -117,6 +118,47 @@ def test_timestamp(requests_mock):
     assert tst_info['nonce'].native == 0x1337
     assert tst_info['gen_time'].native \
            == datetime.now().replace(tzinfo=pytz.utc)
+
+
+@pytest.mark.parametrize(
+    "time, expected", [
+        ('2020-11-05', 'good'),
+        ('2020-12-05', 'revoked')
+    ]
+)
+def test_ocsp(requests_mock, time, expected):
+    ILLUSIONIST.register(requests_mock)
+    with open('tests/data/signer2-ocsp-req.der', 'rb') as req_in:
+        req_data = req_in.read()
+    with freeze_time(time):
+        response = requests.post(
+            "http://test.test/testing-ca/ocsp/interm", data=req_data
+        )
+        resp: ocsp.OCSPResponse = ocsp.OCSPResponse.load(response.content)
+        assert resp['response_status'].native == 'successful'
+
+        rdata = resp['response_bytes']['response'].parsed['tbs_response_data']
+        status = rdata['responses'][0]['cert_status'].name
+        assert status == expected
+
+
+@freeze_time('2020-11-01')
+@pytest.mark.parametrize('fname', ['tests/data/tsa-ocsp-req.der',
+                                   'tests/data/tsa-bad-ocsp-req.der'])
+def test_ocsp_unauthorized(requests_mock, fname):
+    ILLUSIONIST.register(requests_mock)
+    # 1st file: request OK, but this responder can't answer for the issuer
+    # in question
+    # 2nd file: actual issuer of the cert and issuer in the OCSP req are not
+    # the same => the certid won't be found in the (simulated) database, so
+    # we should also get 'unauthorized'
+    with open(fname, 'rb') as req_in:
+        req_data = req_in.read()
+    response = requests.post(
+        "http://test.test/testing-ca/ocsp/interm", data=req_data
+    )
+    resp: ocsp.OCSPResponse = ocsp.OCSPResponse.load(response.content)
+    assert resp['response_status'].native == 'unauthorized'
 
 
 def test_demo_plugin(requests_mock):
