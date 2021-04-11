@@ -3,7 +3,7 @@ import os
 from dataclasses import dataclass
 from datetime import datetime
 from io import BytesIO
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, Callable
 
 import tzlocal
 from asn1crypto import ocsp, tsp, pem
@@ -195,8 +195,23 @@ class Animator:
             service_rules() + (web_ui_rules() if with_web_ui else []),
             converters={'ext': PemExtensionConverter}
         )
+
+        handlers: Dict[str, Callable] = {
+            'ocsp': self.serve_ocsp_response,
+            'tsa': self.serve_timestamp_response,
+            'crls': self.serve_crl,
+            'certs': self.serve_cert,
+            'plugin': self.serve_plugin
+        }
+
         if with_web_ui:
             self.index_html = gen_index(iter(architectures))
+            handlers.update({
+                'any-cert': self.serve_any_cert, 'cert-bundle': self.serve_zip,
+                'pfx-download': self.serve_pfx
+            })
+
+        self._handlers = handlers
 
     def at_time(self, request):
         fake_time = None
@@ -215,7 +230,8 @@ class Animator:
         response = ocsp_resp.build_ocsp_response(req)
         return Response(response.dump(), mimetype='application/ocsp-response')
 
-    def serve_timestamp_response(self, request, *, label: str, arch: str):
+    def serve_timestamp_response(self, request: Request, *,
+                                 label: str, arch: str):
         pki_arch = self.architectures[ArchLabel(arch)]
         tsa = pki_arch.service_registry.summon_timestamper(
             ServiceLabel(label), self.at_time(request)
@@ -241,7 +257,8 @@ class Animator:
             data = pem.armor('X509 CRL', data)
         return Response(data, mimetype=mime)
 
-    def serve_any_cert(self, *, arch: str, label: str, use_pem):
+    def serve_any_cert(self, _request: Request, *,
+                       arch: str, label: str, use_pem):
         mime = 'application/x-pem-file' if use_pem else 'application/pkix-cert'
         pki_arch = self.architectures[ArchLabel(arch)]
         cert = pki_arch.get_cert(CertLabel(label))
@@ -251,7 +268,7 @@ class Animator:
             data = pem.armor('certificate', data)
         return Response(data, mimetype=mime)
 
-    def serve_cert(self, *, label: str, arch: str,
+    def serve_cert(self, _request: Request, *, label: str, arch: str,
                    cert_label: Optional[str], use_pem):
         mime = 'application/x-pem-file' if use_pem else 'application/pkix-cert'
         pki_arch = self.architectures[ArchLabel(arch)]
@@ -289,7 +306,7 @@ class Animator:
             raise BadRequest(e.user_msg)
         return Response(response_bytes, mimetype=content_type)
 
-    def serve_zip(self, *, arch):
+    def serve_zip(self, _request: Request, *, arch):
         try:
             pki_arch = self.architectures[ArchLabel(arch)]
         except KeyError:
@@ -327,26 +344,10 @@ class Animator:
         try:
             endpoint, values = adapter.match()
             assert isinstance(endpoint, str)
-            if self.with_web_ui:
-                if endpoint == 'index':
-                    return Response(self.index_html, mimetype='text/html')
-                if endpoint == 'any-cert':
-                    return self.serve_any_cert(**values)
-                if endpoint == 'cert-bundle':
-                    return self.serve_zip(**values)
-                if endpoint == 'pfx-download':
-                    return self.serve_pfx(request, **values)
-            if endpoint == 'ocsp':
-                return self.serve_ocsp_response(request, **values)
-            if endpoint == 'tsa':
-                return self.serve_timestamp_response(request, **values)
-            if endpoint == 'crls':
-                return self.serve_crl(request, **values)
-            if endpoint == 'certs':
-                return self.serve_cert(**values)
-            if endpoint == 'plugin':
-                return self.serve_plugin(request, **values)
-            raise InternalServerError()  # pragma: nocover
+            if endpoint == 'index' and self.with_web_ui:
+                return Response(self.index_html, mimetype='text/html')
+            handler = self._handlers[endpoint]
+            return handler(request, **values)
         except CertomancerObjectNotFoundError as e:
             logger.info(e)
             return NotFound()
