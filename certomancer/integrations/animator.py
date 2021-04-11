@@ -99,49 +99,53 @@ class ArchServicesDescription:
 WEB_UI_URL_PREFIX = '/_certomancer'
 
 
-WEB_UI_URLS = [
-    Rule('/', endpoint='index', methods=('GET',)),
-    Submount(WEB_UI_URL_PREFIX, [
-        # convenience endpoint that serves certs without regard for
-        # checking whether they belong to any particular (logical)
-        # cert repo (these URLs aren't part of the "PKI API", for lack
-        # of a better term)
-        Rule('/any-cert/<arch>/<label>.<ext:use_pem>',
-             endpoint='any-cert', methods=('GET',)),
-        Rule('/cert-bundle/<arch>', endpoint='cert-bundle', methods=('GET',)),
-        Rule('/pfx-download/<arch>', endpoint='pfx-download',
+def web_ui_rules():
+    return [
+        Rule('/', endpoint='index', methods=('GET',)),
+        Submount(WEB_UI_URL_PREFIX, [
+            # convenience endpoint that serves certs without regard for
+            # checking whether they belong to any particular (logical)
+            # cert repo (these URLs aren't part of the "PKI API", for lack
+            # of a better term)
+            Rule('/any-cert/<arch>/<label>.<ext:use_pem>',
+                 endpoint='any-cert', methods=('GET',)),
+            Rule('/cert-bundle/<arch>', endpoint='cert-bundle',
+                 methods=('GET',)),
+            Rule('/pfx-download/<arch>', endpoint='pfx-download',
+                 methods=('POST',)),
+        ])
+    ]
+
+
+def service_rules():
+    return [
+        # OCSP responder pattern
+        Rule('/<arch>/ocsp/<label>', endpoint='ocsp', methods=('POST',)),
+        # Time stamping service pattern
+        Rule('/<arch>/tsa/<label>', endpoint='tsa', methods=('POST',)),
+        # Plugin endpoint pattern
+        Rule('/<arch>/plugin/<plugin_label>/<label>', endpoint='plugin',
              methods=('POST',)),
-    ])
-]
-
-
-SERVICE_RULES = [
-    # OCSP responder pattern
-    Rule('/<arch>/ocsp/<label>', endpoint='ocsp', methods=('POST',)),
-    # Time stamping service pattern
-    Rule('/<arch>/tsa/<label>', endpoint='tsa', methods=('POST',)),
-    # Plugin endpoint pattern
-    Rule('/<arch>/plugin/<plugin_label>/<label>', endpoint='plugin',
-         methods=('POST',)),
-    # latest CRL pattern
-    Rule("/<arch>/crls/<label>/latest.<ext(exts='crl'):use_pem>",
-         endpoint='crls', methods=('GET',), defaults={'crl_no': None}),
-    # CRL archive pattern
-    Rule("/<arch>/crls/<label>/archive-<int:crl_no>.<ext(exts='crl'):use_pem>",
-         endpoint='crls', methods=('GET',)),
-    # Cert repo authority pattern
-    Rule('/<arch>/certs/<label>/ca.<ext:use_pem>',
-         defaults={'cert_label': None}, endpoint='certs', methods=('GET',)),
-    # Cert repo generic pattern
-    Rule(f"/<arch>/certs/<label>/issued/<cert_label>.<ext:use_pem>",
-         endpoint='certs', methods=('GET',))
-]
+        # latest CRL pattern
+        Rule("/<arch>/crls/<label>/latest.<ext(exts='crl'):use_pem>",
+             endpoint='crls', methods=('GET',), defaults={'crl_no': None}),
+        # CRL archive pattern
+        Rule("/<arch>/crls/<label>"
+             "/archive-<int:crl_no>.<ext(exts='crl'):use_pem>",
+             endpoint='crls', methods=('GET',)),
+        # Cert repo authority pattern
+        Rule('/<arch>/certs/<label>/ca.<ext:use_pem>',
+             defaults={'cert_label': None}, endpoint='certs', methods=('GET',)),
+        # Cert repo generic pattern
+        Rule(f"/<arch>/certs/<label>/issued/<cert_label>.<ext:use_pem>",
+             endpoint='certs', methods=('GET',))
+    ]
 
 
 def gen_index(architectures):
     try:
         from jinja2 import Environment, PackageLoader
-    except ImportError as e:
+    except ImportError as e:  # pragma: nocover
         raise CertomancerServiceError(
             "Web UI requires Jinja2 to be installed"
         ) from e
@@ -188,7 +192,7 @@ class Animator:
         self.allow_time_override = allow_time_override
 
         self.url_map = Map(
-            SERVICE_RULES + (WEB_UI_URLS if with_web_ui else []),
+            service_rules() + (web_ui_rules() if with_web_ui else []),
             converters={'ext': PemExtensionConverter}
         )
         if with_web_ui:
