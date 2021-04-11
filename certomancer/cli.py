@@ -102,10 +102,14 @@ def cli(ctx, config, key_root, extra_config_root, no_external_config):
               type=bool, is_flag=True)
 @click.option('--no-pfx', help='do not attempt to create PKCS#12 files',
               type=bool, is_flag=True)
+@click.option('--pfx-pass', type=str,
+              help='set password for (all) PKCS #12 files. Default is to '
+                   'leave them unencrypted.')
 @click.option('--no-pem', help='use raw DER instead of PEM output',
               required=False, type=bool, is_flag=True)
 @exception_manager()
-def mass_summon(ctx, architecture, output, no_pem, archive, flat, no_pfx):
+def mass_summon(ctx, architecture, output, no_pem, archive, flat, no_pfx,
+                pfx_pass):
     cfg: CertomancerConfig = next(ctx.obj['config'])
     pki_arch = cfg.get_pki_arch(architecture)
     if not no_pfx and not pyca_cryptography_present():
@@ -114,8 +118,12 @@ def mass_summon(ctx, architecture, output, no_pem, archive, flat, no_pfx):
             "pyca/cryptography not installed, no PFX files will be created"
         )
 
+    if pfx_pass is not None:
+        pfx_pass = pfx_pass.encode('utf8')
+
     kwargs = {
-        'use_pem': not no_pem, 'flat': flat, 'include_pkcs12': not no_pfx
+        'use_pem': not no_pem, 'flat': flat, 'include_pkcs12': not no_pfx,
+        'pkcs12_pass': pfx_pass
     }
     if archive:
         with open(output, 'wb') as outf:
@@ -127,17 +135,20 @@ def mass_summon(ctx, architecture, output, no_pem, archive, flat, no_pfx):
 @cli.command(help='retrieve a single certificate from a PKI architecture')
 @click.pass_context
 @click.argument('architecture', type=str, metavar='PKI_ARCH')
-@click.argument('cert_label', type=click.Path(writable=True), required=False)
+@click.argument('cert_label', type=click.Path(writable=True), required=True)
 @click.argument('output', type=click.Path(writable=True), required=False)
 @click.option('--ignore-tty', type=bool, is_flag=True,
               help='never try to prevent binary data from being written '
                    'to stdout')
 @click.option('--as-pfx', type=bool, is_flag=True,
-              help='output PFX file (with key) instead of a certificate')
+              help='output PFX (PKCS #12) file (with key) instead of a '
+                   'certificate')
+@click.option('--pfx-pass', type=str, help='set PFX file passphrase')
 @click.option('--no-pem', help='use raw DER instead of PEM output',
               required=False, type=bool, is_flag=True)
 @exception_manager()
-def summon(ctx, architecture, cert_label, output, no_pem, as_pfx, ignore_tty):
+def summon(ctx, architecture, cert_label, output, no_pem, as_pfx, ignore_tty,
+           pfx_pass):
     cfg: CertomancerConfig = next(ctx.obj['config'])
     pki_arch = cfg.get_pki_arch(architecture)
     if as_pfx and not pyca_cryptography_present():
@@ -156,7 +167,9 @@ def summon(ctx, architecture, cert_label, output, no_pem, as_pfx, ignore_tty):
         )
 
     if as_pfx:
-        data = pki_arch.package_pkcs12(cert_label)
+        if pfx_pass is not None:
+            pfx_pass = pfx_pass.encode('utf8')
+        data = pki_arch.package_pkcs12(cert_label, password=pfx_pass)
     else:
         data = pki_arch.get_cert(CertLabel(cert_label)).dump()
         if not no_pem:
@@ -174,14 +187,19 @@ def summon(ctx, architecture, cert_label, output, no_pem, as_pfx, ignore_tty):
 @click.pass_context
 @click.argument('architecture', type=str, metavar='PKI_ARCH')
 @click.argument('crl_repo', type=str)
-@click.argument('output', type=click.Path(writable=True, dir_okay=False))
+@click.argument('output', type=click.Path(writable=True, dir_okay=False),
+                required=False)
+@click.option('--ignore-tty', type=bool, is_flag=True,
+              help='never try to prevent binary data from being written '
+                   'to stdout')
 @click.option('--no-pem', help='use raw DER instead of PEM output',
               required=False, type=bool, is_flag=True)
 @click.option('--at-time', required=False, type=str,
               help=('ISO 8601 timestamp at which to evaluate '
                     'revocation status [default: now]'))
 @exception_manager()
-def necronomicon(ctx, architecture, crl_repo, output, no_pem, at_time):
+def necronomicon(ctx, architecture, crl_repo, output, no_pem, at_time,
+                 ignore_tty):
     cfg: CertomancerConfig = next(ctx.obj['config'])
     pki_arch = cfg.get_pki_arch(architecture)
     if at_time is None:
@@ -192,14 +210,23 @@ def necronomicon(ctx, architecture, crl_repo, output, no_pem, at_time):
         repo_label=crl_repo, at_time=at_time
     )
 
-    with open(output, 'wb') as f:
-        data = crl.dump()
-        if not no_pem:
-            data = pem.armor('X509 CRL', data)
-        f.write(data)
+    if output is None and no_pem and not ignore_tty and sys.stdout.isatty():
+        raise click.ClickException(
+            "Refusing to write binary output to a TTY. Pass --ignore-tty if "
+            "you really want to ignore this check."
+        )
+    data = crl.dump()
+    if not no_pem:
+        data = pem.armor('X509 CRL', data)
+
+    if output is None:
+        sys.stdout.buffer.write(data)
+    else:
+        with open(output, 'wb') as f:
+            f.write(data)
 
 
-@cli.command(help='run a local web server with Certomancer-backed PKI services')
+@cli.command(help='run the Animator behind a development server')
 @click.option('--port', help='port to listen on',
               required=False, type=int, default=9000, show_default=True)
 @click.option('--no-web-ui', help='disable the web UI',

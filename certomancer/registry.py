@@ -955,7 +955,8 @@ class PKIArchitecture:
         key_pair = self.key_set.get_asym_key(key_label)
         return key_pair.private is not None
 
-    def _dump_certs(self, use_pem=True, flat=False, include_pkcs12=False):
+    def _dump_certs(self, use_pem=True, flat=False, include_pkcs12=False,
+                    pkcs12_pass=None):
         include_pkcs12 &= pyca_cryptography_present()
         self._load_all_certs()
         # start writing only after we know that all certs have been built
@@ -975,13 +976,16 @@ class PKIArchitecture:
                 yield name, data
 
                 if include_pkcs12 and self.is_subject_key_available(cert_label):
-                    yield base_name + '.pfx', self.package_pkcs12(cert_label)
+                    yield base_name + '.pfx', self.package_pkcs12(
+                        cert_label, password=pkcs12_pass
+                    )
 
     def dump_certs(self, folder_path: str, use_pem=True, flat=False,
-                   include_pkcs12=False):
+                   include_pkcs12=False, pkcs12_pass=None):
         os.makedirs(folder_path, exist_ok=True)
         itr = self._dump_certs(
-            use_pem=use_pem, flat=flat, include_pkcs12=include_pkcs12
+            use_pem=use_pem, flat=flat, include_pkcs12=include_pkcs12,
+            pkcs12_pass=pkcs12_pass
         )
         for name, data in itr:
             path = os.path.join(folder_path, name)
@@ -992,11 +996,12 @@ class PKIArchitecture:
                     f.write(data)
 
     def zip_certs(self, output_buffer, use_pem=True, flat=False,
-                  include_pkcs12=False):
+                  include_pkcs12=False, pkcs12_pass=None):
         zip_file = ZipFile(output_buffer, 'w')
         lbl = self.arch_label.value
         itr = self._dump_certs(
-            use_pem=use_pem, flat=flat, include_pkcs12=include_pkcs12
+            use_pem=use_pem, flat=flat, include_pkcs12=include_pkcs12,
+            pkcs12_pass=pkcs12_pass
         )
         for name, data in itr:
             if data is None:
