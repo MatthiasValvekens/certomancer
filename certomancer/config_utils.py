@@ -256,7 +256,7 @@ def pyca_cryptography_present() -> bool:
     try:
         import cryptography
         return True
-    except ImportError:
+    except ImportError:  # pragma: nocover
         return False
 
 

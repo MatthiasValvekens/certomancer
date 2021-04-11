@@ -254,6 +254,22 @@ def test_dump_no_pfx(tmp_path):
     }
 
 
+def test_dump_with_pfx(tmp_path):
+    arch = CONFIG.get_pki_arch(ArchLabel('testing-ca'))
+    arch.dump_certs(str(tmp_path), include_pkcs12=True)
+    dumped = set(_collect_files(str(tmp_path)))
+    assert dumped == {
+        'interm/signer1-long.cert.pem', 'interm/signer1-long.pfx',
+        'interm/signer1.cert.pem', 'interm/signer1.pfx',
+        'interm/signer2.cert.pem', 'interm/signer2.pfx',
+        'interm/interm-ocsp.cert.pem', 'interm/interm-ocsp.pfx',
+        'root/interm.cert.pem', 'root/interm.pfx',
+        'root/tsa.cert.pem', 'root/tsa.pfx',
+        'root/tsa2.cert.pem', 'root/tsa2.pfx',
+        'root/root.cert.pem', 'root/root.pfx',
+    }
+
+
 def test_dump_flat_no_pfx(tmp_path):
     arch = CONFIG.get_pki_arch(ArchLabel('testing-ca'))
     arch.dump_certs(str(tmp_path), include_pkcs12=False, flat=True)
@@ -304,3 +320,21 @@ def test_pss():
     assert arch.get_cert(CertLabel('interm')).signature_algo == 'rsassa_pss'
     assert arch.get_cert(CertLabel('signer1')).signature_algo == 'rsassa_pss'
     assert arch.get_cert(CertLabel('signer2')).signature_algo == 'rsassa_pss'
+
+
+@pytest.mark.parametrize('pw', [None, b'', b'secret'])
+def test_pkcs12(pw):
+    arch = CONFIG.get_pki_arch(ArchLabel('testing-ca'))
+    package = arch.package_pkcs12(CertLabel('signer1'), password=pw)
+    if pw:
+        # there's something about passwordless PKCS#12 files that doesn't quite
+        # jive between oscrypto and pyca/cryptography
+        key, cert, chain = oskeys.parse_pkcs12(package, password=pw)
+        assert cert.dump() == arch.get_cert(CertLabel('signer1')).dump()
+        assert len(chain) == 2
+        assert key is not None
+
+    from cryptography.hazmat.primitives.serialization import pkcs12
+    key, cert, chain = pkcs12.load_key_and_certificates(package, password=pw)
+    assert key is not None
+    assert len(chain) == 2

@@ -940,7 +940,7 @@ class PKIArchitecture:
         key = load_der_private_key(key_der, password=None)
         chain = [pyca_x509.load_der_x509_certificate(c) for c in chain_der]
 
-        if password is None:
+        if not password:
             encryption_alg = NoEncryption()
         else:
             encryption_alg = BestAvailableEncryption(password)
@@ -1536,7 +1536,7 @@ class ServicePlugin(abc.ABC):
             Original plugin parameters from the service definition
             in the configuration file.
         """
-        return params
+        return params  # pragma: nocover
 
     def invoke(self, arch: PKIArchitecture, info: PluginServiceInfo,
                request: bytes, at_time: Optional[datetime] = None) -> bytes:
