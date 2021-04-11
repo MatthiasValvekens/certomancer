@@ -16,7 +16,7 @@ uWSGI is extremely easy if you've dealt with WSGI deployment before.
 4. Set `module = certomancer.integrations.animator:app` in your `uwsgi.ini` file.
 5. Make sure that at least the environment variables `CERTOMANCER_CONFIG` and `CERTOMANCER_KEY_DIR`
    are set (you can do that using the `env FOO=bar` syntax in `uwsgi.ini`).
-   See [below](#Environment variables) for more information.
+   See [below](#environment-variables) for more information.
 6. You're all set!
 
 *Note:* Make sure that `external-url-prefix` in the configuration is set to something sensible,
@@ -43,8 +43,8 @@ The default WSGI entrypoint for the Animator (i.e. `certomancer.integrations.ani
 for the following environment variables. Only `CERTOMANCER_CONFIG` and `CERTOMANCER_KEY_DIR`
 are mandatory. All others are optional.
 
-*Note:* These settings run parallel to [some](cli.md#Core config flags) of the
-[options](cli.md#Running the Animator locally) of the Certomancer [CLI](cli.md).
+*Note:* These settings run parallel to [some](cli.md#core-config-flags) of the
+[options](cli.md#running-the-animator-locally) of the Certomancer [CLI](cli.md).
 
 
 | Environment variable | Value | Use |

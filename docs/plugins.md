@@ -8,7 +8,7 @@ There are two types of plugin in Certomancer.
   See [default_plugins.py](../certomancer/default_plugins.py) for a few examples.
 * **Service plugins** &mdash; These can be used define additional trust services that integrate
   with Certomancer in a way that is very similar to the "core" trust services that Certomancer
-  supports (see [the section on service configuration](config.md#Defining service endpoints)).
+  supports (see [the section on service configuration](config.md#defining-service-endpoints)).
   You might want to take a look at [this module](../example_plugin/encrypt_echo.py) for a
   simple example service plugin.
   
@@ -17,7 +17,7 @@ In general, extension plugins in Certomancer must be **stateless** (or at least,
 be), and not assume that they will always be called within the same PKI architecture. 
 Service plugins should ideally follow the same rules. Plugin instances are created when Certomancer
 starts, and will be used throughout the lifetime of the application.
-See [further down](#Registering and loading plugins) for details on the loading process.
+See [further down](#registering-and-loading-plugins) for details on the loading process.
 
 Problems in plugin configuration should be signalled using the `ConfigurationError` exception class.
 
