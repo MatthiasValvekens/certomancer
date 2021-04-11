@@ -379,13 +379,17 @@ class LazyAnimator:
         config_dir = env.get('CERTOMANCER_EXTRA_CONFIG_DIR', None)
         with_web_ui = not _check_env_flag(env, 'CERTOMANCER_NO_WEB_UI')
         extl_config = not _check_env_flag(env, 'CERTOMANCER_NO_EXTRA_CONFIG')
+        allow_time_override = not _check_env_flag(
+            env, 'CERTOMANCER_NO_TIME_OVERRIDE'
+        )
 
         cfg = CertomancerConfig.from_file(
             cfg_file, key_search_dir=key_dir, config_search_dir=config_dir,
             allow_external_config=extl_config
         )
         self.animator = Animator(
-            AnimatorArchStore(cfg.pki_archs), with_web_ui=with_web_ui
+            AnimatorArchStore(cfg.pki_archs), with_web_ui=with_web_ui,
+            allow_time_override=allow_time_override
         )
 
     def __call__(self, environ, start_response):

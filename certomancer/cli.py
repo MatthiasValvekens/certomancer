@@ -204,9 +204,11 @@ def necronomicon(ctx, architecture, crl_repo, output, no_pem, at_time):
               required=False, type=int, default=9000, show_default=True)
 @click.option('--no-web-ui', help='disable the web UI',
               required=False, type=bool, is_flag=True)
+@click.option('--no-time-override', help='disable time override functionality',
+              required=False, type=bool, is_flag=True)
 @click.pass_context
 @exception_manager()
-def animate(ctx, port, no_web_ui):
+def animate(ctx, port, no_web_ui, no_time_override):
     try:
         from .integrations.animator import Animator, AnimatorArchStore
     except ImportError as e:
@@ -217,5 +219,8 @@ def animate(ctx, port, no_web_ui):
         ) from e
     cfg: CertomancerConfig = next(ctx.obj['config'])
     from werkzeug.serving import run_simple
-    app = Animator(AnimatorArchStore(cfg.pki_archs), with_web_ui=not no_web_ui)
+    app = Animator(
+        AnimatorArchStore(cfg.pki_archs), with_web_ui=not no_web_ui,
+        allow_time_override=not no_time_override
+    )
     run_simple('127.0.0.1', port, app)
