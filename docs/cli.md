@@ -30,7 +30,7 @@ The following flags should be passed before any subcommands.
 | Flag | Argument | Use |
 | ---- | -------- | --- |
 | `--version` | none | Show the version and exit. |
-| `--config` | filename | YAML file to load the configuration from. The default is `certomancer.yml` |
+| `--config` | filename | YAML file to load the [configuration](config.md) from. The default is `certomancer.yml` |
 | `--key-root` | dirname | Root folder for paths to keys. The default is the folder containing the configuration file. |
 | `--extra-config-root` | dirname | Folder to look for external [PKI architecture files](config.md#PKI architecture definitions). The default is the folder containing the configuration file. |
 | `--no-external-config` | none | Disable external PKI architecture files altogether. |
