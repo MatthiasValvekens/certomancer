@@ -1,5 +1,6 @@
 import hashlib
 import importlib
+from collections import namedtuple
 from datetime import datetime
 
 import pytest
@@ -16,31 +17,43 @@ from certomancer.registry import CertomancerConfig, ArchLabel, ServiceLabel, \
 
 importlib.import_module('certomancer.default_plugins')
 
-CONFIG = CertomancerConfig.from_file(
-    'tests/data/with-services.yml', 'tests/data'
-)
 
-ARCH = CONFIG.get_pki_arch(ArchLabel('testing-ca'))
+ServiceSetup = namedtuple('ServiceSetup', ('config', 'arch', 'illusionist'))
 
-ILLUSIONIST = illusionist.Illusionist(pki_arch=ARCH)
+
+def _setup(cfgfile) -> ServiceSetup:
+
+    cfg = CertomancerConfig.from_file(
+        cfgfile, 'tests/data'
+    )
+
+    arch = cfg.get_pki_arch(ArchLabel('testing-ca'))
+
+    return ServiceSetup(cfg, arch, illusionist.Illusionist(pki_arch=arch))
+
+
+RSA_SETUP = _setup('tests/data/with-services.yml')
+DSA_SETUP = _setup('tests/data/with-services-dsa.yml')
+ECDSA_SETUP = _setup('tests/data/with-services-ecdsa.yml')
 
 
 def _check_crl_cardinality(crl, expected_revoked):
     assert len(crl['tbs_cert_list']['revoked_certificates']) == expected_revoked
 
 
-def test_crl():
-    some_crl = ARCH.service_registry.get_crl(
+@pytest.mark.parametrize('setup', [RSA_SETUP, DSA_SETUP, ECDSA_SETUP])
+def test_crl(setup):
+    some_crl = setup.arch.service_registry.get_crl(
         ServiceLabel('interm'),
         at_time=datetime.fromisoformat('2020-11-01 00:00:00+00:00'),
     )
     _check_crl_cardinality(some_crl, expected_revoked=0)
-    some_crl2 = ARCH.service_registry.get_crl(
+    some_crl2 = setup.arch.service_registry.get_crl(
         ServiceLabel('interm'),
         at_time=datetime.fromisoformat('2020-12-02 00:00:00+00:00'),
     )
     _check_crl_cardinality(some_crl2, expected_revoked=0)
-    some_crl3 = ARCH.service_registry.get_crl(
+    some_crl3 = setup.arch.service_registry.get_crl(
         ServiceLabel('interm'),
         at_time=datetime.fromisoformat('2020-12-29 00:00:00+00:00'),
     )
@@ -62,8 +75,9 @@ def test_crl():
     assert invalidity_date == datetime(2020, 11, 30, tzinfo=pytz.utc)
 
 
-def test_aia_ca_issuers():
-    signer1 = ARCH.get_cert(CertLabel('signer1'))
+@pytest.mark.parametrize('setup', [RSA_SETUP, DSA_SETUP, ECDSA_SETUP])
+def test_aia_ca_issuers(setup):
+    signer1 = setup.arch.get_cert(CertLabel('signer1'))
     ca_issuer_urls = {
         aia_entry['access_location']
         for aia_entry
@@ -77,11 +91,12 @@ def test_aia_ca_issuers():
 
 
 @freeze_time('2020-11-01')
-def test_validate(requests_mock):
-    ILLUSIONIST.register(requests_mock)
-    signer_cert = ARCH.get_cert(CertLabel('signer1'))
-    root = ARCH.get_cert(CertLabel('root'))
-    interm = ARCH.get_cert(CertLabel('interm'))
+@pytest.mark.parametrize('setup', [RSA_SETUP, DSA_SETUP, ECDSA_SETUP])
+def test_validate(requests_mock, setup):
+    setup.illusionist.register(requests_mock)
+    signer_cert = setup.arch.get_cert(CertLabel('signer1'))
+    root = setup.arch.get_cert(CertLabel('root'))
+    interm = setup.arch.get_cert(CertLabel('interm'))
     vc = ValidationContext(
         trust_roots=[root], allow_fetching=True,
         revocation_mode='hard-fail', other_certs=[interm]
@@ -97,8 +112,9 @@ def test_validate(requests_mock):
 
 
 @freeze_time('2020-11-01')
-def test_timestamp(requests_mock):
-    ILLUSIONIST.register(requests_mock)
+@pytest.mark.parametrize('setup', [RSA_SETUP, DSA_SETUP, ECDSA_SETUP])
+def test_timestamp(requests_mock, setup):
+    setup.illusionist.register(requests_mock)
     hashed_bytes = hashlib.sha256(b'test').digest()
     req = tsp.TimeStampReq({
         'version': 'v2',
@@ -127,7 +143,8 @@ def test_timestamp(requests_mock):
     ]
 )
 def test_ocsp(requests_mock, time, expected):
-    ILLUSIONIST.register(requests_mock)
+    setup = RSA_SETUP
+    setup.illusionist.register(requests_mock)
     with open('tests/data/signer2-ocsp-req.der', 'rb') as req_in:
         req_data = req_in.read()
     with freeze_time(time):
@@ -146,7 +163,8 @@ def test_ocsp(requests_mock, time, expected):
 @pytest.mark.parametrize('fname', ['tests/data/tsa-ocsp-req.der',
                                    'tests/data/tsa-bad-ocsp-req.der'])
 def test_ocsp_unauthorized(requests_mock, fname):
-    ILLUSIONIST.register(requests_mock)
+    setup = RSA_SETUP
+    setup.illusionist.register(requests_mock)
     # 1st file: request OK, but this responder can't answer for the issuer
     # in question
     # 2nd file: actual issuer of the cert and issuer in the OCSP req are not

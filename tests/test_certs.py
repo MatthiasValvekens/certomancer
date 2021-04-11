@@ -293,3 +293,14 @@ def test_subject_alt_names():
     assert signer2.subject_alt_name_value[0].chosen.native \
            == 'test2@example.com'
     assert signer1_long.subject_alt_name_value is None
+
+
+def test_pss():
+    cfg = CertomancerConfig.from_file(
+        'tests/data/with-external-config.yml', 'tests/data'
+    )
+    arch = cfg.get_pki_arch(ArchLabel('testing-ca-pss'))
+    assert arch.get_cert(CertLabel('root')).signature_algo == 'rsassa_pkcs1v15'
+    assert arch.get_cert(CertLabel('interm')).signature_algo == 'rsassa_pss'
+    assert arch.get_cert(CertLabel('signer1')).signature_algo == 'rsassa_pss'
+    assert arch.get_cert(CertLabel('signer2')).signature_algo == 'rsassa_pss'

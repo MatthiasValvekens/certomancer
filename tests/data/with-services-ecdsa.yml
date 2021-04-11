@@ -1,7 +1,7 @@
 external-url-prefix: "http://test.test"
 keysets:
   testing-ca:
-    path-prefix: keys-rsa
+    path-prefix: keys-ecdsa
     keys:
       root:
         path: root.key.pem
@@ -26,5 +26,4 @@ keysets:
         password: secret
 
 pki-architectures:
-  testing-ca: external-arch.yml
-  testing-ca-pss: external-arch-pss.yml
+  testing-ca: full-service-config.yml
