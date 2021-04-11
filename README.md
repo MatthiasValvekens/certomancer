@@ -13,6 +13,8 @@ Includes CRL, OCSP and time stamping service provisioning.
 Install with `python setup.py install`. See `example.yml` for an example config file, and
 [below](#Documentation) for more detailed documentation.
 
+Requires Python 3.7 or later.
+
 ## Quick start
 
 ```bash
@@ -59,3 +61,4 @@ Consider yourself warned.
  * [Configuration](docs/config.md)
  * [CLI commands](docs/cli.md)
  * [Plugin API](docs/plugins.md)
+ * [Deploying Certomancer](docs/deploy.md)
