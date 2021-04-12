@@ -28,7 +28,10 @@ For more information, see the [documentation](#Documentation) below.
 
 ## Demo
 
-[![asciicast](https://asciinema.org/a/Gow1pK9fc8xRxKdzeMzpYvCRx.svg)](https://asciinema.org/a/Gow1pK9fc8xRxKdzeMzpYvCRx)
+There's a demo on asciinema.org, demonstrating some of the core features of Certomancer. See link below.
+
+[![asciicast](https://asciinema.org/a/406798.svg)](https://asciinema.org/a/406798)
+
 
 ## Features
 
