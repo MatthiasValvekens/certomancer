@@ -26,6 +26,10 @@ This will run the Certomancer Animator WSGI app on your local machine, behind a 
 server. Point your browser to `http://localhost:9000` and take a look around.
 For more information, see the [documentation](#Documentation) below.
 
+## Demo
+
+[![asciicast](https://asciinema.org/a/Gow1pK9fc8xRxKdzeMzpYvCRx.svg)](https://asciinema.org/a/Gow1pK9fc8xRxKdzeMzpYvCRx)
+
 ## Features
 
  * Certomancer's core APIs are stateless: the same request should always return the same result.
