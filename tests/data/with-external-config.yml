@@ -24,7 +24,25 @@ keysets:
       signer2:
         path: signer2.key.pem
         password: secret
+  testing-ca-pss-exclusive:
+    path-prefix: keys-rsa-pss-exclusive
+    keys:
+      root:
+        path: root.key.pem
+      interm:
+        path: interm.key.pem
+      tsa:
+        path: tsa.key.pem
+      tsa2:
+        path: tsa2.key.pem
+      interm-ocsp:
+        path: interm-ocsp.key.pem
+      signer1:
+        path: signer.key.pem
+      signer2:
+        path: signer2.key.pem
 
 pki-architectures:
   testing-ca: external-arch.yml
   testing-ca-pss: external-arch-pss.yml
+  testing-ca-pss-exclusive: external-arch-pss-exclusive.yml

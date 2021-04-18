@@ -37,7 +37,7 @@ class EncryptEcho(registry.ServicePlugin):
         cert = arch.get_cert(cfg)
         if cert.public_key.algorithm != 'rsa':
             raise registry.CertomancerServiceError(
-                "This test plugin only works with RSA"
+                "This test plugin only works with RSA with PKCS #1 v1.5 padding"
             )
 
         # generate a 256-bit key

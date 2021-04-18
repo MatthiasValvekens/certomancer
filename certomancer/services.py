@@ -1,5 +1,6 @@
 import abc
 import hashlib
+import logging
 import os
 import struct
 
@@ -10,6 +11,10 @@ from typing import Optional, List, Tuple
 from oscrypto import asymmetric
 from asn1crypto import keys, x509, tsp, algos, cms, core, crl, ocsp
 import tzlocal
+
+from certomancer.config_utils import _hacky_load_pss_exclusive_key
+
+logger = logging.getLogger(__name__)
 
 
 class CertomancerServiceError(Exception):
@@ -245,6 +250,9 @@ def url_distribution_point(url, extra_urls=()):
 def choose_signed_digest(digest_algo: str, key_algo: str,
                          signature_algo: Optional[str] = None):
     if signature_algo is None:
+        # special OID for keys that should only be used with PSS
+        if key_algo == 'rsassa_pss':
+            signature_algo = 'rsassa_pss'
         if key_algo == 'rsa':
             signature_algo = digest_algo + '_rsa'
         elif key_algo == 'dsa':
@@ -256,6 +264,13 @@ def choose_signed_digest(digest_algo: str, key_algo: str,
         {'algorithm': signature_algo}
     )
     if signature_algo == 'rsassa_pss':
+        if key_algo == 'rsassa_pss':
+            logger.warning(
+                "You seem to be using an RSA key that has been marked as "
+                "RSASSA-PSS exclusive. If it has non-null parameters, these "
+                "WILL be disregarded by the signer, since oscrypto doesn't "
+                "currently support RSASSA-PSS with arbitrary parameters."
+            )
         # replicate default oscrypto PSS settings
         salt_len = len(getattr(hashlib, digest_algo)().digest())
         signature_algo_obj['parameters'] = algos.RSASSAPSSParams({
@@ -278,23 +293,27 @@ def generic_sign(private_key: keys.PrivateKeyInfo, tbs_bytes: bytes,
                  signature_algo: algos.SignedDigestAlgorithm) -> bytes:
 
     pk_algo = private_key.algorithm
+    loaded_key = None
     if pk_algo == 'rsa':
         if signature_algo.signature_algo == 'rsassa_pss':
             sign_fun = asymmetric.rsa_pss_sign
         else:
             sign_fun = asymmetric.rsa_pkcs1v15_sign
+    elif pk_algo == 'rsassa_pss':
+        loaded_key = _hacky_load_pss_exclusive_key(private_key)[0]
+        sign_fun = asymmetric.rsa_pss_sign
     elif pk_algo == 'ec':
         sign_fun = asymmetric.ecdsa_sign
     elif pk_algo == 'dsa':
         sign_fun = asymmetric.dsa_sign
     else:
         raise NotImplementedError(
-            f"The cryptosystem '{pk_algo}' is not supported."
+            f"The signing mechanism '{pk_algo}' is not supported."
         )
-
+    if loaded_key is None:
+        loaded_key = asymmetric.load_private_key(private_key)
     return sign_fun(
-        asymmetric.load_private_key(private_key),
-        tbs_bytes, signature_algo.hash_algo
+        loaded_key, tbs_bytes, signature_algo.hash_algo
     )
 
 

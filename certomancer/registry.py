@@ -22,7 +22,8 @@ from asn1crypto.keys import PrivateKeyInfo, PublicKeyInfo
 from .config_utils import (
     ConfigurationError, check_config_keys, LabelString,
     ConfigurableMixin, parse_duration, key_dashes_to_underscores, get_and_apply,
-    pyca_cryptography_present, SearchDir, plugin_instantiate_util
+    pyca_cryptography_present, SearchDir, plugin_instantiate_util,
+    _hacky_load_pss_exclusive_key
 )
 from .services import CertomancerServiceError, generic_sign, CRLBuilder, \
     choose_signed_digest, SimpleOCSPResponder, TimeStamper, \
@@ -137,7 +138,10 @@ class KeyFromFile:
                 private = oskeys.parse_private(
                     key_bytes, password=self.password
                 )
-                public = asymmetric.load_private_key(private).public_key.asn1
+                if private.algorithm == 'rsassa_pss':
+                    public = _hacky_load_pss_exclusive_key(private)[1]
+                else:
+                    public = asymmetric.load_private_key(private).public_key.asn1
             self._key = AsymKey(public=public, private=private)
 
     @property
