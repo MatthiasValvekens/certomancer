@@ -306,6 +306,18 @@ class Validity(ConfigurableMixin):
                 "Illegal date-time string in validity specification"
             ) from e
 
+    @property
+    def asn1(self) -> x509.Validity:
+        return x509.Validity({
+            'not_before': x509.Time(
+                {'utc_time' if self.valid_from.year < 2050 else 'general_time': self.valid_from}
+            ),
+            'not_after': x509.Time(
+                {'utc_time' if self.valid_to.year < 2050 else 'general_time': self.valid_to}
+            ),
+        })
+
+
 
 class ExtensionPlugin(abc.ABC):
     """
@@ -1072,14 +1084,7 @@ class PKIArchitecture:
             'serial_number': spec.serial,
             'signature': signature_algo_obj,
             'issuer': issuer_name,
-            'validity': x509.Validity({
-                'not_before': x509.Time(
-                    {'general_time': spec.validity.valid_from}
-                ),
-                'not_after': x509.Time(
-                    {'general_time': spec.validity.valid_to}
-                ),
-            }),
+            'validity': spec.validity.asn1,
             'subject': subject_name,
             'subject_public_key_info': subject_key.public_key_info,
             'extensions': extensions
