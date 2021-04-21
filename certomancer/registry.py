@@ -434,7 +434,14 @@ class ExtensionPluginRegistry:
             extn_id = proc.extension_type(extn_id)
         else:
             extn_id = None
-        return proc.provision(extn_id, arch, spec.params)
+        provisioned_value = proc.provision(extn_id, arch, spec.params)
+        if isinstance(provisioned_value, core.Asn1Value) and \
+                not isinstance(provisioned_value, core.ParsableOctetString):
+            # this allows plugins to keep working with extensions for which
+            # we don't have an OID
+            provisioned_value = \
+                core.ParsableOctetString(provisioned_value.dump())
+        return provisioned_value
 
 
 DEFAULT_EXT_PLUGIN_REGISTRY = extension_plugin_registry \

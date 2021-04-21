@@ -9,8 +9,9 @@ import pytest
 import pytz
 import yaml
 from oscrypto import keys as oskeys
+from asn1crypto import x509
 
-from certomancer.config_utils import SearchDir
+from certomancer.config_utils import SearchDir, ConfigurationError
 from certomancer.registry import KeySet, EntityRegistry, PKIArchitecture, \
     CertLabel, EntityLabel, ArchLabel, CertomancerConfig
 
@@ -352,3 +353,77 @@ def test_pkcs12(pw):
     key, cert, chain = pkcs12.load_key_and_certificates(package, password=pw)
     assert key is not None
     assert len(chain) == 2
+
+
+def test_raw_extension():
+    cfg = '''
+      root:
+        subject: root
+        subject-key: root
+        issuer: root
+        authority-key: root
+        validity:
+          valid-from: "2000-01-01T00:00:00+0000"
+          valid-to: "2500-01-01T00:00:00+0000"
+        extensions:
+          - id: basic_constraints
+            critical: true
+            value:
+              ca: true
+          - id: key_usage
+            critical: true
+            smart-value:
+              schema: key-usage
+              params: [digital_signature, key_cert_sign, crl_sign]
+          - id: "2.16.840.1.113730.1.1"  # this is netscape_certificate_type
+            smart-value:
+                schema: der-bytes
+                params: "03020520"
+    '''
+
+    arch = PKIArchitecture(
+        arch_label=ArchLabel('test'), key_set=RSA_KEYS, entities=ENTITIES,
+        cert_spec_config=yaml.safe_load(cfg), service_config={},
+        external_url_prefix='http://test.test',
+    )
+    ext: x509.Extension = next(filter(
+        lambda x: x['extn_id'].native == 'netscape_certificate_type',
+        arch.get_cert(CertLabel('root'))['tbs_certificate']['extensions']
+    ))
+    assert ext['extn_value'].parsed.native == {'email'}
+
+
+@pytest.mark.parametrize('wrong_value', ['"xlkjd"', '[]', 'null'])
+def test_raw_extension(wrong_value):
+    cfg = f'''
+      root:
+        subject: root
+        subject-key: root
+        issuer: root
+        authority-key: root
+        validity:
+          valid-from: "2000-01-01T00:00:00+0000"
+          valid-to: "2500-01-01T00:00:00+0000"
+        extensions:
+          - id: basic_constraints
+            critical: true
+            value:
+              ca: true
+          - id: key_usage
+            critical: true
+            smart-value:
+              schema: key-usage
+              params: [digital_signature, key_cert_sign, crl_sign]
+          - id: "2.16.840.1.113730.1.1"  # this is netscape_certificate_type
+            smart-value:
+                schema: der-bytes
+                params: {wrong_value}
+    '''
+
+    arch = PKIArchitecture(
+        arch_label=ArchLabel('test'), key_set=RSA_KEYS, entities=ENTITIES,
+        cert_spec_config=yaml.safe_load(cfg), service_config={},
+        external_url_prefix='http://test.test',
+    )
+    with pytest.raises(ConfigurationError):
+        arch.get_cert(CertLabel('root'))

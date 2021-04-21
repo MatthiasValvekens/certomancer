@@ -1,6 +1,9 @@
+import binascii
 import itertools
+from typing import Optional
 
 from asn1crypto import x509, core
+from asn1crypto.core import ObjectIdentifier
 
 from dateutil.parser import parse as parse_dt
 from .config_utils import ConfigurationError, check_config_keys, \
@@ -195,3 +198,26 @@ class IsoTimePlugin(ExtensionPlugin):
                 "'params' entry for iso-time plugin should be a string."
             )
         return core.GeneralizedTime(parse_dt(params))
+
+
+@extension_plugin_registry.register
+class RawDERBytes(ExtensionPlugin):
+
+    schema_label = 'der-bytes'
+    extension_type = None
+
+    def provision(self, extn_id, arch: 'PKIArchitecture', params):
+        der_bytes = None
+        try:
+            if isinstance(params, str):
+                der_bytes = binascii.unhexlify(params)
+        except ValueError:
+            pass
+
+        if der_bytes is None:
+            raise ConfigurationError(
+                "'params' entry for der-bytes plugin should be a hexadecimal "
+                "string."
+            )
+
+        return core.ParsableOctetString(der_bytes)
