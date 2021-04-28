@@ -1041,7 +1041,7 @@ class PKIArchitecture:
         signature_algo = spec.signature_algo
         digest_algo = spec.digest_algo
         signature_algo_obj = choose_signed_digest(
-            digest_algo, authority_key.public_key_info.algorithm,
+            digest_algo, authority_key.public_key_info,
             signature_algo
         )
 
@@ -1730,11 +1730,12 @@ class ServiceRegistry:
             ext.to_asn1(self.pki_arch, ocsp.ResponseDataExtension)
             for ext in info.ocsp_extensions
         ]
+        responder_cert = self.pki_arch.get_cert(info.responder_cert)
         return SimpleOCSPResponder(
-            responder_cert=self.pki_arch.get_cert(info.responder_cert),
+            responder_cert=responder_cert,
             responder_key=responder_key,
             signature_algo=choose_signed_digest(
-                info.digest_algo, responder_key.algorithm,
+                info.digest_algo, responder_cert.public_key,
                 signature_algo=info.signature_algo
             ),
             at_time=at_time,
@@ -1785,12 +1786,13 @@ class ServiceRegistry:
         # TODO allow policy parameter to be customised
         info = self.get_tsa_info(label)
         tsa_key = self.pki_arch.key_set.get_private_key(info.signing_key)
+        tsa_cert = self.pki_arch.get_cert(info.signing_cert)
         return TimeStamper(
-            tsa_cert=self.pki_arch.get_cert(info.signing_cert),
+            tsa_cert=tsa_cert,
             tsa_key=tsa_key,
             fixed_dt=at_time,
             signature_algo=choose_signed_digest(
-                info.digest_algo, key_algo=tsa_key.algorithm,
+                info.digest_algo, pub_key=tsa_cert.public_key,
                 signature_algo=info.signature_algo
             ),
             certs_to_embed=[
@@ -1806,8 +1808,9 @@ class ServiceRegistry:
 
         crl_info = self.get_crl_repo_info(repo_label)
         issuer_cert_label = crl_info.issuer_cert
-        signing_key = self.pki_arch.key_set.\
-            get_private_key(crl_info.signing_key)
+        signing_key_pair = \
+            self.pki_arch.key_set.get_asym_key(crl_info.signing_key)
+        signing_key = signing_key_pair.private
 
         # we need a cert to compute the right authority key identifier,
         # time origin etc.
@@ -1842,7 +1845,7 @@ class ServiceRegistry:
             issuer_name=self.pki_arch.entities[crl_info.for_issuer],
             issuer_key=signing_key,
             signature_algo=choose_signed_digest(
-                crl_info.digest_algo, signing_key.algorithm,
+                crl_info.digest_algo, signing_key_pair.public,
                 signature_algo=crl_info.signature_algo
             ),
             authority_key_identifier=iss_cert.key_identifier_value,

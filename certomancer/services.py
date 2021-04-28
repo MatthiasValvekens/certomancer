@@ -60,7 +60,7 @@ class TimeStamper:
         self.policy = policy
         self.md_algorithm = md_algorithm
         self.signature_algo = signature_algo or choose_signed_digest(
-            md_algorithm, tsa_key.algorithm
+            md_algorithm, tsa_cert.public_key
         )
 
     def request_tsa_response(self, req: tsp.TimeStampReq) -> tsp.TimeStampResp:
@@ -243,8 +243,9 @@ def url_distribution_point(url, extra_urls=()):
     }
 
 
-def choose_signed_digest(digest_algo: str, key_algo: str,
+def choose_signed_digest(digest_algo: str, pub_key: keys.PublicKeyInfo,
                          signature_algo: Optional[str] = None):
+    key_algo = pub_key.algorithm
     if signature_algo is None:
         # special OID for keys that should only be used with PSS
         if key_algo == 'rsassa_pss':
@@ -260,8 +261,14 @@ def choose_signed_digest(digest_algo: str, key_algo: str,
         {'algorithm': signature_algo}
     )
     if signature_algo == 'rsassa_pss':
-        signature_algo_obj['parameters'] = \
-            optimal_pss_params(key_algo, digest_algo)
+        parameters = None
+        if pub_key.algorithm == 'rsassa_pss':
+            key_params = pub_key['algorithm']['parameters']
+            if key_params.native is not None:
+                parameters = key_params
+        if parameters is None:
+            parameters = optimal_pss_params(pub_key, digest_algo)
+        signature_algo_obj['parameters'] = parameters
 
     return signature_algo_obj
 
