@@ -135,7 +135,7 @@ class KeyFromFile:
                 public = load_public_key(key_bytes)
                 private = None
             else:
-                _, private, public = load_private_key(key_bytes, self.password)
+                private, public = load_private_key(key_bytes, self.password)
             self._key = AsymKey(public=public, private=private)
 
     @property

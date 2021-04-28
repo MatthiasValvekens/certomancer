@@ -1,12 +1,16 @@
-from typing import Tuple, Any, Optional
+import hashlib
+import logging
+from typing import Tuple, Optional
 
-from asn1crypto import keys, algos
+from asn1crypto import keys, algos, x509
+
+logger = logging.getLogger(__name__)
 
 
 class CryptoBackend:
 
     def load_private_key(self, key_bytes: bytes, password: Optional[str]) \
-            -> Tuple[Any, keys.PrivateKeyInfo, keys.PublicKeyInfo]:
+            -> Tuple[keys.PrivateKeyInfo, keys.PublicKeyInfo]:
         raise NotImplementedError
 
     def load_public_key(self, key_bytes: bytes) -> keys.PublicKeyInfo:
@@ -16,11 +20,15 @@ class CryptoBackend:
                      signature_algo: algos.SignedDigestAlgorithm) -> bytes:
         raise NotImplementedError
 
+    def optimal_pss_params(self, key_algo: str, digest_algo: str) \
+            -> algos.RSASSAPSSParams:
+        raise NotImplementedError
+
 
 class OscryptoBackend(CryptoBackend):
 
     def load_private_key(self, key_bytes: bytes, password: Optional[str]) \
-            -> Tuple[Any, keys.PrivateKeyInfo, keys.PublicKeyInfo]:
+            -> Tuple[keys.PrivateKeyInfo, keys.PublicKeyInfo]:
         from oscrypto import asymmetric, keys as oskeys
         private = oskeys.parse_private(
             key_bytes, password=password
@@ -30,7 +38,7 @@ class OscryptoBackend(CryptoBackend):
         else:
             loaded = asymmetric.load_private_key(private)
             public = loaded.public_key.asn1
-        return loaded, private, public
+        return private, public
 
     def load_public_key(self, key_bytes: bytes) -> keys.PublicKeyInfo:
         from oscrypto import keys as oskeys
@@ -63,6 +71,29 @@ class OscryptoBackend(CryptoBackend):
         return sign_fun(
             loaded_key, tbs_bytes, signature_algo.hash_algo
         )
+
+    def optimal_pss_params(self, key_algo: str, digest_algo: str):
+        if key_algo == 'rsassa_pss':
+            logger.warning(
+                "You seem to be using an RSA key that has been marked as "
+                "RSASSA-PSS exclusive. If it has non-null parameters, these "
+                "WILL be disregarded by the signer, since oscrypto doesn't "
+                "currently support RSASSA-PSS with arbitrary parameters."
+            )
+        # replicate default oscrypto PSS settings
+        salt_len = len(getattr(hashlib, digest_algo)().digest())
+        return algos.RSASSAPSSParams({
+            'hash_algorithm': algos.DigestAlgorithm({
+                'algorithm': digest_algo
+            }),
+            'mask_gen_algorithm': algos.MaskGenAlgorithm({
+                'algorithm': 'mgf1',
+                'parameters': algos.DigestAlgorithm(
+                    {'algorithm': digest_algo}
+                )
+            }),
+            'salt_length': salt_len
+        })
 
 
 def pyca_cryptography_present() -> bool:
@@ -100,9 +131,14 @@ def generic_sign(private_key: keys.PrivateKeyInfo, tbs_bytes: bytes,
 
 
 def load_private_key(key_bytes: bytes, password: Optional[str]) \
-        -> Tuple[Any, keys.PrivateKeyInfo, keys.PublicKeyInfo]:
+        -> Tuple[keys.PrivateKeyInfo, keys.PublicKeyInfo]:
     return CRYPTO_BACKEND.load_private_key(key_bytes, password)
 
 
 def load_public_key(key_bytes: bytes) -> keys.PublicKeyInfo:
     return CRYPTO_BACKEND.load_public_key(key_bytes)
+
+
+def optimal_pss_params(key_algo: str, digest_algo: str) \
+        -> algos.RSASSAPSSParams:
+    return CRYPTO_BACKEND.optimal_pss_params(key_algo, digest_algo)

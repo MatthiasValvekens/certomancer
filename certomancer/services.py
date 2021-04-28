@@ -1,6 +1,5 @@
 import abc
 import hashlib
-import logging
 import os
 import struct
 
@@ -11,9 +10,7 @@ from typing import Optional, List, Tuple
 from asn1crypto import keys, x509, tsp, algos, cms, core, crl, ocsp
 import tzlocal
 
-from certomancer.crypto_utils import generic_sign
-
-logger = logging.getLogger(__name__)
+from certomancer.crypto_utils import generic_sign, optimal_pss_params
 
 
 class CertomancerServiceError(Exception):
@@ -263,27 +260,8 @@ def choose_signed_digest(digest_algo: str, key_algo: str,
         {'algorithm': signature_algo}
     )
     if signature_algo == 'rsassa_pss':
-        if key_algo == 'rsassa_pss':
-            logger.warning(
-                "You seem to be using an RSA key that has been marked as "
-                "RSASSA-PSS exclusive. If it has non-null parameters, these "
-                "WILL be disregarded by the signer, since oscrypto doesn't "
-                "currently support RSASSA-PSS with arbitrary parameters."
-            )
-        # replicate default oscrypto PSS settings
-        salt_len = len(getattr(hashlib, digest_algo)().digest())
-        signature_algo_obj['parameters'] = algos.RSASSAPSSParams({
-            'hash_algorithm': algos.DigestAlgorithm({
-                'algorithm': digest_algo
-            }),
-            'mask_gen_algorithm': algos.MaskGenAlgorithm({
-                'algorithm': 'mgf1',
-                'parameters': algos.DigestAlgorithm(
-                    {'algorithm': digest_algo}
-                )
-            }),
-            'salt_length': salt_len
-        })
+        signature_algo_obj['parameters'] = \
+            optimal_pss_params(key_algo, digest_algo)
 
     return signature_algo_obj
 
