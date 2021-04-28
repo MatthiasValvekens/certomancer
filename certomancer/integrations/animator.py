@@ -13,8 +13,8 @@ from werkzeug.routing import Map, Rule, BaseConverter, Submount
 from werkzeug.exceptions import HTTPException, NotFound, InternalServerError, \
     BadRequest
 
-from certomancer.config_utils import pyca_cryptography_present, \
-    ConfigurationError
+from certomancer.config_utils import ConfigurationError
+from certomancer.crypto_utils import pyca_cryptography_present
 from certomancer.registry import (
     PKIArchitecture, ServiceLabel, CertLabel,
     CertomancerObjectNotFoundError, CertomancerConfig, ArchLabel, EntityLabel,

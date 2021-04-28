@@ -9,7 +9,8 @@ import click
 import tzlocal
 import logging
 
-from .config_utils import pyca_cryptography_present, ConfigurationError
+from .config_utils import ConfigurationError
+from .crypto_utils import pyca_cryptography_present
 from .registry import CertomancerConfig, CertLabel
 from .services import CertomancerServiceError
 from .version import __version__

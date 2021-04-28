@@ -16,15 +16,15 @@ from asn1crypto.core import ObjectIdentifier
 from dateutil.parser import parse as parse_dt
 from asn1crypto import x509, core, pem, ocsp, crl
 from dateutil.tz import tzlocal
-from oscrypto import keys as oskeys, asymmetric
 from asn1crypto.keys import PrivateKeyInfo, PublicKeyInfo
 
 from .config_utils import (
     ConfigurationError, check_config_keys, LabelString,
     ConfigurableMixin, parse_duration, key_dashes_to_underscores, get_and_apply,
-    pyca_cryptography_present, SearchDir, plugin_instantiate_util,
-    _hacky_load_pss_exclusive_key
+    SearchDir, plugin_instantiate_util
 )
+from .crypto_utils import pyca_cryptography_present, \
+    load_public_key, load_private_key
 from .services import CertomancerServiceError, generic_sign, CRLBuilder, \
     choose_signed_digest, SimpleOCSPResponder, TimeStamper, \
     RevocationInfoInterface, url_distribution_point
@@ -132,16 +132,10 @@ class KeyFromFile:
             with open(self.path, 'rb') as keyf:
                 key_bytes = keyf.read()
             if self.public_only:
-                public = oskeys.parse_public(key_bytes)
+                public = load_public_key(key_bytes)
                 private = None
             else:
-                private = oskeys.parse_private(
-                    key_bytes, password=self.password
-                )
-                if private.algorithm == 'rsassa_pss':
-                    public = _hacky_load_pss_exclusive_key(private)[1]
-                else:
-                    public = asymmetric.load_private_key(private).public_key.asn1
+                _, private, public = load_private_key(key_bytes, self.password)
             self._key = AsymKey(public=public, private=private)
 
     @property
@@ -316,7 +310,6 @@ class Validity(ConfigurableMixin):
                 {'utc_time' if self.valid_to.year < 2050 else 'general_time': self.valid_to}
             ),
         })
-
 
 
 class ExtensionPlugin(abc.ABC):

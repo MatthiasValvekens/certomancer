@@ -8,11 +8,10 @@ from asn1crypto.crl import TBSCertListExtension
 from datetime import datetime, timedelta
 from typing import Optional, List, Tuple
 
-from oscrypto import asymmetric
 from asn1crypto import keys, x509, tsp, algos, cms, core, crl, ocsp
 import tzlocal
 
-from certomancer.config_utils import _hacky_load_pss_exclusive_key
+from certomancer.crypto_utils import generic_sign
 
 logger = logging.getLogger(__name__)
 
@@ -287,34 +286,6 @@ def choose_signed_digest(digest_algo: str, key_algo: str,
         })
 
     return signature_algo_obj
-
-
-def generic_sign(private_key: keys.PrivateKeyInfo, tbs_bytes: bytes,
-                 signature_algo: algos.SignedDigestAlgorithm) -> bytes:
-
-    pk_algo = private_key.algorithm
-    loaded_key = None
-    if pk_algo == 'rsa':
-        if signature_algo.signature_algo == 'rsassa_pss':
-            sign_fun = asymmetric.rsa_pss_sign
-        else:
-            sign_fun = asymmetric.rsa_pkcs1v15_sign
-    elif pk_algo == 'rsassa_pss':
-        loaded_key = _hacky_load_pss_exclusive_key(private_key)[0]
-        sign_fun = asymmetric.rsa_pss_sign
-    elif pk_algo == 'ec':
-        sign_fun = asymmetric.ecdsa_sign
-    elif pk_algo == 'dsa':
-        sign_fun = asymmetric.dsa_sign
-    else:
-        raise NotImplementedError(
-            f"The signing mechanism '{pk_algo}' is not supported."
-        )
-    if loaded_key is None:
-        loaded_key = asymmetric.load_private_key(private_key)
-    return sign_fun(
-        loaded_key, tbs_bytes, signature_algo.hash_algo
-    )
 
 
 def issuer_match(cid: ocsp.CertId, candidate: x509.Certificate):

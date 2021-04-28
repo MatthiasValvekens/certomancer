@@ -18,14 +18,11 @@ from datetime import timedelta
 __all__ = [
     'ConfigurationError', 'ConfigurableMixin', 'check_config_keys',
     'parse_duration', 'key_dashes_to_underscores', 'get_and_apply',
-    'LabelString', 'pyca_cryptography_present', 'SearchDir',
+    'LabelString', 'SearchDir',
     'plugin_instantiate_util'
 ]
 
 from typing import Optional
-
-from asn1crypto.keys import PrivateKeyInfo
-from oscrypto import asymmetric
 
 _noneType = type(None)
 
@@ -255,14 +252,6 @@ def get_and_apply(dictionary: dict, key, function: Callable, *, default=None):
     return function(value)
 
 
-def pyca_cryptography_present() -> bool:
-    try:
-        import cryptography
-        return True
-    except ImportError:  # pragma: nocover
-        return False
-
-
 class SearchDir:
     root_path: str
 
@@ -305,14 +294,3 @@ def plugin_instantiate_util(plugin):
     return plugin, cls
 
 
-def _hacky_load_pss_exclusive_key(private: PrivateKeyInfo):
-    # HACK to load PSS-exclusive RSA keys in oscrypto
-    #  Don't ever do this in production code!
-    algo_copy = private['private_key_algorithm'].native
-    private_copy = PrivateKeyInfo.load(private.dump())
-    # set the algorithm to "generic RSA"
-    private_copy['private_key_algorithm'] = {'algorithm': 'rsa'}
-    loaded_key = asymmetric.load_private_key(private_copy)
-    public = loaded_key.public_key.asn1
-    public['algorithm'] = algo_copy
-    return loaded_key, public
