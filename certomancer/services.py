@@ -256,6 +256,10 @@ def choose_signed_digest(digest_algo: str, pub_key: keys.PublicKeyInfo,
             signature_algo = digest_algo + '_dsa'
         elif key_algo == 'ec':
             signature_algo = digest_algo + '_ecdsa'
+        elif key_algo == 'ed25519':
+            signature_algo = 'ed25519'
+        elif key_algo == 'ed448':
+            signature_algo = 'ed448'
 
     signature_algo_obj = algos.SignedDigestAlgorithm(
         {'algorithm': signature_algo}

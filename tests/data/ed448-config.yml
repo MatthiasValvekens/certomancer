@@ -1,0 +1,22 @@
+external-url-prefix: "http://test.test"
+keysets:
+  testing-ca:
+    path-prefix: keys-ed448
+    keys:
+      root:
+        path: root.key.pem
+      interm:
+        path: interm.key.pem
+      tsa:
+        path: tsa.key.pem
+      tsa2:
+        path: tsa2.key.pem
+      interm-ocsp:
+        path: interm-ocsp.key.pem
+      signer1:
+        path: signer.key.pem
+      signer2:
+        path: signer2.key.pem
+
+pki-architectures:
+  testing-ca: external-arch.yml

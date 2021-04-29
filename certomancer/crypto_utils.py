@@ -270,8 +270,11 @@ def _oscrypto_hacky_load_pss_exclusive_key(private: keys.PrivateKeyInfo):
 
 
 def _select_default_crypto_backend() -> CryptoBackend:
+    # pyca/cryptography required for EdDSA certs
     if pyca_cryptography_present():
-        # required for EdDSA certs
+        # Patch EdDSA support into asn1crypto
+        from ._eddsa_oids import register_eddsa_oids
+        register_eddsa_oids()
         return PycaCryptographyBackend()
     else:
         return OscryptoBackend()
