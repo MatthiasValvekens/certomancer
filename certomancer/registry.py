@@ -1426,6 +1426,11 @@ class CertRepoServiceInfo(ServiceInfo):
         fname = CertRepoServiceInfo.issuer_cert_file_name(use_pem=True)
         return f"{self.internal_url}/{fname}"
 
+    @property
+    def issuer_cert_external_url(self):
+        fname = CertRepoServiceInfo.issuer_cert_file_name(use_pem=True)
+        return f"{self.url}/{fname}"
+
     def issued_cert_url(self, label: CertLabel, use_pem=True):
         path = self.issued_cert_url_path(label=label, use_pem=use_pem)
         return f"{self.url}/{path}"

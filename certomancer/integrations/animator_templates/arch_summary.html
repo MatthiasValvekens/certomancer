@@ -77,7 +77,7 @@
         {% if arch_services.tsa %}
             <ul>
                 {% for tsa in arch_services.tsa %}
-                    <li><a href="/{{ arch_services.arch }}{{ tsa.internal_url }}">{{ tsa.label }}</a></li>
+                    <li><a href="{{ tsa.url }}">{{ tsa.label }}</a></li>
                 {% endfor %}
             </ul>
         {% else %}
@@ -89,7 +89,7 @@
         {% if arch_services.ocsp %}
             <ul>
                 {% for ocsp in arch_services.ocsp %}
-                    <li><a href="/{{ arch_services.arch }}{{ ocsp.internal_url }}">{{ ocsp.label }}</a></li>
+                    <li><a href="{{ ocsp.url }}">{{ ocsp.label }}</a></li>
                 {% endfor %}
             </ul>
         {% else %}
@@ -101,7 +101,7 @@
         {% if arch_services.crl %}
             <ul>
                 {% for crl in arch_services.crl %}
-                    <li><a href="/{{ arch_services.arch }}{{ crl.latest_url }}">{{ crl.label }}</a> (latest)</li>
+                    <li><a href="{{ crl.latest_external_url }}">{{ crl.label }}</a> (latest)</li>
                 {% endfor %}
             </ul>
         {% else %}
@@ -114,7 +114,7 @@
             <ul>
                 {% for repo in arch_services.cert_repo %}
                     <li>
-                        <a href="/{{ arch_services.arch }}{{ repo.issuer_cert_internal_url }}">{{ repo.label }}</a>
+                        <a href="{{ repo.issuer_cert_external_url }}">{{ repo.label }}</a>
                         (CA cert{% if repo.publish_issued_certs %}; issued certs available{% endif %})
                     </li>
                 {% endfor %}
