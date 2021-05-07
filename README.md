@@ -37,6 +37,9 @@ There's a demo on asciinema.org, demonstrating some of the core features of Cert
 
  * Certomancer's core APIs are stateless: the same request should always return the same result.
    This property makes it very useful for automated testing.
+   * Note that "the same result" does not necessarily mean "byte-for-byte equal". 
+     This is because some signing schemes (like ECDSA) involve random nonces. In addition to that,
+     time is also a factor in certain cases (but Certomancer does permit time manipulation).
  * Declarative, YAML-based configuration.
  * Minimal input validation, so you can generate deliberately broken certificates if you need to.
  * ``requests-mock`` integration.
@@ -46,11 +49,11 @@ There's a demo on asciinema.org, demonstrating some of the core features of Cert
  * Plugin framework to support arbitrary certificate / CRL extensions and additional services.
    These plugins are compatible with the WSGI and ``requests-mock`` integrations without
    additional configuration.
-* Certomancer is composable: since the Certomancer Animator is a bare-bones WSGI application,
-  you can plug it into whatever web application framework you want with minimal overhead.
-  Hence, for particularly complicated scenarios where the plugin API or existing integrations aren't
-  sufficient, it is very easy to use Certomancer as a library, or wrap it as a component
-  of some other WSGI application.
+ * Certomancer is composable: since the Certomancer Animator is a bare-bones WSGI application,
+   you can plug it into whatever web application framework you want with minimal overhead.
+   Hence, for particularly complicated scenarios where the plugin API or existing integrations aren't
+   sufficient, it is very easy to use Certomancer as a library, or wrap it as a component
+   of some other WSGI application.
  * With [pyca/cryptography](https://github.com/pyca/cryptography) installed, Certomancer can also
    output PKCS#12 files if your tests require those.
 
