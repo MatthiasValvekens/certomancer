@@ -91,7 +91,7 @@ keys is preferable:
  - For testing setups, key reuse is usually not a significant concern, so you can generate a bunch
    of keys *once*, and forget about them later.
 
-Certomancer supports RSA, ECDSA and DSA keys. All of these can be generated using `openssl`.
+Certomancer supports RSA, DSA, ECDSA and EdDSA keys. All of these can be generated using `openssl`.
 Regardless of the type of key used, Certomancer should be able to infer the appropriate signing
 algorithm to use automatically.
 

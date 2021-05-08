@@ -12,7 +12,7 @@ uWSGI is extremely easy if you've dealt with WSGI deployment before.
 2. Install Certomancer using `pip install certomancer[web-api]` (either system-wide or in a
    virtualenv). If you need PKCS#12 support, run `pip install certomancer[web-api,pkcs12]` or
    install the [pyca/cryptography](https://github.com/pyca/cryptography) library manually.
-3. Generate or copy over some testing keys (RSA, DSA and ECDSA are supported).   
+3. Generate or copy over some testing keys (RSA, DSA, ECDSA and EdDSA are supported).   
 4. Set `module = certomancer.integrations.animator:app` in your `uwsgi.ini` file.
 5. Make sure that at least the environment variables `CERTOMANCER_CONFIG` and `CERTOMANCER_KEY_DIR`
    are set (you can do that using the `env FOO=bar` syntax in `uwsgi.ini`).
