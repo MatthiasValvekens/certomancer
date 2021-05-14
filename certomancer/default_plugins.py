@@ -1,9 +1,7 @@
 import binascii
 import itertools
-from typing import Optional
 
 from asn1crypto import x509, core
-from asn1crypto.core import ObjectIdentifier
 
 from dateutil.parser import parse as parse_dt
 from .config_utils import ConfigurationError, check_config_keys, \
