@@ -134,6 +134,18 @@ def register_eddsa_oids():
     global _registered
     if _registered:
         return
+
+    # try to import pyhanko_certvalidator (test dependency with a similar shim)
+    # if that succeeds, we delegate
+    try:
+        from pyhanko_certvalidator import _eddsa_oids
+        _eddsa_oids.register_eddsa_oids()
+        _registered = True
+        return
+    except ImportError:
+        pass
+
+
     ed25519_oid = '1.3.101.112'
     ed448_oid = '1.3.101.113'
 
