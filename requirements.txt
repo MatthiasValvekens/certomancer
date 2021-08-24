@@ -10,6 +10,6 @@ Werkzeug>=1.0.1
 Jinja2>=2.11.3
 cryptography>=3.4.7
 freezegun>=1.1.0
-pyhanko-certvalidator==0.15.3
+pyhanko-certvalidator==0.16.0
 requests>=2.0.0
 requests-mock>=1.8.0

@@ -66,7 +66,7 @@ setup(
     },
     tests_require=[
         'pytest>=6.1.1', 'pytz>=2020.1',
-        'freezegun>=1.1.0', 'pyhanko-certvalidator==0.14.1',
+        'freezegun>=1.1.0', 'pyhanko-certvalidator==0.16.0',
         'requests>=2.0.0'
     ],
     keywords="pki testing"
