@@ -176,6 +176,79 @@ def test_issue_intermediate():
     assert root_cert.not_valid_before == datetime(2000, 1, 1, tzinfo=pytz.utc)
 
 
+def test_template_override_issuer():
+    cfg = '''
+      root-ca:
+        subject: root
+        subject-key: root
+        issuer: root
+        authority-key: root
+        validity:
+          valid-from: "2000-01-01T00:00:00+0000"
+          valid-to: "2500-01-01T00:00:00+0000"
+        extensions:
+          - id: basic_constraints
+            critical: true
+            value:
+              ca: true
+          - id: key_usage
+            critical: true
+            smart-value:
+              schema: key-usage
+              params: [digital_signature, key_cert_sign, crl_sign]
+      intermediate-ca:
+        subject: interm
+        issuer: root
+        validity:
+          valid-from: "2000-01-01T00:00:00+0000"
+          valid-to: "2100-01-01T00:00:00+0000"
+        extensions:
+          - id: basic_constraints
+            critical: true
+            value:
+              ca: true
+              path-len-constraint: 0
+          - id: key_usage
+            critical: true
+            smart-value:
+              schema: key-usage
+              params: [digital_signature, key_cert_sign, crl_sign]
+      leaf:
+        issuer: interm
+        subject: signer1
+        subject-key: signer
+        validity:
+          valid-from: "2020-01-01T00:00:00+0000"
+          valid-to: "2022-01-01T00:00:00+0000"
+        extensions:
+          - id: key_usage
+            critical: true
+            smart-value:
+              schema: key-usage
+              params: [digital_signature, non_repudiation]
+      leaf-copy:
+        subject: signer1
+        subject-key: signer
+        template: leaf
+        issuer: root
+    '''
+
+    arch = PKIArchitecture(
+        arch_label=ArchLabel('test'), key_set=RSA_KEYS, entities=ENTITIES,
+        cert_spec_config=yaml.safe_load(cfg), service_config={},
+        external_url_prefix='http://test.test',
+    )
+    root_cert = arch.get_cert(CertLabel('root-ca'))
+    interm_cert = arch.get_cert(CertLabel('intermediate-ca'))
+    leaf = arch.get_cert(CertLabel('leaf'))
+    leaf_copy = arch.get_cert(CertLabel('leaf-copy'))
+    assert leaf.issuer == interm_cert.subject
+    assert leaf_copy.issuer == root_cert.subject
+    assert leaf.key_usage_value == leaf_copy.key_usage_value
+    assert leaf.subject == leaf_copy.subject
+    assert leaf.public_key == leaf_copy.public_key
+
+
 def test_sign_public_only():
     cfg = '''
       root-ca:
