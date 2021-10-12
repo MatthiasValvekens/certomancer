@@ -524,3 +524,32 @@ def test_arch_templates():
     assert 'Country: FR' in root_name
     assert 'Organizational Unit: Test OU' in root_name
     assert 'Organization: Testing Authority' in root_name
+
+
+def test_keyset_templates():
+    cfg = CertomancerConfig.from_file(
+        'tests/data/with-arch-templates.yml', 'tests/data'
+    )
+    algo = cfg.key_sets['testing-ca'].get_public_key('root').algorithm
+    assert algo == 'rsa'
+
+    algo = cfg.key_sets['other-keyset'].get_public_key('root').algorithm
+    assert algo == 'ed25519'
+
+
+def test_keyset_templates_in_arch():
+
+    cfg = CertomancerConfig.from_file(
+        'tests/data/with-arch-templates.yml', 'tests/data'
+    )
+    old_arch = cfg.get_pki_arch(ArchLabel('testing-ca'))
+    algo = old_arch.get_cert(CertLabel('root')).public_key.algorithm
+    assert algo == 'rsa'
+
+    new_arch = cfg.get_pki_arch(ArchLabel('testing-ca-2'))
+    algo = new_arch.get_cert(CertLabel('root')).public_key.algorithm
+    assert algo == 'rsa'
+
+    newer_arch = cfg.get_pki_arch(ArchLabel('testing-ca-3'))
+    algo = newer_arch.get_cert(CertLabel('root')).public_key.algorithm
+    assert algo == 'ed25519'

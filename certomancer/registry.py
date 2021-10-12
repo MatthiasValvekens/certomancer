@@ -159,7 +159,9 @@ class KeySet:
     """A labelled collection of keys."""
 
     def __init__(self, config, search_dir: SearchDir, lazy_load_keys=False):
-        check_config_keys('KeySet', ('path-prefix', 'keys'), config)
+        check_config_keys(
+            'KeySet', ('path-prefix', 'keys', 'default-password'), config
+        )
         try:
             keys = config['keys']
         except KeyError as e:
@@ -169,17 +171,22 @@ class KeySet:
         path_prefix = config.get('path-prefix', '')
         path_prefix = search_dir.search_subdir(path_prefix)
 
+        default_password = config.get('default-password', None)
+
         # apply path prefix to key configs
-        def _prepend(key_conf):
+        def _proc(key_conf):
+            key_conf = copy.deepcopy(key_conf)
             try:
                 key_conf['path'] = path_prefix.resolve(key_conf['path'])
             except KeyError:
                 pass
+            if default_password is not None:
+                key_conf.setdefault('password', default_password)
             return key_conf
 
         self._dict = {
             KeyLabel(k): KeyFromFile.from_config(
-                KeyLabel(k), _prepend(v), lazy=lazy_load_keys
+                KeyLabel(k), _proc(v), lazy=lazy_load_keys
             )
             for k, v in keys.items()
         }
@@ -211,10 +218,36 @@ class KeySets:
     """A labelled collection of key sets."""
 
     def __init__(self, config, search_dir, lazy_load_keys=False):
-        self._dict = {
-            k: KeySet(v, lazy_load_keys=lazy_load_keys, search_dir=search_dir)
-            for k, v in config.items()
-        }
+        results = {}
+        configs_seen = {}
+        for k, cfg in config.items():
+            cfg = copy.deepcopy(cfg)
+            if 'template' in cfg:
+                template_keyset = cfg.pop('template')
+                try:
+                    template_cfg = copy.deepcopy(configs_seen[template_keyset])
+                except KeyError as e:
+                    raise ConfigurationError(
+                        f"Key set definition with label '{k}' "
+                        f"refers to '{template_keyset}' as a template, but "
+                        f"'{template_keyset}' hasn't been declared yet."
+                    ) from e
+                # merge 'keys' entries
+                template_keys = template_cfg['keys']
+                try:
+                    extra_keys = cfg.pop('keys')
+                    template_keys.update(extra_keys)
+                except KeyError:
+                    pass
+                # clobber all other entries
+                template_cfg.update(cfg)
+                # replace cfg with the updated one
+                cfg = template_cfg
+            configs_seen[k] = cfg
+            results[k] = KeySet(
+                cfg, lazy_load_keys=lazy_load_keys, search_dir=search_dir
+            )
+        self._dict = results
 
     def __getitem__(self, name) -> KeySet:
         try:
