@@ -500,3 +500,27 @@ def test_raw_extension(wrong_value):
     )
     with pytest.raises(ConfigurationError):
         arch.get_cert(CertLabel('root'))
+
+
+def test_arch_templates():
+
+    cfg = CertomancerConfig.from_file(
+        'tests/data/with-arch-templates.yml', 'tests/data'
+    )
+    old_arch = cfg.get_pki_arch(ArchLabel('testing-ca'))
+    root_name = old_arch.entities[EntityLabel('root')].human_friendly
+    assert 'Country: BE' in root_name
+    assert 'Test OU' not in root_name
+    assert 'Organization: Testing Authority' in root_name
+
+    new_arch = cfg.get_pki_arch(ArchLabel('testing-ca-2'))
+    root_name = new_arch.entities[EntityLabel('root')].human_friendly
+    assert 'Country: BE' in root_name
+    assert 'Organizational Unit: Test OU' in root_name
+    assert 'Organization: Testing Authority' in root_name
+
+    newer_arch = cfg.get_pki_arch(ArchLabel('testing-ca-3'))
+    root_name = newer_arch.entities[EntityLabel('root')].human_friendly
+    assert 'Country: FR' in root_name
+    assert 'Organizational Unit: Test OU' in root_name
+    assert 'Organization: Testing Authority' in root_name

@@ -1,4 +1,5 @@
 import abc
+import copy
 import hashlib
 import importlib
 import logging
@@ -714,9 +715,9 @@ class PKIArchitecture:
     modelled by Certomancer.
     """
 
-    CONFIG_KEYS = (
-        'keyset', 'entities', 'certs', 'services', 'entity-defaults'
-    )
+    # These config keys will be merged when an architecture is templated
+    MULTIVAL_CONFIG_KEYS = ('entities', 'certs', 'services', 'entity-defaults')
+    CONFIG_KEYS = ('keyset', *MULTIVAL_CONFIG_KEYS)
 
     @classmethod
     def build_architecture(cls, arch_label: ArchLabel, cfg: dict,
@@ -764,6 +765,7 @@ class PKIArchitecture:
                             config_search_dir: Optional[SearchDir],
                             extension_plugins: ExtensionPluginRegistry = None,
                             service_plugins: 'ServicePluginRegistry' = None):
+        arch_specs = {}
         for arch_label, cfg in cfgs.items():
             arch_label = ArchLabel(arch_label)
             # external config
@@ -776,6 +778,47 @@ class PKIArchitecture:
                 cfg_path = config_search_dir.resolve(path=cfg)
                 with open(cfg_path, 'r') as external_conf:
                     cfg = yaml.safe_load(external_conf)
+            elif isinstance(cfg, dict):
+                # make sure we don't mess with input data passed in
+                # by the caller
+                cfg = copy.deepcopy(cfg)
+            else:
+                raise ConfigurationError(
+                    f"Architecture definition must be either a string or a "
+                    f"dictionary; config with label {arch_label} has type "
+                    f"{type(cfg)}."
+                )
+            if 'template' in cfg:
+                template_arch = cfg.pop('template')
+                # retrieve template config
+                try:
+                    template_cfg = copy.deepcopy(arch_specs[template_arch])
+                except KeyError as e:
+                    raise ConfigurationError(
+                        f"Architecture definition with label '{arch_label}' "
+                        f"refers to '{template_arch}' as a template, but "
+                        f"'{template_arch}' hasn't been declared yet."
+                    ) from e
+
+                # first, merge multivalue config keys
+                for key in PKIArchitecture.MULTIVAL_CONFIG_KEYS:
+                    try:
+                        extra_values = cfg.pop(key)
+                    except KeyError:
+                        continue
+                    try:
+                        orig_values = template_cfg[key]
+                    except KeyError:
+                        template_cfg[key] = orig_values = {}
+                    # update effective config with values to merge
+                    orig_values.update(extra_values)
+
+                # then clobber the rest (all the multivalued keys should have
+                # been deleted by now)
+                template_cfg.update(cfg)
+                cfg = template_cfg
+            # store the config for potential later template use
+            arch_specs[arch_label] = cfg
             yield cls.build_architecture(
                 arch_label=arch_label, cfg=cfg, key_sets=key_sets,
                 external_url_prefix=external_url_prefix,
