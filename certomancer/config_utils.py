@@ -194,7 +194,7 @@ def check_config_keys(config_name, expected_keys, config_dict):
 
 
 DURATION_REGEX_PARTS = re.compile(
-    r"P(?:(?P<days>[0-9YMWD]+))?(?:(?:(?<=P)T?|T)(?P<time>[0-9HMS]+))?"
+    r"P(?P<days>[0-9YMWD]+)?(?:(?:(?<=P)T?|T)(?P<time>[0-9HMS]+))?"
 )
 DURATION_REGEX_DAYS = re.compile(
     r"(?:(?P<years>\d+)Y)?(?:(?P<months>\d+)M)?"
