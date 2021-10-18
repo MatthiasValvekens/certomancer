@@ -5,13 +5,16 @@ from datetime import datetime
 from io import BytesIO
 from zipfile import ZipFile
 
+import pyhanko_certvalidator
 import pytest
 import pytz
 import yaml
 from oscrypto import keys as oskeys
 from asn1crypto import x509
+from pyhanko_certvalidator import ValidationContext
 
 from certomancer.config_utils import SearchDir, ConfigurationError
+from certomancer.crypto_utils import load_cert_from_pemder
 from certomancer.registry import KeySet, EntityRegistry, PKIArchitecture, \
     CertLabel, EntityLabel, ArchLabel, CertomancerConfig
 
@@ -553,3 +556,21 @@ def test_keyset_templates_in_arch():
     newer_arch = cfg.get_pki_arch(ArchLabel('testing-ca-3'))
     algo = newer_arch.get_cert(CertLabel('root')).public_key.algorithm
     assert algo == 'ed25519'
+
+
+def test_pregenerated_cert():
+    cfg = CertomancerConfig.from_file(
+        'tests/data/with-pregenerated-cert.yml', 'tests/data'
+    )
+    arch = cfg.get_pki_arch(ArchLabel('testing-ca'))
+    ca = arch.get_cert(CertLabel('ca'))
+
+    # ECDSA involves randomness, so this is an OK check to see if the file
+    # content was actually used for the CA cert
+    ca_from_disk = load_cert_from_pemder('tests/data/pregenerated-ca-cert.crt')
+    assert ca.dump() == ca_from_disk.dump()
+
+    pyhanko_certvalidator.CertificateValidator(
+        end_entity_cert=arch.get_cert(CertLabel('signer')),
+        validation_context=ValidationContext(trust_roots=[ca]),
+    ).validate_usage({'digital_signature'})

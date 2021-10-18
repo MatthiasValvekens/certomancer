@@ -24,8 +24,11 @@ from .config_utils import (
     ConfigurableMixin, parse_duration, key_dashes_to_underscores, get_and_apply,
     SearchDir, plugin_instantiate_util
 )
-from .crypto_utils import pyca_cryptography_present, \
-    load_public_key, load_private_key
+from .crypto_utils import (
+    pyca_cryptography_present,
+    load_public_key, load_private_key,
+    load_cert_from_pemder
+)
 from .services import CertomancerServiceError, generic_sign, CRLBuilder, \
     choose_signed_digest, SimpleOCSPResponder, TimeStamper, \
     RevocationInfoInterface, url_distribution_point
@@ -536,7 +539,9 @@ class ExtensionSpec(ConfigurableMixin):
         })
 
 
-EXCLUDED_FROM_TEMPLATE = frozenset({'subject', 'subject_key', 'serial'})
+EXCLUDED_FROM_TEMPLATE = frozenset(
+    {'subject', 'subject_key', 'serial', 'certificate_file'}
+)
 EXTNS_EXCLUDED_FROM_TEMPLATE = frozenset({'subject_alt_name'})
 
 
@@ -669,6 +674,27 @@ class CertificateSpec(ConfigurableMixin):
         specified in the configuration.
     """
 
+    certificate_file: Optional[str] = None
+    """
+    Path to a file with a pre-generated copy of the certificate in question,
+    either in DER or in PEM format.
+    
+    When the certificate determined by this certificate spec is requested,
+    the certificate in the file will be returned.
+    
+    .. warning::
+        Certomancer will not attempt to process any information from the
+        certificate file, beyond parsing it into an X.509 certificate structure.
+        Internally, the certificate spec's entries are used instead.
+        It is the config writer's responsibility to make sure that both match
+        up.
+
+    .. note::
+        This option is unavailable when external configuration is disabled.
+        Moreover, it is excluded from templates derived from this certificate
+        spec.
+    """
+
     @property
     def self_issued(self) -> bool:
         """
@@ -757,6 +783,7 @@ class PKIArchitecture:
                            key_sets: KeySets, external_url_prefix,
                            extension_plugins: ExtensionPluginRegistry = None,
                            service_plugins: 'ServicePluginRegistry' = None,
+                           config_search_dir: Optional[SearchDir] = None,
                            cert_cache=None) -> 'PKIArchitecture':
         check_config_keys(arch_label, PKIArchitecture.CONFIG_KEYS, cfg)
         key_set_label = cfg.get('keyset', arch_label)
@@ -790,6 +817,7 @@ class PKIArchitecture:
             cert_spec_config=cert_specs, service_config=services,
             external_url_prefix=external_url_prefix,
             extension_plugins=extension_plugins,
+            config_search_dir=config_search_dir,
             service_plugins=service_plugins, cert_cache=cert_cache
         )
 
@@ -856,6 +884,7 @@ class PKIArchitecture:
                 arch_label=arch_label, cfg=cfg, key_sets=key_sets,
                 external_url_prefix=external_url_prefix,
                 extension_plugins=extension_plugins,
+                config_search_dir=config_search_dir,
                 service_plugins=service_plugins
             )
 
@@ -864,6 +893,7 @@ class PKIArchitecture:
                  cert_spec_config, service_config, external_url_prefix,
                  extension_plugins: ExtensionPluginRegistry = None,
                  service_plugins: 'ServicePluginRegistry' = None,
+                 config_search_dir: Optional[SearchDir] = None,
                  cert_cache=None):
 
         self.arch_label = arch_label
@@ -887,6 +917,8 @@ class PKIArchitecture:
             = defaultdict(list)
         self._cert_labels_by_subject: Dict[EntityLabel, List[CertLabel]] \
             = defaultdict(list)
+
+        self._cert_cache = cert_cache if cert_cache is not None else {}
 
         serial_by_issuer = defaultdict(lambda: DEFAULT_FIRST_SERIAL)
         for name, cert_config in cert_spec_config.items():
@@ -933,10 +965,23 @@ class PKIArchitecture:
             cert_specs[name] = spec = CertificateSpec.from_config(
                 effective_cert_config
             )
+            if spec.certificate_file is not None:
+                if config_search_dir is None:
+                    raise ConfigurationError(
+                        f"Failed to load pregenerated cert with name {name}"
+                        f"from file; external configuration is disabled."
+                    )
+                full_path = config_search_dir.resolve(spec.certificate_file)
+                try:
+                    pregenerated = load_cert_from_pemder(full_path)
+                    self._cert_cache[name] = pregenerated
+                except (IOError, ValueError) as e:
+                    raise ConfigurationError(
+                        f"Failed to load pregenerated cert with name {name}"
+                        f"from file {full_path}."
+                    ) from e
             self._cert_labels_by_issuer[spec.issuer].append(name)
             self._cert_labels_by_subject[spec.subject].append(name)
-
-        self._cert_cache = cert_cache if cert_cache is not None else {}
 
     def get_cert_spec(self, label: CertLabel) -> CertificateSpec:
         try:
