@@ -77,7 +77,10 @@
         {% if arch_services.tsa %}
             <ul>
                 {% for tsa in arch_services.tsa %}
-                    <li><a href="{{ tsa.url }}">{{ tsa.label }}</a></li>
+                    <li>
+                        <a href="{{ tsa.full_relative_url }}">{{ tsa.label }}</a>
+                        (<a href="{{ tsa.url }}">external</a>)
+                    </li>
                 {% endfor %}
             </ul>
         {% else %}
@@ -89,7 +92,11 @@
         {% if arch_services.ocsp %}
             <ul>
                 {% for ocsp in arch_services.ocsp %}
-                    <li><a href="{{ ocsp.url }}">{{ ocsp.label }}</a></li>
+                    <li>
+                        <a href="{{ ocsp.full_relative_url }}">{{ ocsp.label }}</a>
+                        (<a href="{{ ocsp.url }}">external</a>)
+                    </li>
+
                 {% endfor %}
             </ul>
         {% else %}
@@ -101,7 +108,12 @@
         {% if arch_services.crl %}
             <ul>
                 {% for crl in arch_services.crl %}
-                    <li><a href="{{ crl.latest_external_url }}">{{ crl.label }}</a> (latest)</li>
+                    <li>
+                        Latest CRL in
+                        <a href="{{ crl.latest_full_relative_url }}">{{ crl.label }}</a>
+                        (<a href="{{ crl.latest_external_url }}">external</a>)
+                    </li>
+
                 {% endfor %}
             </ul>
         {% else %}
@@ -114,8 +126,10 @@
             <ul>
                 {% for repo in arch_services.cert_repo %}
                     <li>
-                        <a href="{{ repo.issuer_cert_external_url }}">{{ repo.label }}</a>
-                        (CA cert{% if repo.publish_issued_certs %}; issued certs available{% endif %})
+                        CA cert in
+                        <a href="{{ repo.issuer_cert_full_relative_url }}">{{ repo.label }}</a>
+                        (<a href="{{ repo.issuer_cert_external_url }}">external</a>)
+                        {% if repo.publish_issued_certs %}(issued certs available){% endif %}
                     </li>
                 {% endfor %}
             </ul>

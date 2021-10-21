@@ -1290,12 +1290,23 @@ class ServiceInfo(ConfigurableMixin):
         return f"{self.base_url}/{self.label}"
 
     @property
+    def full_relative_url(self):
+        """
+        Full URL where the service's main endpoint can be found,
+        relative to :attr:`external_url_prefix`.
+
+        This is the URL used when listing service links in the web UI.
+        """
+        return f"{self.arch_label}{self.internal_url}"
+
+    @property
     def url(self) -> str:
         """
         Full URL where the service's main endpoint can be found.
+
+        This is the value that is embedded into certificates.
         """
-        return \
-            f"{self.external_url_prefix}/{self.arch_label}{self.internal_url}"
+        return f"{self.external_url_prefix}/{self.full_relative_url}"
 
 
 @dataclass(frozen=True)
@@ -1498,12 +1509,12 @@ class CRLRepoServiceInfo(ServiceInfo):
         _parse_extension_settings(config_dict, 'crl_extensions')
 
     @property
-    def latest_url(self):
-        return f"{self.internal_url}/latest.crl"
-
-    @property
     def latest_external_url(self):
         return f"{self.url}/latest.crl"
+
+    @property
+    def latest_full_relative_url(self):
+        return f"{self.full_relative_url}/latest.crl"
 
     def archive_url(self, for_crl_number):
         return f"{self.internal_url}/archive-{for_crl_number}.crl"
@@ -1543,14 +1554,14 @@ class CertRepoServiceInfo(ServiceInfo):
         return f"{self.url}/{fname}"
 
     @property
-    def issuer_cert_internal_url(self):
-        fname = CertRepoServiceInfo.issuer_cert_file_name(use_pem=True)
-        return f"{self.internal_url}/{fname}"
-
-    @property
     def issuer_cert_external_url(self):
         fname = CertRepoServiceInfo.issuer_cert_file_name(use_pem=True)
         return f"{self.url}/{fname}"
+
+    @property
+    def issuer_cert_full_relative_url(self):
+        fname = CertRepoServiceInfo.issuer_cert_file_name(use_pem=True)
+        return f"{self.full_relative_url}/{fname}"
 
     def issued_cert_url(self, label: CertLabel, use_pem=True):
         path = self.issued_cert_url_path(label=label, use_pem=use_pem)
