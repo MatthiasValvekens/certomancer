@@ -558,7 +558,7 @@ def test_keyset_templates_in_arch():
     assert algo == 'ed25519'
 
 
-def test_pregenerated_cert():
+async def test_pregenerated_cert():
     cfg = CertomancerConfig.from_file(
         'tests/data/with-pregenerated-cert.yml', 'tests/data'
     )
@@ -570,7 +570,7 @@ def test_pregenerated_cert():
     ca_from_disk = load_cert_from_pemder('tests/data/pregenerated-ca-cert.crt')
     assert ca.dump() == ca_from_disk.dump()
 
-    pyhanko_certvalidator.CertificateValidator(
+    await pyhanko_certvalidator.CertificateValidator(
         end_entity_cert=arch.get_cert(CertLabel('signer')),
         validation_context=ValidationContext(trust_roots=[ca]),
-    ).validate_usage({'digital_signature'})
+    ).async_validate_usage({'digital_signature'})

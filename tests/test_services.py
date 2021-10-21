@@ -92,7 +92,7 @@ def test_aia_ca_issuers(setup):
 
 @freeze_time('2020-11-01')
 @pytest.mark.parametrize('setup', [RSA_SETUP, DSA_SETUP, ECDSA_SETUP])
-def test_validate(requests_mock, setup):
+async def test_validate(requests_mock, setup):
     setup.illusionist.register(requests_mock)
     signer_cert = setup.arch.get_cert(CertLabel('signer1'))
     root = setup.arch.get_cert(CertLabel('root'))
@@ -105,7 +105,7 @@ def test_validate(requests_mock, setup):
     validator = CertificateValidator(
         signer_cert, intermediate_certs=[], validation_context=vc
     )
-    validator.validate_usage({'digital_signature'})
+    await validator.async_validate_usage({'digital_signature'})
 
     assert len(vc.ocsps)
     assert len(vc.crls)
