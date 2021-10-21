@@ -49,12 +49,14 @@ def exception_manager():
         raise click.ClickException(msg)
 
 
-def _lazy_cfg(config, key_root, cfg_root, no_external_config):
+def _lazy_cfg(config, key_root, cfg_root, no_external_config,
+              service_url_prefix):
     config = config or DEFAULT_CONFIG_FILE
     try:
         cfg = CertomancerConfig.from_file(
             config, key_search_dir=key_root, config_search_dir=cfg_root,
-            allow_external_config=not no_external_config
+            allow_external_config=not no_external_config,
+            external_url_prefix=service_url_prefix
         )
     except IOError as e:
         raise click.ClickException(
@@ -81,13 +83,18 @@ def _lazy_cfg(config, key_root, cfg_root, no_external_config):
               required=False, type=click.Path(readable=True, file_okay=False))
 @click.option('--no-external-config', help='disable external config loading',
               required=False, type=bool, is_flag=True)
+@click.option('--service-url-prefix',
+              help='override configured URL prefix for service URLs',
+              required=False, type=str)
 @click.pass_context
 @exception_manager()
-def cli(ctx, config, key_root, extra_config_root, no_external_config):
+def cli(ctx, config, key_root, extra_config_root, no_external_config,
+        service_url_prefix):
     _log_config()
     ctx.ensure_object(dict)
     ctx.obj['config'] = _lazy_cfg(
-        config, key_root, extra_config_root, no_external_config
+        config, key_root, extra_config_root, no_external_config,
+        service_url_prefix
     )
 
 

@@ -2074,19 +2074,23 @@ class CertomancerConfig:
     """
 
     DEFAULT_EXTERNAL_URL_PREFIX = 'http://ca.example.com'
+    EXTERNAL_URL_PREFIX_VARIABLE = 'external-url-prefix'
 
     @classmethod
     def from_yaml(cls, yaml_str, key_search_dir,
-                  config_search_dir=None) -> 'CertomancerConfig':
+                  config_search_dir=None,
+                  external_url_prefix=None) -> 'CertomancerConfig':
         config_dict = yaml.safe_load(yaml_str)
         return CertomancerConfig(
             config_dict, key_search_dir=key_search_dir,
-            config_search_dir=config_search_dir
+            config_search_dir=config_search_dir,
+            external_url_prefix=external_url_prefix
         )
 
     @classmethod
     def from_file(cls, cfg_path, key_search_dir=None, config_search_dir=None,
-                  allow_external_config=True) -> 'CertomancerConfig':
+                  allow_external_config=True,
+                  external_url_prefix=None) -> 'CertomancerConfig':
         main_config_dir = os.path.dirname(cfg_path)
         if not allow_external_config:
             config_search_dir = None
@@ -2097,14 +2101,17 @@ class CertomancerConfig:
             config_dict = yaml.safe_load(inf)
         return CertomancerConfig(
             config_dict, key_search_dir=key_search_dir,
-            config_search_dir=config_search_dir
+            config_search_dir=config_search_dir,
+            external_url_prefix=external_url_prefix
         )
 
     def __init__(self, config, key_search_dir: str,
-                 lazy_load_keys=False, config_search_dir: Optional[str] = None):
-        self.external_url_prefix = external_url_prefix = config.get(
-            'external-url-prefix', self.DEFAULT_EXTERNAL_URL_PREFIX
-        )
+                 lazy_load_keys=False, config_search_dir: Optional[str] = None,
+                 external_url_prefix=None):
+        if external_url_prefix is None:
+            self.external_url_prefix = external_url_prefix = config.get(
+                'external-url-prefix', self.DEFAULT_EXTERNAL_URL_PREFIX
+            )
 
         extn_plugin_list = config.get('plugin-modules', ())
         _import_plugin_modules(extn_plugin_list)
