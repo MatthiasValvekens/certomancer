@@ -96,13 +96,13 @@ class ArchServicesDescription:
         )
 
 
-WEB_UI_URL_PREFIX = '/_certomancer'
+WEB_UI_URL_PREFIX = '_certomancer'
 
 
 def web_ui_rules():
     return [
         Rule('/', endpoint='index', methods=('GET',)),
-        Submount(WEB_UI_URL_PREFIX, [
+        Submount("/" + WEB_UI_URL_PREFIX, [
             # convenience endpoint that serves certs without regard for
             # checking whether they belong to any particular (logical)
             # cert repo (these URLs aren't part of the "PKI API", for lack

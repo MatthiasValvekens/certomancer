@@ -241,14 +241,21 @@ def necronomicon(ctx, architecture, crl_repo, output, no_pem, at_time,
               required=False, type=bool, is_flag=True)
 @click.option('--no-time-override', help='disable time override functionality',
               required=False, type=bool, is_flag=True)
+@click.option('--wsgi-prefix', required=False, type=str,
+              help=(
+                      'WSGI prefix under which to mount the application '
+                      '(does not affect generated output)'
+              ))
 @click.pass_context
 @exception_manager()
-def animate(ctx, port, no_web_ui, no_time_override):
+def animate(ctx, port, no_web_ui, no_time_override, wsgi_prefix):
     try:
         from .integrations.animator import Animator, AnimatorArchStore
+        from werkzeug.middleware.dispatcher import DispatcherMiddleware
+        from werkzeug.exceptions import NotFound
     except ImportError as e:
         raise click.ClickException(
-            "'animate' requires additional dependencies."
+            "'animate' requires additional dependencies. "
             "Re-run setup with the [web-api] extension set, or install "
             "Werkzeug (and Jinja2 for the web UI) manually."
         ) from e
@@ -258,4 +265,9 @@ def animate(ctx, port, no_web_ui, no_time_override):
         AnimatorArchStore(cfg.pki_archs), with_web_ui=not no_web_ui,
         allow_time_override=not no_time_override
     )
+    if wsgi_prefix:
+        # Serve the Animator under the indicated prefix, wrapped using
+        # dispatcher middleware (functionally equivalent to SCRIPT_NAME, but
+        # more convenient to run from the CLI in this way)
+        app = DispatcherMiddleware(NotFound(), {wsgi_prefix: app})
     run_simple('127.0.0.1', port, app)
