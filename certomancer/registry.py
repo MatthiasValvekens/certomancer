@@ -765,6 +765,77 @@ class CertificateSpec(ConfigurableMixin):
         return self.issuer_cert or arch.get_unique_cert_for_entity(self.issuer)
 
 
+def _process_cert_spec_settings(cert_spec_config, config_search_dir,
+                                cert_cache):
+    cert_specs: Dict[CertLabel, CertificateSpec] = {}
+    cert_labels_by_issuer = defaultdict(list)
+    cert_labels_by_subject = defaultdict(list)
+    serial_by_issuer = defaultdict(lambda: DEFAULT_FIRST_SERIAL)
+    for name, cert_config in cert_spec_config.items():
+        name = CertLabel(name)
+        cert_config = key_dashes_to_underscores(cert_config)
+        template = cert_config.pop('template', None)
+        if template is not None:
+            # we want to merge extensions from the template
+            extensions = cert_config.pop('extensions', [])
+            try:
+                template_spec: CertificateSpec = \
+                    cert_specs[CertLabel(template)]
+            except KeyError as e:
+                raise ConfigurationError(
+                    f"Cert spec '{name}' refers to '{template}' as a "
+                    f"template, but '{template}' hasn't been declared yet."
+                ) from e
+            effective_cert_config = dict(template_spec.templatable_config)
+            template_extensions = \
+                effective_cert_config.get('extensions', [])
+            effective_cert_config.update(cert_config)
+            # add new extensions
+            effective_cert_config['extensions'] \
+                = extensions + template_extensions
+        else:
+            effective_cert_config = dict(cert_config)
+
+        effective_cert_config['label'] = name.value
+        effective_cert_config.setdefault('subject', name.value)
+        effective_cert_config.setdefault(
+            'subject_key', effective_cert_config['subject']
+        )
+        try:
+            issuer = effective_cert_config['issuer']
+        except KeyError as e:
+            raise ConfigurationError(
+                f"Certificate spec {name} does not specify an issuer."
+            ) from e
+        effective_cert_config.setdefault('authority_key', issuer)
+        serial = serial_by_issuer[issuer]
+        effective_cert_config.setdefault('serial', serial)
+        serial_by_issuer[issuer] = serial + 1
+
+        cert_specs[name] = spec = CertificateSpec.from_config(
+            effective_cert_config
+        )
+        if spec.certificate_file is not None:
+            if config_search_dir is None:
+                raise ConfigurationError(
+                    f"Failed to load pregenerated cert with name {name}"
+                    f"from file; external configuration is disabled."
+                )
+            full_path = config_search_dir.resolve(spec.certificate_file)
+            try:
+                pregenerated = load_cert_from_pemder(full_path)
+                cert_cache[name] = pregenerated
+            except (IOError, ValueError) as e:
+                raise ConfigurationError(
+                    f"Failed to load pregenerated cert with name {name}"
+                    f"from file {full_path}."
+                ) from e
+        cert_labels_by_issuer[spec.issuer].append(name)
+        cert_labels_by_subject[spec.subject].append(name)
+
+    return cert_specs, cert_labels_by_issuer, cert_labels_by_subject
+
+
 DEFAULT_FIRST_SERIAL = 0x1000
 
 
@@ -913,75 +984,17 @@ class PKIArchitecture:
         # happens on-demand
         cert_specs: Dict[CertLabel, CertificateSpec] = {}
         self._cert_specs = cert_specs
+
+        cert_cache = cert_cache if cert_cache is not None else {}
+        self._cert_specs, cert_labels_by_issuer, cert_labels_by_subject = \
+            _process_cert_spec_settings(
+                cert_spec_config, config_search_dir, cert_cache
+            )
         self._cert_labels_by_issuer: Dict[EntityLabel, List[CertLabel]] \
-            = defaultdict(list)
+            = cert_labels_by_issuer
         self._cert_labels_by_subject: Dict[EntityLabel, List[CertLabel]] \
-            = defaultdict(list)
-
-        self._cert_cache = cert_cache if cert_cache is not None else {}
-
-        serial_by_issuer = defaultdict(lambda: DEFAULT_FIRST_SERIAL)
-        for name, cert_config in cert_spec_config.items():
-            name = CertLabel(name)
-            cert_config = key_dashes_to_underscores(cert_config)
-            template = cert_config.pop('template', None)
-            if template is not None:
-                # we want to merge extensions from the template
-                extensions = cert_config.pop('extensions', [])
-                try:
-                    template_spec: CertificateSpec = \
-                        cert_specs[CertLabel(template)]
-                except KeyError as e:
-                    raise ConfigurationError(
-                        f"Cert spec '{name}' refers to '{template}' as a "
-                        f"template, but '{template}' hasn't been declared yet."
-                    ) from e
-                effective_cert_config = dict(template_spec.templatable_config)
-                template_extensions = \
-                    effective_cert_config.get('extensions', [])
-                effective_cert_config.update(cert_config)
-                # add new extensions
-                effective_cert_config['extensions'] \
-                    = extensions + template_extensions
-            else:
-                effective_cert_config = dict(cert_config)
-
-            effective_cert_config['label'] = name.value
-            effective_cert_config.setdefault('subject', name.value)
-            effective_cert_config.setdefault(
-                'subject_key', effective_cert_config['subject']
-            )
-            try:
-                issuer = effective_cert_config['issuer']
-            except KeyError as e:
-                raise ConfigurationError(
-                    f"Certificate spec {name} does not specify an issuer."
-                ) from e
-            effective_cert_config.setdefault('authority_key', issuer)
-            serial = serial_by_issuer[issuer]
-            effective_cert_config.setdefault('serial', serial)
-            serial_by_issuer[issuer] = serial + 1
-
-            cert_specs[name] = spec = CertificateSpec.from_config(
-                effective_cert_config
-            )
-            if spec.certificate_file is not None:
-                if config_search_dir is None:
-                    raise ConfigurationError(
-                        f"Failed to load pregenerated cert with name {name}"
-                        f"from file; external configuration is disabled."
-                    )
-                full_path = config_search_dir.resolve(spec.certificate_file)
-                try:
-                    pregenerated = load_cert_from_pemder(full_path)
-                    self._cert_cache[name] = pregenerated
-                except (IOError, ValueError) as e:
-                    raise ConfigurationError(
-                        f"Failed to load pregenerated cert with name {name}"
-                        f"from file {full_path}."
-                    ) from e
-            self._cert_labels_by_issuer[spec.issuer].append(name)
-            self._cert_labels_by_subject[spec.subject].append(name)
+            = cert_labels_by_subject
+        self._cert_cache = cert_cache
 
     def get_cert_spec(self, label: CertLabel) -> CertificateSpec:
         try:
