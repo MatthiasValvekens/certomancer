@@ -162,6 +162,8 @@ class ConfigurableMixin:
         for fname, label_type in _label_fields():
             try:
                 label_str = config_dict[fname]
+                if label_str is None:
+                    continue
                 config_dict[fname] = label_type(label_str)
             except KeyError:
                 continue

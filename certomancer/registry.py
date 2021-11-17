@@ -614,20 +614,11 @@ class RevocationStatus(ConfigurableMixin):
 
 
 @dataclass(frozen=True)
-class CertificateSpec(ConfigurableMixin):
-    """Certificate specification."""
-
-    label: CertLabel
-    """Internal name of the certificate spec."""
-
-    subject: EntityLabel
-    """Certificate subject"""
+class IssuedItemSpec(ConfigurableMixin):
+    """Specification of a generic issued item."""
 
     serial: int
     """Serial number"""
-
-    subject_key: KeyLabel
-    """Subject's (public) key. Defaults to the value of :attr:`subject`."""
 
     issuer: EntityLabel
     """Certificate issuer"""
@@ -639,26 +630,50 @@ class CertificateSpec(ConfigurableMixin):
     validity: Validity
     """Validity period of the certificate."""
 
-    templatable_config: dict
-    """Configuration that can be reused by other certificate specs."""
-
-    signature_algo: Optional[str] = None
+    signature_algo: Optional[str]
     """Signature algorithm designation. Certomancer will try to figure out
     something sensible if none is given."""
 
-    issuer_cert: Optional[CertLabel] = None
+    issuer_cert: Optional[CertLabel]
     """
     Label of the issuer certificate to use. If the issuer only has one
     certificate, it is not necessary to provide a value for this field.
-    
+
     The certificate is only used to make sure the authority key identifier
     in the generated certificate matches up with the issuer's subject key
     identifier. Certomancer calculates these by hashing the public key (as
     recommended by :rfc:`5280`, but in principle CAs can do whatever they want.
     """
 
-    digest_algo: str = 'sha256'
+    digest_algo: str
     """Digest algorithm to use in the signing process. Defaults to SHA-256."""
+
+    @classmethod
+    def process_entries(cls, config_dict):
+        # we can't set these at the dataclass level because of dataclass
+        # inheritance rules
+        # (solvable in Python 3.10 by making all arguments keyword-only, but
+        #  that's not an option right now)
+        config_dict.setdefault('signature_algo', None)
+        config_dict.setdefault('issuer_cert', None)
+        config_dict.setdefault('digest_algo', 'sha256')
+
+
+@dataclass(frozen=True)
+class CertificateSpec(IssuedItemSpec):
+    """Certificate specification."""
+
+    label: CertLabel
+    """Internal name of the certificate spec."""
+
+    subject: EntityLabel
+    """Certificate subject"""
+
+    subject_key: KeyLabel
+    """Subject's (public) key. Defaults to the value of :attr:`subject`."""
+
+    templatable_config: dict
+    """Configuration that can be reused by other certificate specs."""
 
     revocation: Optional[RevocationStatus] = None
     """Revocation status of the certificate, if relevant."""
