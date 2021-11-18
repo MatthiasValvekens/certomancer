@@ -125,6 +125,66 @@ def test_self_signed(label):
     assert root_cert.not_valid_before == datetime(2000, 1, 1, tzinfo=pytz.utc)
 
 
+def test_attr_cert_spec():
+    cert_cfg = '''
+      root:
+        subject: root
+        subject-key: root
+        issuer: root
+        authority-key: root
+        validity:
+          valid-from: "2000-01-01T00:00:00+0000"
+          valid-to: "2500-01-01T00:00:00+0000"
+        extensions:
+          - id: basic_constraints
+            critical: true
+            value:
+              ca: true
+          - id: key_usage
+            critical: true
+            smart-value:
+              schema: key-usage
+              params: [digital_signature, key_cert_sign, crl_sign]
+      signer1:
+        subject: signer1
+        issuer: root
+        validity:
+          valid-from: "2000-01-01T00:00:00+0000"
+          valid-to: "2100-01-01T00:00:00+0000"
+        extensions:
+          - id: key_usage
+            critical: true
+            smart-value:
+              schema: key-usage
+              params: [digital_signature]
+    '''
+
+    attr_cert_cfg = '''
+      test-ac:
+        holder: signer1
+        # not allowed in RFC 5755, but it doesn't matter for this test
+        issuer: root
+        attributes:
+            - id: role
+              value:
+                role_name:
+                    rfc822_name: signer1@example.com
+        validity:
+          valid-from: "2010-01-01T00:00:00+0000"
+          valid-to: "2011-01-01T00:00:00+0000"
+    '''
+
+    arch = PKIArchitecture(
+        arch_label=ArchLabel('test'), key_set=RSA_KEYS, entities=ENTITIES,
+        cert_spec_config=yaml.safe_load(cert_cfg),
+        ac_spec_config=yaml.safe_load(attr_cert_cfg),
+        service_config={},
+        external_url_prefix='http://test.test',
+    )
+    test_ac = arch.get_attr_cert_spec(CertLabel('test-ac'))
+    assert test_ac.attributes[0].id == 'role'
+
+
 def test_issue_intermediate():
     cfg = '''
       root-ca:

@@ -15,7 +15,7 @@ from zipfile import ZipFile
 import yaml
 from asn1crypto.core import ObjectIdentifier
 from dateutil.parser import parse as parse_dt
-from asn1crypto import x509, core, pem, ocsp, crl
+from asn1crypto import x509, core, pem, ocsp, crl, cms
 from dateutil.tz import tzlocal
 from asn1crypto.keys import PrivateKeyInfo, PublicKeyInfo
 
@@ -481,6 +481,31 @@ The default extension plugin registry.
 """
 
 
+def _process_with_smart_value(config_dict, thing):
+    try:
+        attr_id = config_dict['id']
+    except KeyError as e:
+        raise ConfigurationError(
+            f"'id' entry is mandatory for all {thing}s"
+        ) from e
+
+    sv_spec = config_dict.get('smart_value', None)
+    value = config_dict.get('value', None)
+    if sv_spec is not None and value is not None:
+        raise ConfigurationError(
+            f"Cannot specify both smart-value and value on a "
+            f"{thing}. At least one {attr_id} {thing} does not "
+            f"meet this criterion."
+        )
+    elif sv_spec is not None:
+        config_dict['smart_value'] = SmartValueSpec.from_config(sv_spec)
+    elif value is not None and isinstance(value, dict):
+        # asn1crypto compatibility
+        config_dict['value'] = {
+            k.replace('-', '_'): v for k, v in value.items()
+        }
+
+
 @dataclass(frozen=True)
 class ExtensionSpec(ConfigurableMixin):
     """Specifies the value of an extension."""
@@ -503,28 +528,7 @@ class ExtensionSpec(ConfigurableMixin):
 
     @classmethod
     def process_entries(cls, config_dict):
-        try:
-            ext_id = config_dict['id']
-        except KeyError as e:
-            raise ConfigurationError(
-                "'id' entry is mandatory for all extensions"
-            ) from e
-
-        sv_spec = config_dict.get('smart_value', None)
-        value = config_dict.get('value', None)
-        if sv_spec is not None and value is not None:
-            raise ConfigurationError(
-                f"Cannot specify both smart-value and value on a certificate "
-                f"extension. At least one {ext_id} extension does not "
-                f"meet this criterion."
-            )
-        elif sv_spec is not None:
-            config_dict['smart_value'] = SmartValueSpec.from_config(sv_spec)
-        elif value is not None and isinstance(value, dict):
-            # asn1crypto compatibility
-            config_dict['value'] = {
-                k.replace('-', '_'): v for k, v in value.items()
-            }
+        _process_with_smart_value(config_dict, "certificate extension")
         super().process_entries(config_dict)
 
     def to_asn1(self, arch: 'PKIArchitecture', extension_class):
@@ -672,6 +676,147 @@ class IssuedItemSpec(ConfigurableMixin):
         if revocation is not None:
             config_dict['revocation'] = RevocationStatus.from_config(revocation)
 
+        super().process_entries(config_dict)
+
+
+@dataclass(frozen=True)
+class HolderSpec(ConfigurableMixin):
+    """Describes the holder of an attribute certificate."""
+
+    name: EntityLabel
+    """The name of the holding entity."""
+
+    cert: Optional[CertLabel] = None
+    """
+    The label of the entity certificate to use when encoding the holder, 
+    if the entity has more than one certificate.
+    """
+
+    key: Optional[KeyLabel] = None
+    """
+    The label of the public key to use when encoding the holder, 
+    if the entity has more than one certificate.
+    """
+
+    include_base_cert_id: bool = True
+    """
+    Include the ``baseCertificateID`` field in the holder value.
+    This is recommended by RFC 5755 and the default.
+    """
+
+    include_entity_name: bool = False
+    """
+    Include the ``entityName`` field in the holder value.
+    ``False`` by default.
+    """
+
+    include_object_digest_info: bool = False
+    """
+    Include the ``objectDigestInfo`` field in the holder value.
+    ``False`` by default, and further controlled by :attr:`digested_object_type`
+    and :attr:`obj_digest_algorithm`.
+    """
+
+    digested_object_type: cms.DigestedObjectType = \
+        cms.DigestedObjectType('public_key_cert')
+    """
+    The type of data to digest when computing the ``objectDigestInfo``
+    field (see :class:`cms.DigestedObjectType`).
+    """
+
+    obj_digest_algorithm: str = 'sha256'
+    """
+    Name of the digest algorithm to use when producing holder identifiers
+    of type ``objectDigestInfo``. Defaults to SHA-256.
+    """
+
+    # TODO write encoding logic
+
+
+@dataclass(frozen=True)
+class AttrSpec(ConfigurableMixin):
+    """Specifies the value of an attribute."""
+
+    id: str
+    """ID of the attribute, as a string (see :module:`asn1crypto.cms`)."""
+
+    value: object = None
+    """Provides the value of the attribute, in a form that the ``asn1crypto``
+    value class for the attribute accepts."""
+
+    multivalued: bool = False
+    """
+    If ``True``, the :attr:`value` field will be interpreted as a set of
+    values instead of a singular one.
+    """
+
+    smart_value: Optional[SmartValueSpec] = None
+    """
+    Provides instructions for the dynamic calculation of an attribute value
+    through a plugin. Must be omitted if :attr:`value` is present.
+    """
+
+    @classmethod
+    def process_entries(cls, config_dict):
+        _process_with_smart_value(config_dict, "attribute")
+        super().process_entries(config_dict)
+
+    def to_asn1(self, arch: 'PKIArchitecture', attr_value_class):
+        value = self.value
+        if value is None and self.smart_value is not None:
+            value = arch.extn_plugin_registry.process_value(
+                self.id, arch, self.smart_value
+            )
+        values = value if self.multivalued else [value]
+
+        return cms.AttCertAttribute({
+            'type': cms.AttCertAttributeType(self.id),
+            'values': [attr_value_class(v) for v in values]
+        })
+
+
+@dataclass(frozen=True)
+class AttributeCertificateSpec(IssuedItemSpec):
+    """Attribute certificate specification."""
+
+    label: CertLabel
+    """Internal name of the attribute certificate spec."""
+
+    holder: HolderSpec
+    """Description of the holder."""
+
+    attributes: List[AttrSpec]
+    """List of certified attributes."""
+
+    extensions: List[ExtensionSpec] = field(default_factory=list)
+    """Extension settings for the attribute certificate."""
+
+    @classmethod
+    def process_entries(cls, config_dict):
+        try:
+            holder_raw = config_dict['holder']
+        except KeyError:
+            raise ConfigurationError(
+                "Attribute certificates must specify a holder"
+            )
+        if isinstance(holder_raw, dict):
+            config_dict['holder'] = HolderSpec.from_config(holder_raw)
+        if isinstance(holder_raw, str):
+            config_dict['holder'] = HolderSpec(name=EntityLabel(holder_raw))
+        else:
+            raise ConfigurationError(
+                "'holder' entry must be a string or a dictionary"
+            )
+
+        _parse_extension_settings(config_dict, 'extensions')
+        ext_spec = config_dict.get('attributes', ())
+        if not isinstance(ext_spec, (list, tuple)):
+            raise ConfigurationError(
+                "Applicable attributes must be specified as a list."
+            )
+        config_dict['attributes'] = [
+            AttrSpec.from_config(sett) for sett in ext_spec
+        ]
         super().process_entries(config_dict)
 
 
@@ -854,6 +999,37 @@ def _process_cert_spec_settings(cert_spec_config, config_search_dir,
     return cert_specs, cert_labels_by_issuer, cert_labels_by_subject
 
 
+def _process_ac_spec_config(ac_spec_config):
+    ac_specs: Dict[CertLabel, AttributeCertificateSpec] = {}
+    cert_labels_by_issuer = defaultdict(list)
+    cert_labels_by_holder = defaultdict(list)
+    serial_by_issuer = defaultdict(lambda: DEFAULT_FIRST_SERIAL)
+    for name, ac_config in ac_spec_config.items():
+        name = CertLabel(name)
+        ac_config = key_dashes_to_underscores(ac_config)
+        effective_cert_config = dict(ac_config)
+
+        effective_cert_config['label'] = name.value
+        try:
+            issuer = effective_cert_config['issuer']
+        except KeyError as e:
+            raise ConfigurationError(
+                f"AC spec {name} does not specify an issuer."
+            ) from e
+        effective_cert_config.setdefault('authority_key', issuer)
+        serial = serial_by_issuer[issuer]
+        effective_cert_config.setdefault('serial', serial)
+        serial_by_issuer[issuer] = serial + 1
+
+        ac_specs[name] = spec = AttributeCertificateSpec.from_config(
+            effective_cert_config
+        )
+        cert_labels_by_issuer[spec.issuer].append(name)
+        cert_labels_by_holder[spec.holder.name].append(name)
+
+    return ac_specs, cert_labels_by_issuer, cert_labels_by_holder
+
+
 DEFAULT_FIRST_SERIAL = 0x1000
 
 
@@ -980,6 +1156,7 @@ class PKIArchitecture:
     def __init__(self, arch_label: ArchLabel,
                  key_set: KeySet, entities: EntityRegistry,
                  cert_spec_config, service_config, external_url_prefix,
+                 ac_spec_config=None,
                  extension_plugins: ExtensionPluginRegistry = None,
                  service_plugins: 'ServicePluginRegistry' = None,
                  config_search_dir: Optional[SearchDir] = None,
@@ -1008,6 +1185,8 @@ class PKIArchitecture:
             _process_cert_spec_settings(
                 cert_spec_config, config_search_dir, cert_cache
             )
+        self._ac_specs, ac_labels_by_issuer, ac_labels_by_holder = \
+            _process_ac_spec_config(ac_spec_config or {})
         self._cert_labels_by_issuer: Dict[EntityLabel, List[CertLabel]] \
             = cert_labels_by_issuer
         self._cert_labels_by_subject: Dict[EntityLabel, List[CertLabel]] \
@@ -1020,6 +1199,15 @@ class PKIArchitecture:
         except KeyError as e:
             raise CertomancerObjectNotFoundError(
                 f"There is no registered certificate labelled '{label}'."
+            ) from e
+
+    def get_attr_cert_spec(self, label: CertLabel) -> AttributeCertificateSpec:
+        try:
+            return self._ac_specs[label]
+        except KeyError as e:
+            raise CertomancerObjectNotFoundError(
+                f"There is no registered attribute certificate "
+                f"labelled '{label}'."
             ) from e
 
     def find_cert_label(self, cid: ocsp.CertId,
@@ -1453,8 +1641,7 @@ def _parse_extension_settings(sett_dict, sett_key):
         ext_spec = sett_dict.get(sett_key, ())
         if not isinstance(ext_spec, (list, tuple)):
             raise ConfigurationError(
-                "Applicable certificate extensions must be specified "
-                "as a list."
+                "Applicable extensions must be specified as a list."
             )
         sett_dict[sett_key] = result = [
             ExtensionSpec.from_config(sett) for sett in ext_spec
