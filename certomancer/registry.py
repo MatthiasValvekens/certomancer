@@ -648,6 +648,9 @@ class IssuedItemSpec(ConfigurableMixin):
     digest_algo: str
     """Digest algorithm to use in the signing process. Defaults to SHA-256."""
 
+    revocation: Optional[RevocationStatus]
+    """Revocation status of the certificate, if relevant."""
+
     @classmethod
     def process_entries(cls, config_dict):
         # we can't set these at the dataclass level because of dataclass
@@ -656,7 +659,20 @@ class IssuedItemSpec(ConfigurableMixin):
         #  that's not an option right now)
         config_dict.setdefault('signature_algo', None)
         config_dict.setdefault('issuer_cert', None)
+        config_dict.setdefault('revocation', None)
         config_dict.setdefault('digest_algo', 'sha256')
+
+        try:
+            val_spec = config_dict['validity']
+            config_dict['validity'] = Validity.from_config(val_spec)
+        except KeyError:
+            pass
+
+        revocation = config_dict.get('revocation', None)
+        if revocation is not None:
+            config_dict['revocation'] = RevocationStatus.from_config(revocation)
+
+        super().process_entries(config_dict)
 
 
 @dataclass(frozen=True)
@@ -674,9 +690,6 @@ class CertificateSpec(IssuedItemSpec):
 
     templatable_config: dict
     """Configuration that can be reused by other certificate specs."""
-
-    revocation: Optional[RevocationStatus] = None
-    """Revocation status of the certificate, if relevant."""
 
     extensions: List[ExtensionSpec] = field(default_factory=list)
     """
@@ -736,16 +749,6 @@ class CertificateSpec(IssuedItemSpec):
 
     @classmethod
     def process_entries(cls, config_dict):
-        try:
-            val_spec = config_dict['validity']
-            config_dict['validity'] = Validity.from_config(val_spec)
-        except KeyError:
-            pass
-
-        revocation = config_dict.get('revocation', None)
-        if revocation is not None:
-            config_dict['revocation'] = RevocationStatus.from_config(revocation)
-
         _parse_extension_settings(config_dict, 'extensions')
 
         super().process_entries(config_dict)
