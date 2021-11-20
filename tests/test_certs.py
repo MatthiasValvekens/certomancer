@@ -1,3 +1,4 @@
+import hashlib
 import importlib
 import os
 import re
@@ -10,13 +11,13 @@ import pytest
 import pytz
 import yaml
 from oscrypto import keys as oskeys
-from asn1crypto import x509
+from asn1crypto import x509, cms
 from pyhanko_certvalidator import ValidationContext
 
 from certomancer.config_utils import SearchDir, ConfigurationError
 from certomancer.crypto_utils import load_cert_from_pemder
 from certomancer.registry import KeySet, EntityRegistry, PKIArchitecture, \
-    CertLabel, EntityLabel, ArchLabel, CertomancerConfig
+    CertLabel, EntityLabel, ArchLabel, CertomancerConfig, HolderSpec
 
 importlib.import_module('certomancer.default_plugins')
 
@@ -634,3 +635,82 @@ async def test_pregenerated_cert():
         end_entity_cert=arch.get_cert(CertLabel('signer')),
         validation_context=ValidationContext(trust_roots=[ca]),
     ).async_validate_usage({'digital_signature'})
+
+
+def test_holder_config1():
+    holder_cfg_str = 'signer2'
+    holder_cfg = yaml.safe_load(holder_cfg_str)
+    arch = CONFIG.get_pki_arch(ArchLabel('testing-ca'))
+    holder_obj = HolderSpec.from_config(holder_cfg).to_asn1(arch)
+    holder_cert = arch.get_cert(CertLabel('signer2'))
+    assert (
+        holder_obj['base_certificate_id']['serial'].native
+        == holder_cert.serial_number
+    )
+    assert (
+        holder_obj['base_certificate_id']['issuer'][0].chosen
+        == holder_cert.issuer
+    )
+
+
+def test_holder_config2():
+    holder_cfg_str = '''
+    name: signer1
+    cert: signer1-long
+    include-entity-name: true
+    '''
+    holder_cfg = yaml.safe_load(holder_cfg_str)
+    arch = CONFIG.get_pki_arch(ArchLabel('testing-ca'))
+    holder_obj = HolderSpec.from_config(holder_cfg).to_asn1(arch)
+    holder_cert = arch.get_cert(CertLabel('signer1-long'))
+    assert (
+            holder_obj['base_certificate_id']['serial'].native
+            == holder_cert.serial_number
+    )
+    assert (
+            holder_obj['base_certificate_id']['issuer'][0].chosen
+            == holder_cert.issuer
+    )
+    assert holder_obj['entity_name'][0].chosen == holder_cert.subject
+
+
+def test_holder_config_digest1():
+    holder_cfg_str = '''
+    name: signer1
+    cert: signer1-long
+    include-base-cert-id: false
+    include-object-digest-info: true
+    '''
+    holder_cfg = yaml.safe_load(holder_cfg_str)
+    arch = CONFIG.get_pki_arch(ArchLabel('testing-ca'))
+    holder_obj = HolderSpec.from_config(holder_cfg).to_asn1(arch)
+    holder_cert = arch.get_cert(CertLabel('signer1-long'))
+    odi: cms.ObjectDigestInfo = holder_obj['object_digest_info']
+
+    assert odi['digested_object_type'].native == 'public_key_cert'
+    assert odi['digest_algorithm']['algorithm'].native == 'sha256'
+    assert odi['object_digest'].native \
+           == hashlib.sha256(holder_cert.dump()).digest()
+
+
+@pytest.mark.parametrize('dot_str_spec', [
+    'public_key', '0'
+])
+def test_holder_config_digest2(dot_str_spec):
+    holder_cfg_str = f'''
+    name: signer1
+    cert: signer1-long
+    include-base-cert-id: false
+    include-object-digest-info: true
+    digested-object-type: {dot_str_spec}
+    '''
+    holder_cfg = yaml.safe_load(holder_cfg_str)
+    arch = CONFIG.get_pki_arch(ArchLabel('testing-ca'))
+    holder_obj = HolderSpec.from_config(holder_cfg).to_asn1(arch)
+    holder_cert = arch.get_cert(CertLabel('signer1-long'))
+    odi: cms.ObjectDigestInfo = holder_obj['object_digest_info']
+
+    assert odi['digested_object_type'].native == 'public_key'
+    assert odi['digest_algorithm']['algorithm'].native == 'sha256'
+    assert odi['object_digest'].native \
+           == hashlib.sha256(holder_cert.public_key.dump()).digest()

@@ -15,7 +15,7 @@ from zipfile import ZipFile
 import yaml
 from asn1crypto.core import ObjectIdentifier
 from dateutil.parser import parse as parse_dt
-from asn1crypto import x509, core, pem, ocsp, crl, cms
+from asn1crypto import x509, core, pem, ocsp, crl, cms, keys
 from dateutil.tz import tzlocal
 from asn1crypto.keys import PrivateKeyInfo, PublicKeyInfo
 
@@ -679,6 +679,13 @@ class IssuedItemSpec(ConfigurableMixin):
         super().process_entries(config_dict)
 
 
+def _as_general_name(name: x509.Name) -> cms.GeneralName:
+    # note for readability: the 'name' parameter below is part of the Choice
+    # API in asn1crypto, and has nothing to do with the fact that we're dealing
+    # with name objects here
+    return x509.GeneralName(name='directory_name', value=name)
+
+
 @dataclass(frozen=True)
 class HolderSpec(ConfigurableMixin):
     """Describes the holder of an attribute certificate."""
@@ -730,7 +737,64 @@ class HolderSpec(ConfigurableMixin):
     of type ``objectDigestInfo``. Defaults to SHA-256.
     """
 
-    # TODO write encoding logic
+    @classmethod
+    def process_entries(cls, config_dict):
+        try:
+            dot_setting = config_dict['digested_object_type']
+            if isinstance(dot_setting, (int, str)):
+                config_dict['digested_object_type'] \
+                    = cms.DigestedObjectType(dot_setting)
+            elif not isinstance(dot_setting, cms.DigestedObjectType):
+                raise ConfigurationError(
+                    f"Digested object type setting type must be 'str' or 'int', "
+                    f"not {type(dot_setting)}"
+                )
+        except KeyError:
+            pass
+
+    def to_asn1(self, arch: 'PKIArchitecture') -> cms.Holder:
+        result = {}
+        holder_cert_label = self.cert \
+                            or arch.get_unique_cert_for_entity(self.name)
+        holder_cert: x509.Certificate = arch.get_cert(holder_cert_label)
+        if self.include_base_cert_id:
+            result['base_certificate_id'] = {
+                'issuer': [_as_general_name(holder_cert.issuer)],
+                'serial': holder_cert.serial_number
+            }
+        if self.include_entity_name:
+            result['entity_name'] = [_as_general_name(holder_cert.subject)]
+        if self.include_object_digest_info:
+            type_desc = self.digested_object_type.native
+            data_to_digest: bytes
+            if type_desc == 'public_key':
+                pk_info: keys.PublicKeyInfo = holder_cert.public_key
+                # RFC 5755 § 7.3 requires that the entire PublicKeyInfo be
+                # hashed
+                # (Warning: this is _not_ what pk_info.sha256 does in
+                #  asn1crypto!)
+                if pk_info.algorithm == 'dsa' and \
+                        not pk_info['algorithm']['parameters'].native:
+                    raise NotImplementedError(
+                        "DSA parameter inheritance is not supported"
+                    )
+                data_to_digest = pk_info.dump()
+            elif type_desc == 'public_key_cert':
+                data_to_digest = holder_cert.dump()
+            else:
+                raise NotImplementedError(
+                    "Only 'public_key' and 'public_key_cert' are implemented"
+                )
+
+            digest_f = getattr(hashlib, self.obj_digest_algorithm)
+            obj_digest = digest_f(data_to_digest).digest()
+
+            result['object_digest_info'] = {
+                'digested_object_type': self.digested_object_type,
+                'digest_algorithm': {'algorithm': self.obj_digest_algorithm},
+                'object_digest': obj_digest
+            }
+        return cms.Holder(result)
 
 
 @dataclass(frozen=True)
