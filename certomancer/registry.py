@@ -1255,6 +1255,10 @@ class PKIArchitecture:
             = cert_labels_by_issuer
         self._cert_labels_by_subject: Dict[EntityLabel, List[CertLabel]] \
             = cert_labels_by_subject
+        self._ac_labels_by_issuer: Dict[EntityLabel, List[CertLabel]] \
+            = ac_labels_by_issuer
+        self._ac_labels_by_holder: Dict[EntityLabel, List[CertLabel]] \
+            = ac_labels_by_holder
         self._cert_cache = cert_cache
 
     def get_cert_spec(self, label: CertLabel) -> CertificateSpec:
