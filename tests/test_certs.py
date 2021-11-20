@@ -638,7 +638,7 @@ async def test_pregenerated_cert():
 
 
 def test_holder_config1():
-    holder_cfg_str = 'signer2'
+    holder_cfg_str = 'name: signer2'
     holder_cfg = yaml.safe_load(holder_cfg_str)
     arch = CONFIG.get_pki_arch(ArchLabel('testing-ca'))
     holder_obj = HolderSpec.from_config(holder_cfg).to_asn1(arch)
