@@ -128,7 +128,7 @@ def test_self_signed(label):
 
 def test_attr_cert_spec():
     cert_cfg = '''
-      root:
+      ac-issuer:
         subject: root
         subject-key: root
         issuer: root
@@ -137,17 +137,14 @@ def test_attr_cert_spec():
           valid-from: "2000-01-01T00:00:00+0000"
           valid-to: "2500-01-01T00:00:00+0000"
         extensions:
-          - id: basic_constraints
-            critical: true
-            value:
-              ca: true
           - id: key_usage
             critical: true
             smart-value:
               schema: key-usage
               params: [digital_signature, key_cert_sign, crl_sign]
-      signer1:
+      signer:
         subject: signer1
+        subject-key: signer
         issuer: root
         validity:
           valid-from: "2000-01-01T00:00:00+0000"
@@ -162,14 +159,16 @@ def test_attr_cert_spec():
 
     attr_cert_cfg = '''
       test-ac:
-        holder: signer1
-        # not allowed in RFC 5755, but it doesn't matter for this test
+        holder:
+            name: signer
+            cert: signer
         issuer: root
         attributes:
             - id: role
-              value:
-                role_name:
-                    rfc822_name: signer1@example.com
+              smart-value:
+                schema: role-syntax
+                params:
+                    name: {type: email, value: blah@example.com}
         validity:
           valid-from: "2010-01-01T00:00:00+0000"
           valid-to: "2011-01-01T00:00:00+0000"
@@ -182,8 +181,9 @@ def test_attr_cert_spec():
         service_config={},
         external_url_prefix='http://test.test',
     )
-    test_ac = arch.get_attr_cert_spec(CertLabel('test-ac'))
-    assert test_ac.attributes[0].id == 'role'
+    test_ac_spec = arch.get_attr_cert_spec(CertLabel('test-ac'))
+    assert test_ac_spec.attributes[0].id == 'role'
+    test_ac = arch.get_attr_cert(CertLabel('test-ac'))
 
 
 def test_issue_intermediate():

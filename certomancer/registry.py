@@ -348,6 +348,13 @@ class Validity(ConfigurableMixin):
             ),
         })
 
+    @property
+    def att_asn1(self) -> cms.AttCertValidityPeriod:
+        return cms.AttCertValidityPeriod({
+            'not_before_time': core.GeneralizedTime(self.valid_from),
+            'not_after_time': core.GeneralizedTime(self.valid_to),
+        })
+
 
 class ExtensionPlugin(abc.ABC):
     """
@@ -480,6 +487,84 @@ DEFAULT_EXT_PLUGIN_REGISTRY = extension_plugin_registry \
 The default extension plugin registry.
 """
 
+
+class AttributePlugin(abc.ABC):
+    # FIXME give attribute plugins an API to determine how they want
+    #  to handle multivalued attrs (repeated invocation or in bulk)
+    schema_label: str = None
+
+    def provision(self, attr_id: Optional[ObjectIdentifier],
+                  arch: 'PKIArchitecture', params):
+        """
+        Produce a value for an attribute identified by ``extn_id``.
+
+        :param attr_id:
+            The ID of an extension.
+        :param arch:
+            The current :class:`.PKIArchitecture` being operated on.
+        :param params:
+            A parameter object, lifted directly from the input configuration.
+            Plugins are expected to handle any necessary type checking.
+        :return:
+            A value compatible with the targeted attribute type.
+        """
+        raise NotImplementedError
+
+
+class AttributePluginRegistry:
+    """
+    Registry of attribute plugin implementations.
+    """
+
+    def __init__(self):
+        self._dict = {}
+
+    def register(self, plugin: Union[AttributePlugin, Type[AttributePlugin]]):
+        """
+        Register a plugin object.
+
+        As a convenience, you can also use this method as a class decorator
+        on plugin classes. In this case latter case, the plugin class should
+        have a no-arguments ``__init__`` method.
+
+        :param plugin:
+            A subclass of :class:`AttributePlugin`, or an instance of
+            such a subclass.
+        """
+        orig_input = plugin
+
+        plugin, cls = plugin_instantiate_util(plugin)
+
+        schema_label = plugin.schema_label
+        if not isinstance(schema_label, str):
+            raise ConfigurationError(
+                f"Plugin {cls.__name__} does not declare a string-type "
+                f"'schema_label' attribute."
+            )
+
+        self._dict[PluginLabel(schema_label)] = plugin
+        return orig_input
+
+    def process_value(self, attr_id: str,
+                      arch: 'PKIArchitecture', spec: SmartValueSpec):
+        try:
+            proc: AttributePlugin = self._dict[spec.schema]
+        except KeyError as e:
+            raise ConfigurationError(
+                f"There is no registered plugin for the schema "
+                f"'{spec.schema}'."
+            ) from e
+        provisioned_value = proc.provision(
+            cms.AttCertAttributeType(attr_id), arch, spec.params
+        )
+        return provisioned_value
+
+
+DEFAULT_ATTR_PLUGIN_REGISTRY = attr_plugin_registry \
+    = AttributePluginRegistry()
+"""
+The default attribute plugin registry.
+"""
 
 def _process_with_smart_value(config_dict, thing):
     try:
@@ -678,6 +763,9 @@ class IssuedItemSpec(ConfigurableMixin):
 
         super().process_entries(config_dict)
 
+    def resolve_issuer_cert(self, arch: 'PKIArchitecture') -> CertLabel:
+        return self.issuer_cert or arch.get_unique_cert_for_entity(self.issuer)
+
 
 def _as_general_name(name: x509.Name) -> cms.GeneralName:
     # note for readability: the 'name' parameter below is part of the Choice
@@ -825,17 +913,16 @@ class AttrSpec(ConfigurableMixin):
         _process_with_smart_value(config_dict, "attribute")
         super().process_entries(config_dict)
 
-    def to_asn1(self, arch: 'PKIArchitecture', attr_value_class):
+    def to_asn1(self, arch: 'PKIArchitecture'):
         value = self.value
         if value is None and self.smart_value is not None:
-            value = arch.extn_plugin_registry.process_value(
+            value = arch.attr_plugin_registry.process_value(
                 self.id, arch, self.smart_value
             )
         values = value if self.multivalued else [value]
 
         return cms.AttCertAttribute({
-            'type': cms.AttCertAttributeType(self.id),
-            'values': [attr_value_class(v) for v in values]
+            'type': cms.AttCertAttributeType(self.id), 'values': values
         })
 
 
@@ -865,11 +952,12 @@ class AttributeCertificateSpec(IssuedItemSpec):
             )
         if isinstance(holder_raw, dict):
             config_dict['holder'] = HolderSpec.from_config(holder_raw)
-        if isinstance(holder_raw, str):
+        elif isinstance(holder_raw, str):
             config_dict['holder'] = HolderSpec(name=EntityLabel(holder_raw))
         else:
             raise ConfigurationError(
-                "'holder' entry must be a string or a dictionary"
+                f"'holder' entry must be a string or a dictionary, not "
+                f"{type(holder_raw)}."
             )
 
         _parse_extension_settings(config_dict, 'extensions')
@@ -987,9 +1075,6 @@ class CertificateSpec(IssuedItemSpec):
         config_dict['templatable_config'] = dict(_template_entries())
 
         return super().from_config(config_dict)
-
-    def resolve_issuer_cert(self, arch: 'PKIArchitecture') -> CertLabel:
-        return self.issuer_cert or arch.get_unique_cert_for_entity(self.issuer)
 
 
 def _process_cert_spec_settings(cert_spec_config, config_search_dir,
@@ -1222,9 +1307,10 @@ class PKIArchitecture:
                  cert_spec_config, service_config, external_url_prefix,
                  ac_spec_config=None,
                  extension_plugins: ExtensionPluginRegistry = None,
+                 attr_plugins: AttributePluginRegistry = None,
                  service_plugins: 'ServicePluginRegistry' = None,
                  config_search_dir: Optional[SearchDir] = None,
-                 cert_cache=None):
+                 cert_cache=None, ac_cache=None):
 
         self.arch_label = arch_label
         self.key_set = key_set
@@ -1232,6 +1318,8 @@ class PKIArchitecture:
 
         self.extn_plugin_registry = \
             extension_plugins or DEFAULT_EXT_PLUGIN_REGISTRY
+        self.attr_plugin_registry = \
+            attr_plugins or DEFAULT_ATTR_PLUGIN_REGISTRY
 
         self.service_registry: ServiceRegistry = ServiceRegistry(
             self, external_url_prefix, service_config,
@@ -1245,6 +1333,7 @@ class PKIArchitecture:
         self._cert_specs = cert_specs
 
         cert_cache = cert_cache if cert_cache is not None else {}
+        ac_cache = ac_cache if ac_cache is not None else {}
         self._cert_specs, cert_labels_by_issuer, cert_labels_by_subject = \
             _process_cert_spec_settings(
                 cert_spec_config, config_search_dir, cert_cache
@@ -1260,6 +1349,7 @@ class PKIArchitecture:
         self._ac_labels_by_holder: Dict[EntityLabel, List[CertLabel]] \
             = ac_labels_by_holder
         self._cert_cache = cert_cache
+        self._ac_cache = ac_cache
 
     def get_cert_spec(self, label: CertLabel) -> CertificateSpec:
         try:
@@ -1433,6 +1523,71 @@ class PKIArchitecture:
             fname = os.path.join(lbl, name)
             zip_file.writestr(fname, data)
         zip_file.close()
+
+    def get_attr_cert(self, label: CertLabel) -> cms.AttributeCertificateV2:
+        try:
+            return self._ac_cache[label]
+        except KeyError:
+            pass
+        spec = self.get_attr_cert_spec(label)
+        issuer_name = self.entities[spec.issuer]
+        authority_key = self.key_set[spec.authority_key]
+        signature_algo = spec.signature_algo
+        digest_algo = spec.digest_algo
+        signature_algo_obj = choose_signed_digest(
+            digest_algo, authority_key.public_key_info,
+            signature_algo
+        )
+
+        try:
+            issuer_cert_lbl = spec.resolve_issuer_cert(self)
+            issuer_cert = self.get_cert(issuer_cert_lbl)
+            aki = issuer_cert.key_identifier_value
+        except CertomancerServiceError:
+            aki = authority_key.public_key_info.sha1
+        aki_value = x509.AuthorityKeyIdentifier({'key_identifier': aki})
+        aki_extension = x509.Extension({
+            'extn_id': 'authority_key_identifier',
+            'critical': False,
+            'extn_value': aki_value
+        })
+        extensions = [aki_extension]
+        # add extensions from config
+        extensions.extend(
+            ext_spec.to_asn1(self, x509.Extension)
+            for ext_spec in spec.extensions
+        )
+
+        attributes = [attr.to_asn1(self) for attr in spec.attributes]
+        tbs = cms.AttributeCertificateInfoV2({
+            'version': 'v2',
+            'holder': spec.holder.to_asn1(self),
+            'issuer': cms.AttCertIssuer(
+                name='v2_form',
+                value=cms.V2Form(
+                    {'issuer_name': [_as_general_name(issuer_name)]}
+                )
+            ),
+            'signature': signature_algo_obj,
+            'serial_number': spec.serial,
+            'att_cert_validity_period': spec.validity.att_asn1,
+            'attributes': attributes,
+            'extensions': extensions
+        })
+
+        signature = generic_sign(
+            private_key=authority_key.private_key_info,
+            tbs_bytes=tbs.dump(), signature_algo=signature_algo_obj
+        )
+
+        cert = cms.AttributeCertificateV2({
+            'ac_info': tbs,
+            'signature_algorithm': signature_algo_obj,
+            'signature': signature
+        })
+
+        self._cert_cache[label] = cert
+        return cert
 
     def get_cert(self, label: CertLabel) -> x509.Certificate:
         try:

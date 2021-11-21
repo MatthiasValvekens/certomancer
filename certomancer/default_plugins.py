@@ -1,14 +1,14 @@
 import binascii
 import itertools
 
-from asn1crypto import x509, core
+from asn1crypto import x509, core, cms
 
 from dateutil.parser import parse as parse_dt
 from .config_utils import ConfigurationError, check_config_keys, \
     key_dashes_to_underscores
 from .registry import ExtensionPlugin, PKIArchitecture, \
-    extension_plugin_registry, ServiceLabel, CertLabel, EntityRegistry, \
-    EntityLabel
+    extension_plugin_registry, attr_plugin_registry,\
+    ServiceLabel, CertLabel, EntityRegistry, EntityLabel
 
 __all__ = [
     'CRLDistributionPointsPlugin', 'KeyUsagePlugin', 'AIAUrlPlugin',
@@ -183,6 +183,34 @@ class GeneralNamesPlugin(ExtensionPlugin):
             )
 
         return [process_general_name(arch.entities, p) for p in params]
+
+
+@attr_plugin_registry.register
+class RoleSyntaxPlugin(ExtensionPlugin):
+    schema_label = 'role-syntax'
+    extension_type = None
+
+    def provision(self, extn_id, arch: 'PKIArchitecture', params):
+        if not isinstance(params, dict):
+            raise ConfigurationError(
+                "Parameters for general-names should be specified as a dict"
+            )
+        try:
+            name_params = params['name']
+        except KeyError:
+            raise ConfigurationError("role-syntax requires a name entry")
+        role_name = process_general_name(arch.entities, name_params)
+        authority_params = params.get('authority', None)
+        result = {'role_name': role_name}
+        if authority_params is not None:
+            if not isinstance(authority_params, list):
+                raise ConfigurationError(
+                    "Parameters for role authority should be specified as "
+                    "a list"
+                )
+            authority = [process_general_name(arch.entities, p) for p in params]
+            result['role_authority'] = authority
+        return cms.RoleSyntax(result)
 
 
 @extension_plugin_registry.register

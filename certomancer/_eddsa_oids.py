@@ -1,7 +1,7 @@
 # Shim module that makes asn1crypto aware of OIDs relevant for EdDSA support
 # Will be removed once asn1crypto supports these OIDs natively
 
-from asn1crypto import algos, core, keys
+from asn1crypto import algos, core, keys, cms
 from asn1crypto._errors import unwrap
 
 
@@ -130,10 +130,22 @@ def _hash_algo(self):
 _registered = False
 
 
+def _make_tag_explicit(field_decl):
+    if 'explicit' in field_decl:
+        return
+    tag_dict = field_decl[2]
+    tag_dict['explicit'] = tag_dict['implicit']
+    del tag_dict['implicit']
+
+
 def register_eddsa_oids():
     global _registered
     if _registered:
         return
+
+    # XXX: hack: a small rider to deal with wbond/asn1crypto#218
+    _make_tag_explicit(cms.RoleSyntax._fields[1])
+    _make_tag_explicit(cms.SecurityCategory._fields[1])
 
     # try to import pyhanko_certvalidator (test dependency with a similar shim)
     # if that succeeds, we delegate
