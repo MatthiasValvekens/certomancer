@@ -127,7 +127,8 @@ def _hash_algo(self):
     ))
 
 
-_registered = False
+_eddsa_registered = False
+_attr_cert_patches_registered = False
 
 
 def _make_tag_explicit(field_decl):
@@ -138,25 +139,29 @@ def _make_tag_explicit(field_decl):
     del tag_dict['implicit']
 
 
-def register_eddsa_oids():
-    global _registered
-    if _registered:
+def register_attr_cert_patches():
+    global _attr_cert_patches_registered
+    if _attr_cert_patches_registered:
         return
 
-    # XXX: hack: a small rider to deal with wbond/asn1crypto#218
     _make_tag_explicit(cms.RoleSyntax._fields[1])
     _make_tag_explicit(cms.SecurityCategory._fields[1])
+
+
+def register_eddsa_oids():
+    global _eddsa_registered
+    if _eddsa_registered:
+        return
 
     # try to import pyhanko_certvalidator (test dependency with a similar shim)
     # if that succeeds, we delegate
     try:
         from pyhanko_certvalidator import _eddsa_oids
         _eddsa_oids.register_eddsa_oids()
-        _registered = True
+        _eddsa_registered = True
         return
     except ImportError:
-        pass
-
+        _eddsa_oids = None
 
     ed25519_oid = '1.3.101.112'
     ed448_oid = '1.3.101.113'
@@ -182,4 +187,4 @@ def register_eddsa_oids():
     keys.PrivateKeyInfo._spec_callbacks['private_key'] = _private_key_spec
     keys.PublicKeyInfo._spec_callbacks['public_key'] = _public_key_spec
 
-    _registered = True
+    _eddsa_registered = True
