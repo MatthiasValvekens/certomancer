@@ -156,20 +156,26 @@ def register_attr_cert_patches():
     x509.Extension._oid_specs['no_rev_avail'] = core.Null
 
 
-def register_eddsa_oids():
+def _defer_to_certvalidator():
     global _eddsa_registered
-    if _eddsa_registered:
-        return
-
     # try to import pyhanko_certvalidator (test dependency with a similar shim)
     # if that succeeds, we delegate
     try:
         from pyhanko_certvalidator import _eddsa_oids
         _eddsa_oids.register_eddsa_oids()
         _eddsa_registered = True
-        return
+        return True
     except ImportError:
-        _eddsa_oids = None
+        return False
+
+
+def register_eddsa_oids():
+    global _eddsa_registered
+    if _eddsa_registered:
+        return
+
+    if _defer_to_certvalidator():
+        return
 
     ed25519_oid = '1.3.101.112'
     ed448_oid = '1.3.101.113'
