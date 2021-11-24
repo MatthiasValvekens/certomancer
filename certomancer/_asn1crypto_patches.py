@@ -1,7 +1,7 @@
 # Shim module that makes asn1crypto aware of OIDs relevant for EdDSA support
 # Will be removed once asn1crypto supports these OIDs natively
 
-from asn1crypto import algos, core, keys, cms
+from asn1crypto import algos, core, keys, cms, x509
 from asn1crypto._errors import unwrap
 
 
@@ -144,8 +144,16 @@ def register_attr_cert_patches():
     if _attr_cert_patches_registered:
         return
 
+    # Deal with wbond/asn1crypto#218
     _make_tag_explicit(cms.RoleSyntax._fields[1])
     _make_tag_explicit(cms.SecurityCategory._fields[1])
+
+    # patch in attribute certificate extensions
+    x509.ExtensionId._map['2.5.29.55'] = 'target_information'
+    x509.ExtensionId._map['2.5.29.56'] = 'no_rev_avail'
+    from ._asn1_types import SequenceOfTargets
+    x509.Extension._oid_specs['target_information'] = SequenceOfTargets
+    x509.Extension._oid_specs['no_rev_avail'] = core.Null
 
 
 def register_eddsa_oids():

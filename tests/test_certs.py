@@ -126,57 +126,58 @@ def test_self_signed(label):
     assert root_cert.not_valid_before == datetime(2000, 1, 1, tzinfo=pytz.utc)
 
 
-def test_attr_cert_spec():
-    cert_cfg = '''
-      ac-issuer:
-        subject: root
-        subject-key: root
-        issuer: root
-        authority-key: root
-        validity:
-          valid-from: "2000-01-01T00:00:00+0000"
-          valid-to: "2500-01-01T00:00:00+0000"
-        extensions:
-          - id: key_usage
-            critical: true
-            smart-value:
-              schema: key-usage
-              params: [digital_signature, key_cert_sign, crl_sign]
-      signer:
-        subject: signer1
-        subject-key: signer
-        issuer: root
-        validity:
-          valid-from: "2000-01-01T00:00:00+0000"
-          valid-to: "2100-01-01T00:00:00+0000"
-        extensions:
-          - id: key_usage
-            critical: true
-            smart-value:
-              schema: key-usage
-              params: [digital_signature]
-    '''
+BASIC_AC_ISSUER_SETUP = '''
+  ac-issuer:
+    subject: root
+    subject-key: root
+    issuer: root
+    authority-key: root
+    validity:
+      valid-from: "2000-01-01T00:00:00+0000"
+      valid-to: "2500-01-01T00:00:00+0000"
+    extensions:
+      - id: key_usage
+        critical: true
+        smart-value:
+          schema: key-usage
+          params: [digital_signature, key_cert_sign, crl_sign]
+  signer:
+    subject: signer1
+    subject-key: signer
+    issuer: root
+    validity:
+      valid-from: "2000-01-01T00:00:00+0000"
+      valid-to: "2100-01-01T00:00:00+0000"
+    extensions:
+      - id: key_usage
+        critical: true
+        smart-value:
+          schema: key-usage
+          params: [digital_signature]
+'''
 
+
+def test_attr_cert_spec():
     attr_cert_cfg = '''
-      test-ac:
-        holder:
-            name: signer
-            cert: signer
-        issuer: root
-        attributes:
-            - id: role
-              smart-value:
-                schema: role-syntax
-                params:
-                    name: {type: email, value: blah@example.com}
-        validity:
-          valid-from: "2010-01-01T00:00:00+0000"
-          valid-to: "2011-01-01T00:00:00+0000"
+    test-ac:
+      holder:
+          name: signer
+          cert: signer
+      issuer: root
+      attributes:
+          - id: role
+            smart-value:
+              schema: role-syntax
+              params:
+                  name: {type: email, value: blah@example.com}
+      validity:
+        valid-from: "2010-01-01T00:00:00+0000"
+        valid-to: "2011-01-01T00:00:00+0000"
     '''
 
     arch = PKIArchitecture(
         arch_label=ArchLabel('test'), key_set=RSA_KEYS, entities=ENTITIES,
-        cert_spec_config=yaml.safe_load(cert_cfg),
+        cert_spec_config=yaml.safe_load(BASIC_AC_ISSUER_SETUP),
         ac_spec_config=yaml.safe_load(attr_cert_cfg),
         service_config={},
         external_url_prefix='http://test.test',
@@ -184,6 +185,57 @@ def test_attr_cert_spec():
     test_ac_spec = arch.get_attr_cert_spec(CertLabel('test-ac'))
     assert test_ac_spec.attributes[0].id == 'role'
     test_ac = arch.get_attr_cert(CertLabel('test-ac'))
+    assert test_ac['ac_info']['attributes'][0]['type'].native == 'role'
+
+
+def test_attr_cert_targets():
+    attr_cert_cfg = '''
+    test-ac:
+      holder:
+          name: signer
+          cert: signer
+      issuer: root
+      attributes:
+          - id: role
+            smart-value:
+              schema: role-syntax
+              params:
+                  name: {type: email, value: blah@example.com}
+      validity:
+        valid-from: "2010-01-01T00:00:00+0000"
+        valid-to: "2011-01-01T00:00:00+0000"
+      extensions:
+          - id: target_information
+            critical: true
+            smart-value:
+              schema: ac-targets
+              params:
+                  - signer2
+                  - type: dns_name
+                    value: example.com
+                    is-group: true
+    '''
+
+    arch = PKIArchitecture(
+        arch_label=ArchLabel('test'), key_set=RSA_KEYS, entities=ENTITIES,
+        cert_spec_config=yaml.safe_load(BASIC_AC_ISSUER_SETUP),
+        ac_spec_config=yaml.safe_load(attr_cert_cfg),
+        service_config={},
+        external_url_prefix='http://test.test',
+    )
+    test_ac = arch.get_attr_cert(CertLabel('test-ac'))
+
+    targets_ext = next(
+        ext['extn_value'].parsed for ext in
+        test_ac['ac_info']['extensions']
+        if ext['extn_id'].native == 'target_information'
+    )
+    targets_obj = targets_ext[0]
+    assert len(targets_obj) == 2
+    assert targets_obj[0].name == 'target_name'
+    assert 'Bob' in targets_obj[0].chosen.chosen.human_friendly
+    assert targets_obj[1].name == 'target_group'
+    assert 'example.com' == targets_obj[1].chosen.native
 
 
 def test_issue_intermediate():

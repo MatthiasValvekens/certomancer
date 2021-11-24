@@ -185,6 +185,51 @@ class GeneralNamesPlugin(ExtensionPlugin):
         return [process_general_name(arch.entities, p) for p in params]
 
 
+@extension_plugin_registry.register
+class ACTargetsPlugin(ExtensionPlugin):
+    schema_label = 'ac-targets'
+    extension_type = x509.ExtensionId
+
+    @staticmethod
+    def _parse_target(entities, params):
+
+        if isinstance(params, str):
+            name = x509.GeneralName(
+                name='directory_name', value=entities[EntityLabel(params)]
+            )
+            is_group = False
+        elif isinstance(params, dict):
+            params = dict(params)
+            # remove the is_group key
+            is_group = bool(params.pop('is-group', False))
+            # treat the rest as a general name designation
+            name = process_general_name(entities, params)
+        else:
+            raise ConfigurationError(
+                "Target designation must be either a string or a dictionary"
+            )
+        return name, is_group
+
+    def provision(self, extn_id, arch: 'PKIArchitecture', params):
+        from ._asn1_types import Target, Targets
+        if isinstance(params, list):
+            targets = (
+                ACTargetsPlugin._parse_target(arch.entities, t)
+                for t in params
+            )
+        else:
+            targets = (ACTargetsPlugin._parse_target(arch.entities, params),)
+
+        target_objs = [
+            Target(
+                name='target_group' if is_group else 'target_name',
+                value=name
+            )
+            for name, is_group in targets
+        ]
+        return [Targets(target_objs)]
+
+
 @attr_plugin_registry.register
 class RoleSyntaxPlugin(ExtensionPlugin):
     schema_label = 'role-syntax'
