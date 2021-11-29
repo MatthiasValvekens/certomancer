@@ -2,6 +2,7 @@ import abc
 import copy
 import hashlib
 import importlib
+import itertools
 import logging
 import os
 import os.path
@@ -1416,6 +1417,11 @@ class PKIArchitecture:
             # Coerce unevaluated parts of cert object structure
             # noinspection PyStatementEffect
             cert.native
+        for label, spec in self._ac_specs.items():
+            cert = self.get_attr_cert(label)
+            # Coerce unevaluated parts of cert object structure
+            # noinspection PyStatementEffect
+            cert.native
 
     def enumerate_certs_by_issuer(self) \
             -> Iterable[Tuple[EntityLabel, Iterable[CertificateSpec]]]:
@@ -1481,7 +1487,6 @@ class PKIArchitecture:
     def _dump_certs(self, use_pem=True, flat=False, include_pkcs12=False,
                     pkcs12_pass=None):
         include_pkcs12 &= pyca_cryptography_present()
-        self._load_all_certs()
         # start writing only after we know that all certs have been built
         ext = '.cert.pem' if use_pem else '.crt'
         for iss_label, iss_certs in self._cert_labels_by_issuer.items():
@@ -1503,14 +1508,33 @@ class PKIArchitecture:
                         cert_label, password=pkcs12_pass
                     )
 
+    def _dump_attr_certs(self, use_pem=True, flat=False):
+        # start writing only after we know that all certs have been built
+        ext = '.attr.cert.pem' if use_pem else '.attr.crt'
+        for iss_label, iss_certs in self._ac_labels_by_issuer.items():
+            if not flat:
+                yield iss_label.value, None
+            for cert_label in iss_certs:
+                cert = self.get_attr_cert(cert_label)
+                base_name = cert_label.value
+                if not flat:
+                    base_name = os.path.join(iss_label.value, base_name)
+                name = base_name + ext
+                data = cert.dump()
+                if use_pem:
+                    data = pem.armor('attribute certificate', data)
+                yield name, data
+
     def dump_certs(self, folder_path: str, use_pem=True, flat=False,
                    include_pkcs12=False, pkcs12_pass=None):
         os.makedirs(folder_path, exist_ok=True)
-        itr = self._dump_certs(
+        self._load_all_certs()
+        itr_certs = self._dump_certs(
             use_pem=use_pem, flat=flat, include_pkcs12=include_pkcs12,
             pkcs12_pass=pkcs12_pass
         )
-        for name, data in itr:
+        itr_att_certs = self._dump_attr_certs(use_pem=use_pem, flat=flat)
+        for name, data in itertools.chain(itr_certs, itr_att_certs):
             path = os.path.join(folder_path, name)
             if data is None:  # folder
                 os.makedirs(path, exist_ok=True)

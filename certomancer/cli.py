@@ -98,8 +98,6 @@ def cli(ctx, config, key_root, extra_config_root, no_external_config,
     )
 
 
-# TODO also output attribute certificates
-
 @cli.command(help='create and dump all certificates for a PKI architecture')
 @click.pass_context
 @click.argument('architecture', type=str, metavar='PKI_ARCH')
