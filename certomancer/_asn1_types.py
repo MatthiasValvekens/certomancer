@@ -2,9 +2,7 @@
 ASN.1 types for internal Certomancer use. All of these are for encoding only.
 """
 
-from asn1crypto import core, x509
-
-#
+from asn1crypto import core, x509, cms
 
 
 class Target(core.Choice):
@@ -24,3 +22,16 @@ class Targets(core.SequenceOf):
 # Blame X.509...
 class SequenceOfTargets(core.SequenceOf):
     _child_spec = Targets
+
+
+class AttrSpec(core.SequenceOf):
+    _child_spec = cms.AttCertAttributeType
+
+
+class AAControls(core.Sequence):
+    _fields = [
+        ('path_len_constraint', core.Integer, {'optional': True}),
+        ('permitted_attrs', AttrSpec, {'optional': True, 'implicit': 0}),
+        ('excluded_attrs', AttrSpec, {'optional': True, 'implicit': 1}),
+        ('permit_unspecified', core.Boolean, {'default': True})
+    ]

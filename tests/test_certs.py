@@ -141,6 +141,11 @@ BASIC_AC_ISSUER_SETUP = '''
         smart-value:
           schema: key-usage
           params: [digital_signature, key_cert_sign, crl_sign]
+      - id: aa_controls
+        critical: true
+        value:
+          path_len_constraint: 0
+          permitted_attrs: ['role']
   signer:
     subject: signer1
     subject-key: signer
@@ -186,6 +191,8 @@ def test_attr_cert_spec():
     assert test_ac_spec.attributes[0].id == 'role'
     test_ac = arch.get_attr_cert(CertLabel('test-ac'))
     assert test_ac['ac_info']['attributes'][0]['type'].native == 'role'
+    ac_iss = arch.get_cert(CertLabel('ac-issuer'))
+    assert len(ac_iss['tbs_certificate']['extensions']) == 4
 
 
 def test_attr_cert_targets():

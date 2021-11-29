@@ -151,9 +151,11 @@ def register_attr_cert_patches():
     # patch in attribute certificate extensions
     x509.ExtensionId._map['2.5.29.55'] = 'target_information'
     x509.ExtensionId._map['2.5.29.56'] = 'no_rev_avail'
-    from ._asn1_types import SequenceOfTargets
+    x509.ExtensionId._map['1.3.6.1.5.5.7.1.6'] = 'aa_controls'
+    from ._asn1_types import SequenceOfTargets, AAControls
     x509.Extension._oid_specs['target_information'] = SequenceOfTargets
     x509.Extension._oid_specs['no_rev_avail'] = core.Null
+    x509.Extension._oid_specs['aa_controls'] = AAControls
 
 
 def _defer_to_certvalidator():
