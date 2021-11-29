@@ -24,6 +24,8 @@ keysets:
       signer2:
         path: signer2.key.pem
         password: secret
+      aa:
+        path: aa.key.pem
 
 pki-architectures:
   testing-ca:
@@ -38,6 +40,8 @@ pki-architectures:
         common-name: Intermediate CA
       tsa:
         common-name: Time Stamping Authority
+      aa:
+        common-name: Attribute Authority
       interm-ocsp:
         common-name: OCSP responder
       signer1:
@@ -156,6 +160,39 @@ pki-architectures:
         template: signer1
         validity:
           valid-from: "2020-01-01T00:00:00+0000"
+          valid-to: "2030-01-01T00:00:00+0000"
+      role-aa:
+        subject: aa
+        issuer: root
+        validity:
+          valid-from: "2000-01-01T00:00:00+0000"
+          valid-to: "2100-01-01T00:00:00+0000"
+        extensions:
+          - id: key_usage
+            critical: true
+            smart-value:
+              schema: key-usage
+              params: [digital_signature, crl_sign]
+          - id: aa_controls
+            critical: true
+            value:
+              path_len_constraint: 0
+              permitted_attrs: ['role']
+    attr-certs:
+      test-ac:
+        holder:
+          name: signer1
+          cert: signer1
+        issuer: aa
+        issuer-cert: role-aa
+        attributes:
+          - id: role
+            smart-value:
+              schema: role-syntax
+              params:
+                name: {type: email, value: bigboss@example.com}
+        validity:
+          valid-from: "2010-01-01T00:00:00+0000"
           valid-to: "2030-01-01T00:00:00+0000"
     services:
       ocsp:

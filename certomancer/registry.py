@@ -1189,7 +1189,10 @@ class PKIArchitecture:
     """
 
     # These config keys will be merged when an architecture is templated
-    MULTIVAL_CONFIG_KEYS = ('entities', 'certs', 'services', 'entity-defaults')
+    MULTIVAL_CONFIG_KEYS = (
+        'entities', 'certs', 'services', 'entity-defaults',
+        'attr-certs'
+    )
     CONFIG_KEYS = ('keyset', *MULTIVAL_CONFIG_KEYS)
 
     @classmethod
@@ -1198,7 +1201,7 @@ class PKIArchitecture:
                            extension_plugins: ExtensionPluginRegistry = None,
                            service_plugins: 'ServicePluginRegistry' = None,
                            config_search_dir: Optional[SearchDir] = None,
-                           cert_cache=None) -> 'PKIArchitecture':
+                           cert_cache=None, ac_cache=None) -> 'PKIArchitecture':
         check_config_keys(arch_label, PKIArchitecture.CONFIG_KEYS, cfg)
         key_set_label = cfg.get('keyset', arch_label)
         try:
@@ -1222,6 +1225,10 @@ class PKIArchitecture:
                 "The 'certs' key is required in all PKI architecture "
                 "specifications."
             ) from e
+        try:
+            ac_specs = cfg['attr-certs']
+        except KeyError:
+            ac_specs = None
         entities = EntityRegistry(
             entity_cfg, cfg.get('entity-defaults', None)
         )
@@ -1232,7 +1239,9 @@ class PKIArchitecture:
             external_url_prefix=external_url_prefix,
             extension_plugins=extension_plugins,
             config_search_dir=config_search_dir,
-            service_plugins=service_plugins, cert_cache=cert_cache
+            service_plugins=service_plugins,
+            ac_spec_config=ac_specs,
+            cert_cache=cert_cache, ac_cache=ac_cache,
         )
 
     @classmethod

@@ -98,6 +98,8 @@ def cli(ctx, config, key_root, extra_config_root, no_external_config,
     )
 
 
+# TODO also output attribute certificates
+
 @cli.command(help='create and dump all certificates for a PKI architecture')
 @click.pass_context
 @click.argument('architecture', type=str, metavar='PKI_ARCH')
@@ -145,6 +147,8 @@ def mass_summon(ctx, architecture, output, no_pem, archive, flat, no_pfx,
 @click.argument('architecture', type=str, metavar='PKI_ARCH')
 @click.argument('cert_label', type=click.Path(writable=True), required=True)
 @click.argument('output', type=click.Path(writable=True), required=False)
+@click.option('--attr', type=bool, is_flag=True,
+              help='fetch an attribute certificate instead of a regular one')
 @click.option('--ignore-tty', type=bool, is_flag=True,
               help='never try to prevent binary data from being written '
                    'to stdout')
@@ -155,8 +159,8 @@ def mass_summon(ctx, architecture, output, no_pem, archive, flat, no_pfx,
 @click.option('--no-pem', help='use raw DER instead of PEM output',
               required=False, type=bool, is_flag=True)
 @exception_manager()
-def summon(ctx, architecture, cert_label, output, no_pem, as_pfx, ignore_tty,
-           pfx_pass):
+def summon(ctx, architecture, attr, cert_label, output, no_pem, as_pfx,
+           ignore_tty, pfx_pass):
     cfg: CertomancerConfig = next(ctx.obj['config'])
     pki_arch = cfg.get_pki_arch(architecture)
     if as_pfx and not pyca_cryptography_present():
@@ -175,13 +179,20 @@ def summon(ctx, architecture, cert_label, output, no_pem, as_pfx, ignore_tty,
         )
 
     if as_pfx:
+        if attr:
+            raise click.ClickException(
+                "Attribute certificates are not supported in PKCS#12 output"
+            )
         if pfx_pass is not None:
             pfx_pass = pfx_pass.encode('utf8')
         data = pki_arch.package_pkcs12(cert_label, password=pfx_pass)
     else:
-        data = pki_arch.get_cert(CertLabel(cert_label)).dump()
+        if attr:
+            data = pki_arch.get_attr_cert(CertLabel(cert_label)).dump()
+        else:
+            data = pki_arch.get_cert(CertLabel(cert_label)).dump()
         if not no_pem:
-            data = pem.armor('certificate', data)
+            data = pem.armor(f'{"attribute " if attr else ""}certificate', data)
 
     if output is None:
         # we want to write bytes, not strings
