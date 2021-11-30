@@ -24,6 +24,66 @@ keysets:
       signer2:
         path: signer2.key.pem
         password: secret
+      aa:
+        path: aa.key.pem
 
 pki-architectures:
   testing-ca: full-service-config.yml
+  testing-ca-with-aa:
+    template: testing-ca
+    entities:
+      aa:
+        common-name: Attribute Authority
+    certs:
+      role-aa:
+        subject: aa
+        issuer: root
+        validity:
+          valid-from: "2000-01-01T00:00:00+0000"
+          valid-to: "2100-01-01T00:00:00+0000"
+        extensions:
+          - id: key_usage
+            critical: true
+            smart-value:
+              schema: key-usage
+              params: [digital_signature, crl_sign]
+          - id: aa_controls
+            critical: true
+            value:
+              path_len_constraint: 0
+              permitted_attrs: ['role']
+    attr-certs:
+      test-ac:
+        holder:
+          name: signer2
+          cert: signer2
+        issuer: aa
+        issuer-cert: role-aa
+        attributes:
+          - id: role
+            smart-value:
+              schema: role-syntax
+              params:
+                name: {type: email, value: bigboss@example.com}
+        validity:
+          valid-from: "2010-01-01T00:00:00+0000"
+          valid-to: "2030-01-01T00:00:00+0000"
+        revocation:
+          revoked-since: "2020-12-01T00:00:00+0000"
+          reason: key_compromise
+    services:
+      crl-repo:
+        role-aa:
+          for-issuer: aa
+          signing-key: aa
+          simulated-update-schedule: "P30D"
+          crl-type: ac-only
+        # FIXME auto-merge/inherit these in the templating handler
+        root:
+          for-issuer: root
+          signing-key: root
+          simulated-update-schedule: "P90D"
+        interm:
+          for-issuer: interm
+          signing-key: interm
+          simulated-update-schedule: "P30D"

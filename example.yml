@@ -181,8 +181,8 @@ pki-architectures:
     attr-certs:
       test-ac:
         holder:
-          name: signer1
-          cert: signer1
+          name: signer2
+          cert: signer2
         issuer: aa
         issuer-cert: role-aa
         attributes:

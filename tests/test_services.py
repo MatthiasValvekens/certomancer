@@ -75,6 +75,39 @@ def test_crl(setup):
     assert invalidity_date == datetime(2020, 11, 30, tzinfo=pytz.utc)
 
 
+def test_aa_crl():
+
+    cfg = CertomancerConfig.from_file(
+        'tests/data/with-services.yml', 'tests/data'
+    )
+
+    arch = cfg.get_pki_arch(ArchLabel('testing-ca-with-aa'))
+
+    setup = ServiceSetup(cfg, arch, illusionist.Illusionist(pki_arch=arch))
+    some_crl = setup.arch.service_registry.get_crl(
+        ServiceLabel('role-aa'),
+        at_time=datetime.fromisoformat('2020-11-01 00:00:00+00:00'),
+    )
+    _check_crl_cardinality(some_crl, expected_revoked=0)
+    some_crl2 = setup.arch.service_registry.get_crl(
+        ServiceLabel('role-aa'),
+        at_time=datetime.fromisoformat('2020-12-02 00:00:00+00:00'),
+    )
+    _check_crl_cardinality(some_crl2, expected_revoked=0)
+    some_crl3 = setup.arch.service_registry.get_crl(
+        ServiceLabel('role-aa'),
+        at_time=datetime.fromisoformat('2020-12-29 00:00:00+00:00'),
+    )
+    _check_crl_cardinality(some_crl3, expected_revoked=1)
+
+    idp = next(
+        ext['extn_value'].native
+        for ext in some_crl3['tbs_cert_list']['crl_extensions']
+        if ext['extn_id'].native == 'issuing_distribution_point'
+    )
+    assert bool(idp['only_contains_attribute_certs'])
+
+
 @pytest.mark.parametrize('setup', [RSA_SETUP, DSA_SETUP, ECDSA_SETUP])
 def test_aia_ca_issuers(setup):
     signer1 = setup.arch.get_cert(CertLabel('signer1'))
