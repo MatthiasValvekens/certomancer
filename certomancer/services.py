@@ -324,7 +324,11 @@ class SimpleOCSPResponder:
         return ocsp.OCSPResponse({'response_status': error_status})
 
     def build_ocsp_response(self, req: ocsp.OCSPRequest) -> ocsp.OCSPResponse:
-        nonce = req.nonce_value.native
+        nonce_asn1 = req.nonce_value
+        if nonce_asn1 is not None:
+            nonce = nonce_asn1.native
+        else:
+            nonce = None
         requests = req['tbs_request']['request_list']
         issuer_cert = self.revinfo_interface.get_issuer_cert()
         err = SimpleOCSPResponder.build_error_response
