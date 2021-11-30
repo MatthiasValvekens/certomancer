@@ -155,7 +155,7 @@ class CRLBuilder:
 
     def build_crl(self, crl_number: int,
                   this_update: datetime, next_update: datetime,
-                  revoked_certs, distpoint: x509.DistributionPoint = None) \
+                  revoked_certs, distpoint: Optional[dict] = None) \
             -> crl.CertificateList:
         tbs_crl = self.format_tbs_crl(
             crl_number=crl_number, this_update=this_update,
@@ -196,8 +196,7 @@ class CRLBuilder:
 
     def format_tbs_crl(self, crl_number: int, this_update: datetime,
                        revoked_certs, next_update: datetime,
-                       distpoint: x509.DistributionPoint = None) \
-            -> crl.TbsCertList:
+                       distpoint: Optional[dict] = None) -> crl.TbsCertList:
         extensions = [
             crl.TBSCertListExtension({
                 'extn_id': 'crl_number', 'extn_value': core.Integer(crl_number)

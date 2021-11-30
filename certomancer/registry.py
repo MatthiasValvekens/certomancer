@@ -1,5 +1,6 @@
 import abc
 import copy
+import enum
 import hashlib
 import importlib
 import itertools
@@ -1700,9 +1701,12 @@ class PKIArchitecture:
         self._cert_cache[label] = cert
         return cert
 
-    def check_revocation_status(self, cert_label, at_time: datetime) \
-            -> Optional[RevocationStatus]:
-        spec = self.get_cert_spec(cert_label)
+    def check_revocation_status(self, cert_label, at_time: datetime,
+                                is_ac=False) -> Optional[RevocationStatus]:
+        spec = (
+            self.get_attr_cert_spec(cert_label) if is_ac
+            else self.get_cert_spec(cert_label)
+        )
         revo = spec.revocation
         if revo is not None and revo.revoked_since <= at_time:
             return revo
@@ -1722,6 +1726,13 @@ class PKIArchitecture:
             )
         return labels[0]
 
+    def _format_revo(self, serial: int, revo: RevocationStatus):
+        exts = [
+            ext.to_asn1(self, crl.CRLEntryExtension)
+            for ext in revo.crl_entry_extensions
+        ]
+        return revo.to_crl_entry_asn1(serial, exts)
+
     def get_revoked_certs_at_time(self, issuer_label: EntityLabel,
                                   at_time: datetime):
         labels = self._cert_labels_by_issuer[issuer_label]
@@ -1729,11 +1740,20 @@ class PKIArchitecture:
             revo = self.check_revocation_status(cert_label, at_time=at_time)
             cert = self.get_cert(cert_label)
             if revo is not None:
-                exts = [
-                    ext.to_asn1(self, crl.CRLEntryExtension)
-                    for ext in revo.crl_entry_extensions
-                ]
-                yield revo.to_crl_entry_asn1(cert.serial_number, exts)
+                yield self._format_revo(cert.serial_number, revo)
+
+    def get_revoked_attr_certs_at_time(self, issuer_label: EntityLabel,
+                                       at_time: datetime):
+        labels = self._ac_labels_by_issuer[issuer_label]
+        for cert_label in labels:
+            revo = self.check_revocation_status(
+                cert_label, at_time=at_time, is_ac=True
+            )
+            cert = self.get_attr_cert(cert_label)
+            if revo is not None:
+                yield self._format_revo(
+                    cert['ac_info']['serial_number'].native, revo
+                )
 
 
 @dataclass(frozen=True)
@@ -1907,6 +1927,44 @@ def _parse_extension_settings(sett_dict, sett_key):
         return []
 
 
+@enum.unique
+class CRLType(enum.Enum):
+    """
+    Type of CRL. Determines flags in the issuing distribution point extension.
+
+    Note: Certomancer internally does not distinguish between user certs and
+    CA certs, so these will be treated uniformly.
+
+    Note: RFC 5755 bans AAs from acting as CAs, so in principle AA-backed CRLs
+    should not intersect with CA-backed ones in a well-managed PKI/PMI
+    infrastructure (unless CRLs are delegated).
+    However, Certomancer will still allow you to mix and match.
+    """
+
+    USER_ONLY = 'user-only'
+    """
+    Include only user certs.
+    """
+
+    CA_ONLY = 'ca-only'
+    """
+    Include only CA certs.
+    """
+
+    AC_ONLY = 'ac-only'
+    """
+    Include only attribute certs.
+    """
+
+    MIXED = 'mixed'
+    """
+    Unspecified.
+    """
+    # TODO mixed CRLs would be interesting for edge case testing
+    #  but for that to work well we need to support generating indirect
+    #  CRLs properly first (IDP extension management etc.)
+
+
 @dataclass(frozen=True)
 class CRLRepoServiceInfo(ServiceInfo):
     """
@@ -1968,6 +2026,11 @@ class CRLRepoServiceInfo(ServiceInfo):
     List of additional CRL extensions.
     """
 
+    crl_type: CRLType = CRLType.MIXED
+    """
+    Type of CRL.
+    """
+
     @classmethod
     def process_entries(cls, config_dict):
         try:
@@ -1977,6 +2040,10 @@ class CRLRepoServiceInfo(ServiceInfo):
             pass
         try:
             config_dict.setdefault('signing_key', config_dict['for_issuer'])
+        except KeyError:
+            pass
+        try:
+            config_dict['crl_type'] = CRLType(config_dict['crl_type'])
         except KeyError:
             pass
 
@@ -1997,6 +2064,18 @@ class CRLRepoServiceInfo(ServiceInfo):
         return url_distribution_point(
             self.latest_external_url, self.extra_urls
         )
+
+    def format_idp(self):
+        result = url_distribution_point(
+            self.latest_external_url, self.extra_urls
+        )
+        if self.crl_type == CRLType.AC_ONLY:
+            result['only_contains_attribute_certs'] = True
+        elif self.crl_type == CRLType.CA_ONLY:
+            result['only_contains_ca_certs'] = True
+        elif self.crl_type == CRLType.USER_ONLY:
+            result['only_contains_user_certs'] = True
+        return result
 
     def resolve_issuer_cert(self, arch: 'PKIArchitecture') -> CertLabel:
         return self.issuer_cert or \
@@ -2463,15 +2542,23 @@ class ServiceRegistry:
             extra_crl_extensions=extra_extensions
         )
 
-        revoked = list(
-            self.pki_arch.get_revoked_certs_at_time(
-                issuer_label=crl_info.for_issuer, at_time=this_update
+        revoked = []
+        if crl_info.crl_type != CRLType.AC_ONLY:
+            revoked.extend(
+                self.pki_arch.get_revoked_certs_at_time(
+                    issuer_label=crl_info.for_issuer, at_time=this_update
+                )
             )
-        )
+        if crl_info.crl_type not in (CRLType.CA_ONLY, CRLType.USER_ONLY):
+            revoked.extend(
+                self.pki_arch.get_revoked_attr_certs_at_time(
+                    issuer_label=crl_info.for_issuer, at_time=this_update
+                )
+            )
         return builder.build_crl(
             crl_number=number, this_update=this_update,
             next_update=next_update, revoked_certs=revoked,
-            distpoint=crl_info.format_distpoint()
+            distpoint=crl_info.format_idp()
         )
 
     def get_cert_from_repo(self, repo_label: ServiceLabel,
