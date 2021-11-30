@@ -192,6 +192,37 @@ def test_ocsp(requests_mock, time, expected):
         assert status == expected
 
 
+@pytest.mark.parametrize(
+    "time, expected", [
+        ('2020-11-05', 'good'),
+        ('2020-12-05', 'revoked')
+    ]
+)
+def test_aa_ocsp(requests_mock, time, expected):
+    cfg = CertomancerConfig.from_file(
+        'tests/data/with-services.yml', 'tests/data'
+    )
+
+    arch = cfg.get_pki_arch(ArchLabel('testing-ca-with-aa'))
+
+    setup = ServiceSetup(cfg, arch, illusionist.Illusionist(pki_arch=arch))
+    setup.illusionist.register(requests_mock)
+
+    with open('tests/data/test-ac-ocsp-req.der', 'rb') as req_in:
+        req_data = req_in.read()
+
+    with freeze_time(time):
+        response = requests.post(
+            "http://test.test/testing-ca-with-aa/ocsp/role-aa", data=req_data
+        )
+        resp: ocsp.OCSPResponse = ocsp.OCSPResponse.load(response.content)
+        assert resp['response_status'].native == 'successful'
+
+        rdata = resp['response_bytes']['response'].parsed['tbs_response_data']
+        status = rdata['responses'][0]['cert_status'].name
+        assert status == expected
+
+
 @freeze_time('2020-11-01')
 @pytest.mark.parametrize('fname', ['tests/data/tsa-ocsp-req.der',
                                    'tests/data/tsa-bad-ocsp-req.der'])

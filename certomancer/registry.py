@@ -1380,8 +1380,11 @@ class PKIArchitecture:
             ) from e
 
     def find_cert_label(self, cid: ocsp.CertId,
-                        issuer_label: Optional[EntityLabel] = None) \
-            -> CertLabel:
+                        issuer_label: Optional[EntityLabel] = None,
+                        is_ac=False) -> CertLabel:
+        by_iss_map = (
+            self._ac_labels_by_issuer if is_ac else self._cert_labels_by_issuer
+        )
         # FIXME this doesn't really scale
         serial = cid['serial_number'].native
         if issuer_label is None:
@@ -1390,7 +1393,7 @@ class PKIArchitecture:
             hash_algo = cid['hash_algorithm']['algorithm'].native
             try:
                 issuer_label = next(
-                    lbl for lbl in self._cert_labels_by_issuer.keys()
+                    lbl for lbl in by_iss_map.keys()
                     if entities.get_name_hash(lbl, hash_algo) == name_hash
                 )
             except StopIteration as e:
@@ -1398,11 +1401,20 @@ class PKIArchitecture:
                     f"Could not find a suitable issuer for CertID {cid.native}."
                 ) from e
 
-        specs = self._cert_labels_by_issuer[issuer_label]
+        specs = by_iss_map[issuer_label]
+
+        def _lbl_to_serial(lbl: CertLabel):
+            if is_ac:
+                cert = self.get_attr_cert(lbl)
+                return cert['ac_info']['serial_number'].native
+            else:
+                cert = self.get_cert(lbl)
+                return cert.serial_number
+
         try:
             return next(
                 lbl for lbl in specs
-                if self.get_cert(lbl).serial_number == serial
+                if _lbl_to_serial(lbl) == serial
             )
         except StopIteration as e:
             raise CertomancerServiceError(
@@ -1862,6 +1874,12 @@ class OCSPResponderServiceInfo(ServiceInfo):
     Certomancer.
     """
 
+    is_aa_responder: bool = False
+    """
+    Flag indicating whether the OCSP responder queries attribute certificates
+    or regular certificates.
+    """
+
     @classmethod
     def process_entries(cls, config_dict):
         try:
@@ -2157,10 +2175,11 @@ class PluginServiceInfo(ServiceInfo):
 class OCSPInterface(RevocationInfoInterface):
 
     def __init__(self, for_issuer: EntityLabel, pki_arch: PKIArchitecture,
-                 issuer_cert_label: CertLabel):
+                 issuer_cert_label: CertLabel, is_aa_responder: bool = False):
         self.for_issuer = for_issuer
         self.pki_arch = pki_arch
         self.issuer_cert_label = issuer_cert_label
+        self.is_aa_responder = is_aa_responder
 
     def get_issuer_cert(self) -> x509.Certificate:
         return self.pki_arch.get_cert(self.issuer_cert_label)
@@ -2168,9 +2187,11 @@ class OCSPInterface(RevocationInfoInterface):
     def check_revocation_status(self, cid: ocsp.CertId, at_time: datetime) \
             -> Tuple[ocsp.CertStatus, List[ocsp.SingleResponseExtension]]:
         cert_label = self.pki_arch.find_cert_label(
-            cid, issuer_label=self.for_issuer
+            cid, issuer_label=self.for_issuer, is_ac=self.is_aa_responder
         )
-        revo = self.pki_arch.check_revocation_status(cert_label, at_time)
+        revo = self.pki_arch.check_revocation_status(
+            cert_label, at_time, is_ac=self.is_aa_responder
+        )
 
         if revo is None:
             return ocsp.CertStatus('good'), []
@@ -2431,7 +2452,8 @@ class ServiceRegistry:
             at_time=at_time,
             revinfo_interface=OCSPInterface(
                 for_issuer=info.for_issuer, pki_arch=self.pki_arch,
-                issuer_cert_label=issuer_cert_label
+                issuer_cert_label=issuer_cert_label,
+                is_aa_responder=info.is_aa_responder
             ),
             response_extensions=extra_extensions
         )
