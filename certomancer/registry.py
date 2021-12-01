@@ -548,7 +548,8 @@ class AttributePluginRegistry:
         return orig_input
 
     def process_value(self, attr_id: str,
-                      arch: 'PKIArchitecture', spec: SmartValueSpec):
+                      arch: 'PKIArchitecture', spec: SmartValueSpec,
+                      multivalued: bool):
         try:
             proc: AttributePlugin = self._dict[spec.schema]
         except KeyError as e:
@@ -556,10 +557,23 @@ class AttributePluginRegistry:
                 f"There is no registered plugin for the schema "
                 f"'{spec.schema}'."
             ) from e
-        provisioned_value = proc.provision(
-            cms.AttCertAttributeType(attr_id), arch, spec.params
-        )
-        return provisioned_value
+        if multivalued:
+            if not isinstance(spec.params, list):
+                raise ConfigurationError(
+                    "Params for multivalued attribute must be a list."
+                )
+            values = [
+                proc.provision(
+                    cms.AttCertAttributeType(attr_id), arch, inst_params
+                )
+                for inst_params in spec.params
+            ]
+        else:
+            provisioned_value = proc.provision(
+                cms.AttCertAttributeType(attr_id), arch, spec.params
+            )
+            values = [provisioned_value]
+        return values
 
 
 DEFAULT_ATTR_PLUGIN_REGISTRY = attr_plugin_registry \
@@ -918,10 +932,11 @@ class AttrSpec(ConfigurableMixin):
     def to_asn1(self, arch: 'PKIArchitecture'):
         value = self.value
         if value is None and self.smart_value is not None:
-            value = arch.attr_plugin_registry.process_value(
-                self.id, arch, self.smart_value
+            values = arch.attr_plugin_registry.process_value(
+                self.id, arch, self.smart_value, self.multivalued
             )
-        values = value if self.multivalued else [value]
+        else:
+            values = value if self.multivalued else [value]
 
         return cms.AttCertAttribute({
             'type': cms.AttCertAttributeType(self.id), 'values': values
