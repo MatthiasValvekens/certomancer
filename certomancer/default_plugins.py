@@ -7,8 +7,8 @@ from dateutil.parser import parse as parse_dt
 from .config_utils import ConfigurationError, check_config_keys, \
     key_dashes_to_underscores
 from .registry import ExtensionPlugin, PKIArchitecture, \
-    extension_plugin_registry, attr_plugin_registry,\
-    ServiceLabel, CertLabel, EntityRegistry, EntityLabel
+    extension_plugin_registry, attr_plugin_registry, \
+    ServiceLabel, CertLabel, EntityRegistry, EntityLabel, AttributePlugin
 
 __all__ = [
     'CRLDistributionPointsPlugin', 'KeyUsagePlugin', 'AIAUrlPlugin',
@@ -231,14 +231,14 @@ class ACTargetsPlugin(ExtensionPlugin):
 
 
 @attr_plugin_registry.register
-class RoleSyntaxPlugin(ExtensionPlugin):
+class RoleSyntaxPlugin(AttributePlugin):
     schema_label = 'role-syntax'
     extension_type = None
 
-    def provision(self, extn_id, arch: 'PKIArchitecture', params):
+    def provision(self, attr_id, arch: 'PKIArchitecture', params):
         if not isinstance(params, dict):
             raise ConfigurationError(
-                "Parameters for general-names should be specified as a dict"
+                "Parameters for role-syntax should be specified as a dict"
             )
         try:
             name_params = params['name']
