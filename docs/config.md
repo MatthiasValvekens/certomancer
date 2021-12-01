@@ -388,6 +388,95 @@ signer2:
               - {type: email, value: test2@example.com}
 ```
 
+### Defining attribute certificates
+
+Since version `0.7.0`, Certomancer also handles attribute certificates, as defined in X.509 and
+RFC 5755.
+Attribute certificates are defined under the `attr-certs` key in a PKI architecture, in much
+the same way as regular certificates.
+
+An example:
+
+```yaml
+example-attr-cert:
+   holder:
+      name: signer1
+      cert: signer1
+   issuer: aa
+   issuer-cert: role-aa
+   attributes:
+      - id: role
+        smart-value:
+           schema: role-syntax
+           params:
+              name: {type: email, value: alice@example.com}
+   validity:
+      valid-from: "2010-01-01T00:00:00+0000"
+      valid-to: "2030-01-01T00:00:00+0000"
+   extensions:
+      - id: no_rev_avail
+```
+
+Like regular certificates, attribute certificates have an issuer (the attribute authority, or AA).
+In Certomancer configuration, the AA is an entity defined by the label in the `issuer` entry.
+The issuer-related entries all have the same function as in a regular certificate config, with
+the role of the CA replaced by the AA as the issuing authority.
+
+Similarly, attribute certificates can also have extensions. The extension mechanism is the same
+as for regular certificates. The configuration for revocation simulation and the certificate's
+validity period also remains the same.
+
+The two biggest differences are the following:
+
+ - An attribute certificate doesn't have a _subject_, but a _holder_. In other words, it is assumed
+   that the holder is already identified in some other way (usually by a regular public-key
+   certificate issued by a CA). This conceptual difference is reflected in the encoding, and also
+   in Certomancer's configuration.
+ - As the name implies, attribute certificates assert that their holder has certain _attributes_,
+   which of course have to be encoded in the certificate.
+
+We discuss these in the next two sections.
+
+
+#### Configuring the holder
+
+The `holder` entry in an attribute certificate config dictionary contains entries that _define_
+the holder and its key, and entries that define how it's encoded in an ASN.1 value.
+
+
+| Key | Type | Meaning |
+| --- | --- | --- |
+| `name` | entity label | Label of the holding entity (required). |
+| `cert` | cert label | Label of the holding entity's certificate (can be inferred if unique). |
+| `key` | key label | Label of the holder's key. |
+| `include_base_cert_id` | boolean | Include the `baseCertificateID` field in the holder value. Default `True`. |
+| `include_entity_name` | boolean | Include the `entityName` field in the holder value. Default `False`. |
+| `include_object_digest_info` | boolean | Include the `objectDigestInfo` field in the holder value. Default `False`. |
+| `digested_object_type` | `cms.DigestedObjectType` value | Type of the object used in the `objectDigestInfo`, if present. Defaults to `public_key_cert`. |
+| `obj_digest_algorithm` | string | Digest algorithm used in the `objectDigestInfo`, if present. Defaults to `sha256`. |
+
+Note that RFC 5755 recommends sticking with one of `baseCertificateID`, `entityName` or
+`objectDigestInfo`. Certomancer doesn't enforce this recommendation, but by default only
+`baseCertificateID` is used.
+
+
+#### Configuring attributes
+
+Attribute definitions work very similarly to extensions, with some differences.
+
+
+| Key | Type | Meaning |
+| --- | --- | --- |
+| `id` |string| Mandatory; given by an OID string, or the name of an attribute type known to `asn1crypto` (see `cms.AttCertAttributeType`).|
+| `value` |depends| Direct specification of the extension's value, to be fed directly to the `asn1crypto` class that implements the attribute.|
+| `smart-value` |dictionary| Indicates that the value of the certificate extension is to be provided by an attribute plugin (more details below). |
+| `multivalued` |boolean| Indicates whether the `value` entry should be interpreted as a set instead of a single value. Defaults to `False`. |
+
+Attribute plugins for use with `smart-value` can be defined by extending `AttributePlugin`
+and registering the subclass in the relevant attribute plugin registry.
+When `multivalued` is `True`, the plugin will be invoked once for every set of parameters.
+
+
 ### Extension plugins available by default
 
 #### Key usage
@@ -570,6 +659,30 @@ Simple plugin that parses ISO 8601 timestamp strings into `GeneralizedTime` obje
   smart-value:
     schema: iso-time
     params: "2020-11-30T00:00:00+0000"
+```
+
+### Attribute plugins available by default
+
+#### Role syntax plugin
+
+| **Schema label** | `role-syntax` |
+| --- | --- |
+| **Params type** | dictionary |
+
+Plugin that represents roles. The parameter dictionary must contain a `name` key identifying the
+role's name as a `GeneralName` (see `general-names` extension plugin) and can optionally contain
+an `authority` field, which is a list of `GeneralName` configs.
+
+**Example**
+
+```yaml
+- id: role
+  multivalued: true
+  smart-value:
+     schema: role-syntax
+     params:
+        - name: {type: email, value: alice@example.com}
+        - name: {type: email, value: alice2@example.com}
 ```
 
 ### Defining service endpoints
