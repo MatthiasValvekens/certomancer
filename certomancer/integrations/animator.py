@@ -80,6 +80,7 @@ class ArchServicesDescription:
     ocsp: list
     crl: list
     cert_repo: list
+    attr_cert_repo: list
     certs_by_issuer: Dict[EntityLabel, List[AnimatorCertInfo]]
 
     @classmethod
@@ -92,6 +93,7 @@ class ArchServicesDescription:
             ocsp=services.list_ocsp_responders(),
             crl=services.list_crl_repos(),
             cert_repo=services.list_cert_repos(),
+            attr_cert_repo=services.list_attr_cert_repos(),
             certs_by_issuer=cert_info,
         )
 
@@ -137,8 +139,15 @@ def service_rules():
         Rule('/<arch>/certs/<label>/ca.<ext:use_pem>',
              defaults={'cert_label': None}, endpoint='certs', methods=('GET',)),
         # Cert repo generic pattern
-        Rule(f"/<arch>/certs/<label>/issued/<cert_label>.<ext:use_pem>",
-             endpoint='certs', methods=('GET',))
+        Rule('/<arch>/certs/<label>/issued/<cert_label>.<ext:use_pem>',
+             endpoint='certs', methods=('GET',)),
+        # Attr cert repo authority pattern
+        Rule('/<arch>/attr-certs/<label>/aa.<ext:use_pem>',
+             defaults={'cert_label': None},
+             endpoint='attr-certs', methods=('GET',)),
+        # Attr cert repo generic pattern
+        Rule("/<arch>/attr-certs/<label>/issued/<cert_label>.attr.<ext:use_pem>",
+             endpoint='attr-certs', methods=('GET',)),
     ]
 
 
@@ -201,6 +210,7 @@ class Animator:
             'tsa': self.serve_timestamp_response,
             'crls': self.serve_crl,
             'certs': self.serve_cert,
+            'attr-certs': self.serve_attr_cert,
             'plugin': self.serve_plugin
         }
 
@@ -283,6 +293,41 @@ class Animator:
         data = cert.dump()
         if use_pem:
             data = pem.armor('certificate', data)
+        return Response(data, mimetype=mime)
+
+    def serve_attr_cert(self, _request: Request, *, label: str, arch: str,
+                        cert_label: Optional[str], use_pem):
+        pki_arch = self.architectures[ArchLabel(arch)]
+        svc_reg = pki_arch.service_registry
+        svc_label = ServiceLabel(label)
+        if cert_label is None:
+            mime = (
+                'application/x-pem-file' if use_pem else 'application/pkix-cert'
+            )
+            # retrieve the AA's certificate
+            cert = pki_arch.get_cert(
+                svc_reg.determine_repo_issuer_cert(
+                    svc_reg.get_attr_cert_repo_info(svc_label),
+                )
+            )
+        else:
+            mime = (
+                'application/x-pem-file'
+                if use_pem else 'application/pkix-attr-cert'
+            )
+            cert = svc_reg.get_attr_cert_from_repo(
+                svc_label, CertLabel(cert_label)
+            )
+        if cert is None:
+            raise NotFound()
+
+        data = cert.dump()
+        if use_pem:
+            data = pem.armor(
+                'attribute certificate'
+                if cert_label is not None else 'certificate',
+                data
+            )
         return Response(data, mimetype=mime)
 
     def serve_plugin(self, request: Request, plugin_label: str, *, label: str,

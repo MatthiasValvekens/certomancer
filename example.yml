@@ -259,6 +259,9 @@ pki-architectures:
         interm:
           for-issuer: interm
           publish-issued-certs: no
+      attr-cert-repo:
+        role-aa:
+          for-issuer: aa
       time-stamping:
         tsa:
           signing-key: tsa

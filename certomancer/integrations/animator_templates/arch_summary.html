@@ -137,5 +137,21 @@
             <p>No certificate repositories</p>
         {% endif %}
     </section>
+    <section>
+        <h3>Certificate repositories</h3>
+        {% if arch_services.attr_cert_repo %}
+            <ul>
+                {% for repo in arch_services.attr_cert_repo %}
+                    <li>
+                        AA cert in
+                        <a href="{{ repo.issuer_cert_full_relative_url }}">{{ repo.label }}</a>
+                        (<a href="{{ repo.issuer_cert_external_url }}">external</a>)
+                    </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p>No attribute certificate repositories</p>
+        {% endif %}
+    </section>
     <hr/>
 </article>

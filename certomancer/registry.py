@@ -2129,10 +2129,14 @@ class CRLRepoServiceInfo(ServiceInfo):
 
 
 @dataclass(frozen=True)
-class CertRepoServiceInfo(ServiceInfo):
-    base_url = '/certs'
+class BaseCertRepoServiceInfo(ServiceInfo):
     for_issuer: EntityLabel
     issuer_cert: Optional[CertLabel] = None
+
+
+@dataclass(frozen=True)
+class CertRepoServiceInfo(BaseCertRepoServiceInfo):
+    base_url = '/certs'
     publish_issued_certs: bool = True
 
     @staticmethod
@@ -2164,6 +2168,57 @@ class CertRepoServiceInfo(ServiceInfo):
 
     def issued_cert_url(self, label: CertLabel, use_pem=True):
         path = self.issued_cert_url_path(label=label, use_pem=use_pem)
+        return f"{self.url}/{path}"
+
+
+# TODO Add to Illusionist
+
+@dataclass(frozen=True)
+class AttrCertRepoServiceInfo(BaseCertRepoServiceInfo):
+    base_url = '/attr-certs'
+
+    # TODO implement the query functionality for this
+    publish_by_holder: bool = True
+
+    @staticmethod
+    def issuer_cert_file_name(use_pem=True):
+        fname = f"aa.{'cert.pem' if use_pem else 'crt'}"
+        return f"{fname}"
+
+    @classmethod
+    def issued_cert_url_path(cls, label: CertLabel, use_pem=True):
+        fname = f"{label}.{'attr.cert.pem' if use_pem else 'attr.crt'}"
+        return f"issued/{fname}"
+
+    @classmethod
+    def by_holder_url_path(cls, label: EntityLabel, use_pem=True):
+        fname = f"{label}-all.{'attr.cert.pem' if use_pem else 'attr.p7b'}"
+        return f"by-holder/{fname}"
+
+    def issuer_cert_url(self, use_pem=True):
+        fname = AttrCertRepoServiceInfo.issuer_cert_file_name(use_pem=use_pem)
+        return f"{self.url}/{fname}"
+
+    @property
+    def issuer_cert_external_url(self):
+        fname = AttrCertRepoServiceInfo.issuer_cert_file_name(use_pem=True)
+        return f"{self.url}/{fname}"
+
+    @property
+    def issuer_cert_full_relative_url(self):
+        fname = AttrCertRepoServiceInfo.issuer_cert_file_name(use_pem=True)
+        return f"{self.full_relative_url}/{fname}"
+
+    def issued_cert_url(self, label: CertLabel, use_pem=True):
+        path = AttrCertRepoServiceInfo.issued_cert_url_path(
+            label=label, use_pem=use_pem
+        )
+        return f"{self.url}/{path}"
+
+    def issued_to_holder_url(self, label: EntityLabel, use_pem=True):
+        path = AttrCertRepoServiceInfo.by_holder_url_path(
+            label=label, use_pem=use_pem
+        )
         return f"{self.url}/{path}"
 
 
@@ -2399,7 +2454,8 @@ class ServiceRegistry:
 
         check_config_keys(
             'services', (
-                'ocsp', 'crl-repo', 'cert-repo', 'time-stamping', 'plugin'
+                'ocsp', 'crl-repo', 'cert-repo', 'attr-cert-repo',
+                'time-stamping', 'plugin'
             ),
             service_config
         )
@@ -2418,6 +2474,11 @@ class ServiceRegistry:
             label: CertRepoServiceInfo.from_config(cfg)
             for label, cfg
             in _gen_svc_config(service_config.get('cert-repo', {}))
+        }
+        self._attr_cert_repo = {
+            label: AttrCertRepoServiceInfo.from_config(cfg)
+            for label, cfg
+            in _gen_svc_config(service_config.get('attr-cert-repo', {}))
         }
         self._tsa = {
             label: TSAServiceInfo.from_config(cfg)
@@ -2506,8 +2567,21 @@ class ServiceRegistry:
                 f"labelled '{label}'."
             ) from e
 
+    def get_attr_cert_repo_info(self, label: ServiceLabel) \
+            -> CertRepoServiceInfo:
+        try:
+            return self._attr_cert_repo[label]
+        except KeyError as e:
+            raise CertomancerObjectNotFoundError(
+                f"There is no registered attribute certificate repository "
+                f"labelled '{label}'."
+            ) from e
+
     def list_cert_repos(self) -> List[CertRepoServiceInfo]:
         return list(self._cert_repo.values())
+
+    def list_attr_cert_repos(self) -> List[AttrCertRepoServiceInfo]:
+        return list(self._attr_cert_repo.values())
 
     def get_tsa_info(self, label: ServiceLabel) -> TSAServiceInfo:
         try:
@@ -2611,6 +2685,28 @@ class ServiceRegistry:
             distpoint=crl_info.format_idp()
         )
 
+    def determine_repo_issuer_cert(self, repo_info: BaseCertRepoServiceInfo):
+        # return the issuer's certificate
+        cert_label = repo_info.issuer_cert
+        if cert_label is None:
+            issuer = repo_info.for_issuer
+            # TODO: Should we return None if the issuer cert can't be
+            #  determined, or let the error propagate?
+            #  Choosing the latter for now.
+            cert_label = self.pki_arch.get_unique_cert_for_entity(issuer)
+        return cert_label
+
+    def _check_repo_membership(self, repo_info: BaseCertRepoServiceInfo,
+                               cert_label: CertLabel, is_attr=False):
+        # check if the cert in question actually belongs to the repo
+        # (i.e. whether it is issued by the right entity)
+        if is_attr:
+            cert_spec = self.pki_arch.get_attr_cert_spec(cert_label)
+        else:
+            cert_spec = self.pki_arch.get_cert_spec(cert_label)
+
+        return cert_spec.issuer == repo_info.for_issuer
+
     def get_cert_from_repo(self, repo_label: ServiceLabel,
                            cert_label: Optional[CertLabel] = None) \
             -> Optional[x509.Certificate]:
@@ -2618,21 +2714,19 @@ class ServiceRegistry:
         repo_info = self.get_cert_repo_info(repo_label)
         arch = self.pki_arch
         if cert_label is None:
-            # return the issuer's certificate
-            cert_label = repo_info.issuer_cert
-            if cert_label is None:
-                issuer = repo_info.for_issuer
-                # TODO: Should we return None if the issuer cert can't be
-                #  determined, or let the error propagate?
-                #  Choosing the latter for now.
-                cert_label = arch.get_unique_cert_for_entity(issuer)
-        else:
-            # check if the cert in question actually belongs to the repo
-            # (i.e. whether it is issued by the right entity)
-            cert_spec = arch.get_cert_spec(cert_label)
-            if cert_spec.issuer != repo_info.for_issuer:
-                return None
+            cert_label = self.determine_repo_issuer_cert(repo_info)
+        elif not self._check_repo_membership(repo_info, cert_label):
+            return None
         return arch.get_cert(cert_label)
+
+    def get_attr_cert_from_repo(self, repo_label: ServiceLabel,
+                                cert_label: CertLabel) \
+            -> Optional[cms.AttributeCertificateV2]:
+
+        repo_info = self.get_attr_cert_repo_info(repo_label)
+        if not self._check_repo_membership(repo_info, cert_label, is_attr=True):
+            return None
+        return self.pki_arch.get_attr_cert(cert_label)
 
     def invoke_plugin(self, plugin_label: PluginLabel,
                       label: ServiceLabel, request: bytes,
