@@ -208,6 +208,23 @@ pki-architectures:
         revocation:
           revoked-since: "2020-12-01T00:00:00+0000"
           reason: key_compromise
+      unrevokable-test-ac:
+        holder:
+          name: signer1
+          cert: signer1
+        issuer: aa
+        issuer-cert: role-aa
+        attributes:
+          - id: role
+            smart-value:
+              schema: role-syntax
+              params:
+                name: {type: email, value: alice@example.com}
+        validity:
+          valid-from: "2010-01-01T00:00:00+0000"
+          valid-to: "2030-01-01T00:00:00+0000"
+        extensions:
+          - id: no_rev_avail
     services:
       ocsp:
         interm:
