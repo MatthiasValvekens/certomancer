@@ -280,3 +280,17 @@ def test_demo_plugin(requests_mock):
         decrypted_key, encrypted_content_bytes, iv
     )
     assert decrypted_payload == payload
+
+
+def test_svc_template_result():
+    cfg = CertomancerConfig.from_file(
+        'tests/data/with-services.yml', 'tests/data'
+    )
+
+    arch = cfg.get_pki_arch(ArchLabel('testing-ca-with-aa'))
+    # new OCSP responder
+    arch.service_registry.get_ocsp_info(ServiceLabel('role-aa'))
+    # inherited OCSP responder
+    arch.service_registry.get_ocsp_info(ServiceLabel('interm'))
+    # no new TSAs, but this should still work
+    arch.service_registry.get_tsa_info(ServiceLabel('tsa'))
