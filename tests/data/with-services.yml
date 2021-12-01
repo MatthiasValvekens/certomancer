@@ -71,6 +71,17 @@ pki-architectures:
         revocation:
           revoked-since: "2020-12-01T00:00:00+0000"
           reason: key_compromise
+        extensions:
+          - id: crl_distribution_points
+            smart-value:
+              schema: crl-dist-url
+              params:
+                crl-repo-names: [role-aa]
+          - id: authority_information_access
+            smart-value:
+              schema: aia-urls
+              params:
+                ocsp-responder-names: [role-aa]
     services:
       crl-repo:
         role-aa:

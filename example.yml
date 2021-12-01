@@ -194,6 +194,17 @@ pki-architectures:
         validity:
           valid-from: "2010-01-01T00:00:00+0000"
           valid-to: "2030-01-01T00:00:00+0000"
+        extensions:
+          - id: crl_distribution_points
+            smart-value:
+              schema: crl-dist-url
+              params:
+                crl-repo-names: [role-aa]
+          - id: authority_information_access
+            smart-value:
+              schema: aia-urls
+              params:
+                ocsp-responder-names: [role-aa]
         revocation:
           revoked-since: "2020-12-01T00:00:00+0000"
           reason: key_compromise
@@ -203,6 +214,11 @@ pki-architectures:
           for-issuer: interm
           responder-cert: interm-ocsp
           signing-key: interm-ocsp
+        role-aa:
+          for-issuer: aa
+          responder-cert: role-aa
+          signing-key: aa
+          is-aa-responder: true
       crl-repo:
         root:
           for-issuer: root
