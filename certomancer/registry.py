@@ -1192,10 +1192,10 @@ class PKIArchitecture:
 
     # These config keys will be merged when an architecture is templated
     MULTIVAL_CONFIG_KEYS = (
-        'entities', 'certs', 'services', 'entity-defaults',
+        'entities', 'certs', 'entity-defaults',
         'attr-certs'
     )
-    CONFIG_KEYS = ('keyset', *MULTIVAL_CONFIG_KEYS)
+    CONFIG_KEYS = ('keyset', 'services', *MULTIVAL_CONFIG_KEYS)
 
     @classmethod
     def build_architecture(cls, arch_label: ArchLabel, cfg: dict,
@@ -1299,7 +1299,20 @@ class PKIArchitecture:
                     # update effective config with values to merge
                     orig_values.update(extra_values)
 
-                # then clobber the rest (all the multivalued keys should have
+                # ...then merge services...
+                extra_services = cfg.pop('services', {})
+                try:
+                    svc_dict = template_cfg['services']
+                except KeyError:
+                    template_cfg['services'] = svc_dict = {}
+                for svc_type, extra_svc_defs in extra_services.items():
+                    try:
+                        orig_svc_defs = svc_dict[svc_type]
+                    except KeyError:
+                        svc_dict[svc_type] = orig_svc_defs = {}
+                    orig_svc_defs.update(extra_svc_defs)
+
+                # ...then clobber the rest (all the multivalued keys should have
                 # been deleted by now)
                 template_cfg.update(cfg)
                 cfg = template_cfg

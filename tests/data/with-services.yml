@@ -78,20 +78,7 @@ pki-architectures:
           signing-key: aa
           simulated-update-schedule: "P30D"
           crl-type: ac-only
-        # FIXME auto-merge/inherit these in the templating handler
-        root:
-          for-issuer: root
-          signing-key: root
-          simulated-update-schedule: "P90D"
-        interm:
-          for-issuer: interm
-          signing-key: interm
-          simulated-update-schedule: "P30D"
       ocsp:
-        interm:
-          for-issuer: interm
-          responder-cert: interm-ocsp
-          signing-key: interm-ocsp
         role-aa:
           for-issuer: aa
           responder-cert: role-aa
