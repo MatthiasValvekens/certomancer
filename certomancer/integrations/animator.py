@@ -18,6 +18,7 @@ from certomancer.crypto_utils import pyca_cryptography_present
 from certomancer.registry import (
     PKIArchitecture, ServiceLabel, CertLabel,
     CertomancerObjectNotFoundError, CertomancerConfig, ArchLabel, EntityLabel,
+    AttributeCertificateSpec,
     CertificateSpec, PluginLabel, PluginServiceRequestError
 )
 from certomancer.services import CertomancerServiceError
@@ -74,6 +75,26 @@ class AnimatorCertInfo:
 
 
 @dataclass(frozen=True)
+class AnimatorAttrCertInfo:
+    spec: AttributeCertificateSpec
+    holder_dn: str
+
+    @staticmethod
+    def gather_cert_info(pki_arch: PKIArchitecture):
+
+        def _for_attr_cert(spec: AttributeCertificateSpec):
+            return AnimatorAttrCertInfo(
+                spec=spec,
+                holder_dn=pki_arch.entities[spec.holder.name].human_friendly
+            )
+
+        return {
+            iss: list(map(_for_attr_cert, issd_certs))
+            for iss, issd_certs in pki_arch.enumerate_attr_certs_by_issuer()
+        }
+
+
+@dataclass(frozen=True)
 class ArchServicesDescription:
     arch: ArchLabel
     tsa: list
@@ -82,11 +103,13 @@ class ArchServicesDescription:
     cert_repo: list
     attr_cert_repo: list
     certs_by_issuer: Dict[EntityLabel, List[AnimatorCertInfo]]
+    attr_certs_by_issuer: Dict[EntityLabel, List[AnimatorCertInfo]]
 
     @classmethod
     def compile(cls, pki_arch: PKIArchitecture):
         services = pki_arch.service_registry
         cert_info = AnimatorCertInfo.gather_cert_info(pki_arch)
+        attr_cert_info = AnimatorAttrCertInfo.gather_cert_info(pki_arch)
         return ArchServicesDescription(
             pki_arch.arch_label,
             tsa=services.list_time_stamping_services(),
@@ -95,6 +118,7 @@ class ArchServicesDescription:
             cert_repo=services.list_cert_repos(),
             attr_cert_repo=services.list_attr_cert_repos(),
             certs_by_issuer=cert_info,
+            attr_certs_by_issuer=attr_cert_info
         )
 
 
@@ -111,6 +135,8 @@ def web_ui_rules():
             # of a better term)
             Rule('/any-cert/<arch>/<label>.<ext:use_pem>',
                  endpoint='any-cert', methods=('GET',)),
+            Rule('/any-attr-cert/<arch>/<label>.attr.<ext:use_pem>',
+                 endpoint='any-attr-cert', methods=('GET',)),
             Rule('/cert-bundle/<arch>', endpoint='cert-bundle',
                  methods=('GET',)),
             Rule('/pfx-download/<arch>', endpoint='pfx-download',
@@ -217,8 +243,9 @@ class Animator:
         if with_web_ui:
             self.index_html = gen_index(iter(architectures))
             handlers.update({
-                'any-cert': self.serve_any_cert, 'cert-bundle': self.serve_zip,
-                'pfx-download': self.serve_pfx
+                'any-cert': self.serve_any_cert,
+                'any-attr-cert': self.serve_any_attr_cert,
+                'cert-bundle': self.serve_zip, 'pfx-download': self.serve_pfx
             })
 
         self._handlers = handlers
@@ -276,6 +303,20 @@ class Animator:
         data = cert.dump()
         if use_pem:
             data = pem.armor('certificate', data)
+        return Response(data, mimetype=mime)
+
+    def serve_any_attr_cert(self, _request: Request, *,
+                            arch: str, label: str, use_pem):
+        mime = (
+            'application/x-pem-file'
+            if use_pem else 'application/pkix-attr-cert'
+        )
+        pki_arch = self.architectures[ArchLabel(arch)]
+        cert = pki_arch.get_attr_cert(CertLabel(label))
+
+        data = cert.dump()
+        if use_pem:
+            data = pem.armor('attribute certificate', data)
         return Response(data, mimetype=mime)
 
     def serve_cert(self, _request: Request, *, label: str, arch: str,

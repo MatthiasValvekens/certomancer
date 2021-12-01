@@ -1469,6 +1469,11 @@ class PKIArchitecture:
         for iss_label, issd_certs in self._cert_labels_by_issuer.items():
             yield iss_label, map(self.get_cert_spec, issd_certs)
 
+    def enumerate_attr_certs_by_issuer(self) \
+            -> Iterable[Tuple[EntityLabel, Iterable[AttributeCertificateSpec]]]:
+        for iss_label, issd_certs in self._ac_labels_by_issuer.items():
+            yield iss_label, map(self.get_attr_cert_spec, issd_certs)
+
     def get_chain(self, cert_label: CertLabel) -> Iterable[CertLabel]:
         # TODO support different chaining modes
         #  (e.g. until a cert in a certain list of roots, or until a cert

@@ -22,6 +22,25 @@
         {% endfor %}
     </section>
     <section>
+        <h3>Attribute certificates by issuer</h3>
+        {% for iss in arch_services.attr_certs_by_issuer %}
+            <details>
+                <summary>{{ iss }}</summary>
+                <ul>
+                    {% for cert_info in arch_services.attr_certs_by_issuer[iss] %}
+                        <li>
+                            {{ cert_info.spec.label }}<br/>
+                            <i>{{ cert_info.holder_dn }}</i><br/>
+                            <a href="{{ web_ui_prefix }}/any-attr-cert/{{ arch_services.arch }}/{{ cert_info.spec.label }}.attr.cert.pem">PEM</a>
+                            &ensp;
+                            <a href="{{ web_ui_prefix }}/any-attr-cert/{{ arch_services.arch }}/{{ cert_info.spec.label }}.attr.crt">DER</a>
+                        </li>
+                    {% endfor %}
+                </ul>
+            </details>
+        {% endfor %}
+    </section>
+    <section>
         {% if pfx_possible %}
             <h3>Download PKCS&nbsp;#12 (.pfx) bundles</h3>
             <p>
