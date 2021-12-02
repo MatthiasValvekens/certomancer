@@ -45,6 +45,7 @@ There's a demo on asciinema.org, demonstrating some of the core features of Cert
  * Declarative, YAML-based configuration.
  * Minimal input validation, so you can generate deliberately broken certificates if you need to.
  * ``requests-mock`` integration.
+ * Attribute certificate support (`0.7.0` and up)
  * Ultra-lightweight WSGI application: the Certomancer Animator serves CRLs, OCSP responses, 
    timestamps and more. This component requires Werkzeug, and optionally Jinja2 for the index view.
    Other than a web server and WSGI application server, there are no application dependencies.
