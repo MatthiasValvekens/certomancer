@@ -1474,6 +1474,18 @@ class PKIArchitecture:
         for iss_label, issd_certs in self._ac_labels_by_issuer.items():
             yield iss_label, map(self.get_attr_cert_spec, issd_certs)
 
+    def enumerate_attr_certs_of_holder(self, holder_name: EntityLabel,
+                                       issuer: Optional[EntityLabel] = None):
+        # slow, but eh, it'll do
+        if issuer is None:
+            relevant = itertools.chain(*self._ac_labels_by_issuer.values())
+        else:
+            relevant = self._ac_labels_by_issuer[issuer]
+        for ac_label in relevant:
+            ac_spec = self.get_attr_cert_spec(ac_label)
+            if ac_spec.holder.name == holder_name:
+                yield ac_spec
+
     def get_chain(self, cert_label: CertLabel) -> Iterable[CertLabel]:
         # TODO support different chaining modes
         #  (e.g. until a cert in a certain list of roots, or until a cert
@@ -2181,8 +2193,6 @@ class CertRepoServiceInfo(BaseCertRepoServiceInfo):
 @dataclass(frozen=True)
 class AttrCertRepoServiceInfo(BaseCertRepoServiceInfo):
     base_url = '/attr-certs'
-
-    # TODO implement the query functionality for this
     publish_by_holder: bool = True
 
     @staticmethod
@@ -2573,7 +2583,7 @@ class ServiceRegistry:
             ) from e
 
     def get_attr_cert_repo_info(self, label: ServiceLabel) \
-            -> CertRepoServiceInfo:
+            -> AttrCertRepoServiceInfo:
         try:
             return self._attr_cert_repo[label]
         except KeyError as e:

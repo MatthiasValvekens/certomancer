@@ -137,6 +137,8 @@ def web_ui_rules():
                  endpoint='any-cert', methods=('GET',)),
             Rule('/any-attr-cert/<arch>/<label>.attr.<ext:use_pem>',
                  endpoint='any-attr-cert', methods=('GET',)),
+            Rule('/attr-certs-of/<arch>/<entity_label>-all.attr.cert.pem',
+                 endpoint='attr-certs-of', methods=('GET',)),
             Rule('/cert-bundle/<arch>', endpoint='cert-bundle',
                  methods=('GET',)),
             Rule('/pfx-download/<arch>', endpoint='pfx-download',
@@ -174,6 +176,8 @@ def service_rules():
         # Attr cert repo generic pattern
         Rule("/<arch>/attr-certs/<label>/issued/<cert_label>.attr.<ext:use_pem>",
              endpoint='attr-certs', methods=('GET',)),
+        Rule("/<arch>/attr-certs/<label>/by-holder/<entity_label>-all.attr.cert.pem",
+             endpoint='attr-certs-by-holder', methods=('GET',)),
     ]
 
 
@@ -237,6 +241,7 @@ class Animator:
             'crls': self.serve_crl,
             'certs': self.serve_cert,
             'attr-certs': self.serve_attr_cert,
+            'attr-certs-by-holder': self.serve_attr_certs_of_holder,
             'plugin': self.serve_plugin
         }
 
@@ -245,6 +250,7 @@ class Animator:
             handlers.update({
                 'any-cert': self.serve_any_cert,
                 'any-attr-cert': self.serve_any_attr_cert,
+                'attr-certs-of': self.serve_all_attr_certs_of_holder,
                 'cert-bundle': self.serve_zip, 'pfx-download': self.serve_pfx
             })
 
@@ -370,6 +376,44 @@ class Animator:
                 data
             )
         return Response(data, mimetype=mime)
+
+    def _build_attr_cert_payload(self, pki_arch, cert_specs):
+        # TODO support non-PEM with p7b
+        data_buf = BytesIO()
+        for cert_spec in cert_specs:
+            cert = pki_arch.get_attr_cert(cert_spec.label)
+            data_buf.write(
+                pem.armor(
+                    'attribute certificate',
+                    cert.dump()
+                )
+            )
+        data = data_buf.getvalue()
+        if not data:
+            raise NotFound()
+        return data
+
+    def serve_all_attr_certs_of_holder(self, _request: Request, *,
+                                       arch: str, entity_label: str):
+        pki_arch = self.architectures[ArchLabel(arch)]
+        cert_specs = pki_arch.enumerate_attr_certs_of_holder(
+            EntityLabel(entity_label),
+        )
+        data = self._build_attr_cert_payload(pki_arch, cert_specs)
+        return Response(data, mimetype='application/pkix-attr-cert')
+
+    def serve_attr_certs_of_holder(self, _request: Request, *,
+                                   label: str, arch: str, entity_label: str):
+        pki_arch = self.architectures[ArchLabel(arch)]
+        svc_label = ServiceLabel(label)
+        info = pki_arch.service_registry.get_attr_cert_repo_info(svc_label)
+        if not info.publish_by_holder:
+            raise NotFound()
+        cert_specs = pki_arch.enumerate_attr_certs_of_holder(
+            EntityLabel(entity_label), info.for_issuer,
+        )
+        data = self._build_attr_cert_payload(pki_arch, cert_specs)
+        return Response(data, mimetype='application/pkix-attr-cert')
 
     def serve_plugin(self, request: Request, plugin_label: str, *, label: str,
                      arch: str):
