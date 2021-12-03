@@ -211,7 +211,7 @@ class ACTargetsPlugin(ExtensionPlugin):
         return name, is_group
 
     def provision(self, extn_id, arch: 'PKIArchitecture', params):
-        from ._asn1_types import Target, Targets
+        from ._asn1_types import Target, Targets, SequenceOfTargets
         if isinstance(params, list):
             targets = (
                 ACTargetsPlugin._parse_target(arch.entities, t)
@@ -227,7 +227,11 @@ class ACTargetsPlugin(ExtensionPlugin):
             )
             for name, is_group in targets
         ]
-        return [Targets(target_objs)]
+        value = SequenceOfTargets([Targets(target_objs)])
+        # Convert to octet string directly to avoid exposing internal types,
+        # and to avoid internal types clashing with external ones that might
+        # be registered in asn1crypto
+        return core.ParsableOctetString(value.dump())
 
 
 @attr_plugin_registry.register

@@ -149,13 +149,23 @@ def register_attr_cert_patches():
     _make_tag_explicit(cms.SecurityCategory._fields[1])
 
     # patch in attribute certificate extensions
-    x509.ExtensionId._map['2.5.29.55'] = 'target_information'
-    x509.ExtensionId._map['2.5.29.56'] = 'no_rev_avail'
-    x509.ExtensionId._map['1.3.6.1.5.5.7.1.6'] = 'aa_controls'
-    from ._asn1_types import SequenceOfTargets, AAControls
-    x509.Extension._oid_specs['target_information'] = SequenceOfTargets
-    x509.Extension._oid_specs['no_rev_avail'] = core.Null
-    x509.Extension._oid_specs['aa_controls'] = AAControls
+    # Note: we only make these patches so that we can reliably produce the
+    # relevant values, and don't insist on supplying Certomancer's internal
+    # definitions at the Python level if some other library already supplied
+    # them
+    ext_map = x509.ExtensionId._map
+    ext_specs = x509.Extension._oid_specs
+    if '2.5.29.55' not in ext_map:
+        from ._asn1_types import SequenceOfTargets
+        ext_map['2.5.29.55'] = 'target_information'
+        ext_specs['target_information'] = SequenceOfTargets
+    if '2.5.29.56' not in ext_map:
+        ext_map['2.5.29.56'] = 'no_rev_avail'
+        ext_specs['no_rev_avail'] = core.Null
+    if '1.3.6.1.5.5.7.1.6' not in ext_map:
+        from ._asn1_types import AAControls
+        ext_map['1.3.6.1.5.5.7.1.6'] = 'aa_controls'
+        ext_specs['aa_controls'] = AAControls
 
 
 def _defer_to_certvalidator():
