@@ -475,6 +475,7 @@ Attribute definitions work very similarly to extensions, with some differences.
 Attribute plugins for use with `smart-value` can be defined by extending `AttributePlugin`
 and registering the subclass in the relevant attribute plugin registry.
 When `multivalued` is `True`, the plugin will be invoked once for every set of parameters.
+The default set of `AttributePlugin` subclasses is listed further down.
 
 
 ### Extension plugins available by default
@@ -683,6 +684,70 @@ an `authority` field, which is a list of `GeneralName` configs.
      params:
         - name: {type: email, value: alice@example.com}
         - name: {type: email, value: alice2@example.com}
+```
+
+
+#### IETF attribute syntax plugin
+
+| **Schema label** | `ietf-attribute` |
+| --- | --- |
+| **Params type** | dictionary or list |
+
+Plugin that implements the `IetfAttrSyntax` ASN.1 type that is used for a number of attribute types
+in RFC 5755. Its parameters can be supplied as a dictionary or a list. If a dictionary is used,
+the supported keys are `values` and `authority`. The latter is optional. If the parameters are
+supplied as a list, its members will be interpreted as if they were given as arguments for the
+`values` key.
+
+The value of the `authority` key is interpreted as in the `general-names` plugin, if present.
+The constituent values in `values` are, in general, dictionaries with a `type` and `value` key.
+The possible `type`s and their usage are listed below.
+
+| **`type` entry** | **Possible `value`s** | **Description** |
+| --- | --- | --- |
+| `string` | any string | a text string attribute value |
+| `oid` | any dotted OID string | an object identifier attribute value |
+| `octets` | any hexadecimal string | a binary (`OCTET STRING`) attribute value |
+
+A constituent value can also be defined as a bare string (instead of a dictionary with `type` and 
+`value` entries). In this case, the `type` is assumed to be `string`.
+
+
+**Examples**
+
+```yaml
+- id: group
+  smart-value:
+     schema: ietf-attribute
+     params:  # Here, we use the abbreviated form where the values are passed in as a list
+        - type: string
+          value: "Big Corp Inc. Employees"
+        - "Team FooBar"  # this is equivalent to {type: string, value: "Team FooBar"}
+        - type: octets
+          value: deadbeef  # interpreted as a hex string
+        - type: oid
+          value: "2.999"
+```
+
+Here is the same example with an added policy authority, defined using a single DNS name.
+Note that we have to use the dictionary form of the parameters now.
+
+```yaml
+- id: group
+  smart-value:
+     schema: ietf-attribute
+     params:
+        authority:
+           - type: dns_name
+             value: admin.example.com
+        values:
+           - type: string
+             value: "Big Corp Inc. Employees"
+           - "Team FooBar"
+           - type: octets
+             value: deadbeef
+           - type: oid
+             value: "2.999"
 ```
 
 ### Defining service endpoints
