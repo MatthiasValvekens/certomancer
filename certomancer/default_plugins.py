@@ -383,7 +383,7 @@ class ServiceAuthInfoPlugin(AttributePlugin):
 
         if not isinstance(params, dict):
             raise ConfigurationError(
-                "'params' for service-auth-info plugin should be a dict."
+                "Parameters for service-auth-info should be specified as a dict"
             )
 
         check_config_keys(
@@ -407,9 +407,7 @@ class ServiceAuthInfoPlugin(AttributePlugin):
         try:
             auth_info = params['auth-info']
             if not isinstance(auth_info, str):
-                raise ConfigurationError(
-                    "'auth-info' must be a hexadecimal string"
-                )
+                raise ConfigurationError("'auth-info' must be a hex string")
         except KeyError:
             auth_info = None
 
@@ -419,9 +417,7 @@ class ServiceAuthInfoPlugin(AttributePlugin):
                     binascii.unhexlify(auth_info)
                 )
             except ValueError:
-                raise ConfigurationError(
-                    "'auth-info' must be a hexadecimal string"
-                )
+                raise ConfigurationError("'auth-info' must be a hex string")
         return cms.SvceAuthInfo(result)
 
 

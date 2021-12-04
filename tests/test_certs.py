@@ -196,6 +196,12 @@ def test_attr_cert_spec():
                     service: {type: dns_name, value: admin.example.com}
                     ident: {type: email, value: blah@example.com}
                     auth-info: deadbeef
+          - id: access_identity
+            smart-value:
+                schema: service-auth-info
+                params:
+                    service: {type: dns_name, value: admin.example.com}
+                    ident: {type: email, value: blah@example.com}
       validity:
         valid-from: "2010-01-01T00:00:00+0000"
         valid-to: "2011-01-01T00:00:00+0000"
@@ -213,6 +219,7 @@ def test_attr_cert_spec():
     assert test_ac_spec.attributes[1].id == 'group'
     assert test_ac_spec.attributes[2].id == 'charging_identity'
     assert test_ac_spec.attributes[3].id == 'authentication_info'
+    assert test_ac_spec.attributes[4].id == 'access_identity'
     test_ac = arch.get_attr_cert(CertLabel('test-ac'))
     attrs = test_ac['ac_info']['attributes']
     assert attrs[0]['type'].native == 'role'
@@ -232,6 +239,10 @@ def test_attr_cert_spec():
     assert attrs[3]['values'][0]['service'].native == 'admin.example.com'
     assert attrs[3]['values'][0]['ident'].native == 'blah@example.com'
     assert attrs[3]['values'][0]['auth_info'].native == b'\xde\xad\xbe\xef'
+
+    assert attrs[4]['type'].native == 'access_identity'
+    assert attrs[4]['values'][0]['service'].native == 'admin.example.com'
+    assert attrs[4]['values'][0]['ident'].native == 'blah@example.com'
 
 
 def test_attr_cert_targets():
@@ -1052,3 +1063,48 @@ def test_role_syntax_attr_errors(err_msg, params_str):
     )
     with pytest.raises(ConfigurationError, match=err_msg):
         RoleSyntaxPlugin().provision(None, arch, params)
+
+
+@pytest.mark.parametrize('params_str,err_msg', [
+    ("""
+    params:
+        service: {type: dns_name, value: admin.example.com}
+        ident: {type: email, value: blah@example.com}
+        auth-info: deadbeefz
+    """, "hex string"),
+    ("""
+    params:
+        service: {type: dns_name, value: admin.example.com}
+        ident: {type: email, value: blah@example.com}
+        auth-info: 0
+    """, "hex string"),
+    ("""
+     params: foo
+     """, "should be specified as a dict",),
+    ("""
+    params:
+        service: {type: dns_name, value: admin.example.com}
+    """, "'ident'.*required"),
+    ("""
+    params:
+        ident: {type: email, value: blah@example.com}
+        auth-info: deadbeef
+    """, "'service'.*required"),
+    ("""
+    params:
+        foo: bar
+        service: {type: dns_name, value: admin.example.com}
+        ident: {type: email, value: blah@example.com}
+        auth-info: deadbeef
+    """, "Unexpected.*foo"),
+])
+def test_svce_auth_info_errors(err_msg, params_str):
+    from certomancer.default_plugins import ServiceAuthInfoPlugin
+    params = yaml.safe_load(params_str)['params']
+    arch = PKIArchitecture(
+        arch_label=ArchLabel('test'), key_set=RSA_KEYS, entities=ENTITIES,
+        cert_spec_config={}, service_config={},
+        external_url_prefix='http://test.test',
+    )
+    with pytest.raises(ConfigurationError, match=err_msg):
+        ServiceAuthInfoPlugin().provision(None, arch, params)
