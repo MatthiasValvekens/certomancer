@@ -262,6 +262,99 @@ class RoleSyntaxPlugin(AttributePlugin):
         return cms.RoleSyntax(result)
 
 
+def _parse_ietf_attr_value(params):
+    if isinstance(params, str):
+        alt = 'string'
+        value = core.UTF8String(params)
+    elif isinstance(params, dict):
+        check_config_keys(
+            'IETF attribute syntax constituent value', ('type', 'value'), params
+        )
+        alt = params['type']
+        value_pre = params['value']
+        if not isinstance(value_pre, str):
+            raise ConfigurationError(
+                "The 'value' entry in an IETF attribute syntax constituent "
+                "value dictionary must be a string"
+            )
+        if alt == 'string':
+            value = core.UTF8String(value_pre)
+        elif alt == 'oid':
+            try:
+                value = core.ObjectIdentifier(value=value_pre)
+                value.dump()
+            except ValueError:
+                raise ConfigurationError(
+                    f"IETF attribute syntax constituent value of type 'oid' "
+                    f"must be a valid dotted OID string, not '{value_pre}'."
+                )
+        elif alt == 'octets':
+            try:
+                value = core.OctetString(
+                    value=binascii.unhexlify(value_pre)
+                )
+            except ValueError:
+                raise ConfigurationError(
+                    f"IETF attribute syntax constituent value of type 'octets' "
+                    f"must be a valid hex string, not '{value_pre}'."
+                )
+        else:
+            raise ConfigurationError(
+                "The 'type' entry in an IETF attribute syntax constituent "
+                "value dictionary must be one of 'oid', 'octets' or 'string', "
+                f"not '{alt}'"
+            )
+    else:
+        raise ConfigurationError(
+            "An IETF attribute syntax constituent value is given by "
+            f"a string or a dict, not {type(params)}."
+        )
+    return cms.IetfAttrValue(name=alt, value=value)
+
+
+@attr_plugin_registry.register
+class IetfAttrSyntaxPlugin(AttributePlugin):
+    schema_label = 'ietf-attribute'
+    extension_type = None
+
+    def provision(self, attr_id, arch: 'PKIArchitecture', params):
+        if isinstance(params, dict):
+            try:
+                values = params['values']
+                if not isinstance(values, list):
+                    raise ConfigurationError(
+                        "'values' in ietf-attribute should be a list"
+                    )
+            except KeyError:
+                raise ConfigurationError(
+                    "ietf-attribute requires a 'values' entry "
+                    "when specified as a dict"
+                )
+            try:
+                policy_authority = params['authority']
+                if not isinstance(policy_authority, list):
+                    raise ConfigurationError(
+                        "'authority' in ietf-attribute should be a list"
+                    )
+            except KeyError:
+                policy_authority = None
+        elif isinstance(params, list):
+            values = params
+            policy_authority = None
+        else:
+            raise ConfigurationError(
+                "Parameters for ietf-attribute should be specified as a dict "
+                "or a list"
+            )
+
+        result = {'values': [_parse_ietf_attr_value(p) for p in values]}
+        if policy_authority is not None:
+            result['policy_authority'] = [
+                process_general_name(arch.entities, p) for p in params
+            ]
+        return cms.IetfAttrSyntax(result)
+
+
 @extension_plugin_registry.register
 class IsoTimePlugin(ExtensionPlugin):
     schema_label = 'iso-time'

@@ -11,7 +11,7 @@ import pytest
 import pytz
 import yaml
 from oscrypto import keys as oskeys
-from asn1crypto import x509, cms
+from asn1crypto import x509, cms, core
 from pyhanko_certvalidator import ValidationContext
 
 from certomancer.config_utils import SearchDir, ConfigurationError
@@ -175,6 +175,20 @@ def test_attr_cert_spec():
               schema: role-syntax
               params:
                   name: {type: email, value: blah@example.com}
+          - id: group
+            smart-value:
+                schema: ietf-attribute
+                params:
+                    - type: string
+                      value: "Big Corp Inc. Employees"
+                    - type: octets
+                      value: deadbeef
+                    - type: oid
+                      value: "2.999"
+          - id: charging_identity
+            smart-value:
+                schema: ietf-attribute
+                params: ["Big Corp Inc."]
       validity:
         valid-from: "2010-01-01T00:00:00+0000"
         valid-to: "2011-01-01T00:00:00+0000"
@@ -189,8 +203,20 @@ def test_attr_cert_spec():
     )
     test_ac_spec = arch.get_attr_cert_spec(CertLabel('test-ac'))
     assert test_ac_spec.attributes[0].id == 'role'
+    assert test_ac_spec.attributes[1].id == 'group'
+    assert test_ac_spec.attributes[2].id == 'charging_identity'
     test_ac = arch.get_attr_cert(CertLabel('test-ac'))
-    assert test_ac['ac_info']['attributes'][0]['type'].native == 'role'
+    attrs = test_ac['ac_info']['attributes']
+    assert attrs[0]['type'].native == 'role'
+    assert attrs[1]['type'].native == 'group'
+    group_attr_syntax = attrs[1]['values'][0]
+    assert group_attr_syntax['values'][0].native == "Big Corp Inc. Employees"
+    assert group_attr_syntax['values'][1].native == b"\xde\xad\xbe\xef"
+    assert group_attr_syntax['values'][2].chosen \
+           == core.ObjectIdentifier("2.999")
+
+    assert attrs[2]['type'].native == 'charging_identity'
+    assert attrs[2]['values'][0]['values'][0].native == "Big Corp Inc."
     ac_iss = arch.get_cert(CertLabel('ac-issuer'))
     assert len(ac_iss['tbs_certificate']['extensions']) == 4
 
