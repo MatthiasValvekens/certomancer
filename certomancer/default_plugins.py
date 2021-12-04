@@ -245,20 +245,28 @@ class RoleSyntaxPlugin(AttributePlugin):
             raise ConfigurationError(
                 "Parameters for role-syntax should be specified as a dict"
             )
+        check_config_keys(
+            'role-syntax', ('name', 'authority'), params
+        )
         try:
             name_params = params['name']
         except KeyError:
             raise ConfigurationError("role-syntax requires a name entry")
         role_name = process_general_name(arch.entities, name_params)
-        authority_params = params.get('authority', None)
-        result = {'role_name': role_name}
-        if authority_params is not None:
+        try:
+            authority_params = params['authority']
             if not isinstance(authority_params, list):
                 raise ConfigurationError(
                     "Parameters for role authority should be specified as "
                     "a list"
                 )
-            authority = [process_general_name(arch.entities, p) for p in params]
+        except KeyError:
+            authority_params = None
+        result = {'role_name': role_name}
+        if authority_params is not None:
+            authority = [
+                process_general_name(arch.entities, p) for p in authority_params
+            ]
             result['role_authority'] = authority
         return cms.RoleSyntax(result)
 

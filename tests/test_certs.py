@@ -991,3 +991,51 @@ def test_ietf_attr_value_syntax_errors(err_msg, params_str):
     )
     with pytest.raises(ConfigurationError, match=err_msg):
         IetfAttrSyntaxPlugin().provision(None, arch, params)
+
+
+def test_role_syntax_with_authority():
+    params_str = """
+    params:
+       authority:
+        - type: email
+          value: admin@example.com
+       name:
+          type: email
+          value: blah@example.com
+    """
+    from certomancer.default_plugins import RoleSyntaxPlugin
+    params = yaml.safe_load(params_str)['params']
+    arch = PKIArchitecture(
+        arch_label=ArchLabel('test'), key_set=RSA_KEYS, entities=ENTITIES,
+        cert_spec_config={}, service_config={},
+        external_url_prefix='http://test.test',
+    )
+    result = RoleSyntaxPlugin().provision(None, arch, params)
+    assert result['role_name'].native == 'blah@example.com'
+    assert result['role_authority'].native == ['admin@example.com']
+
+
+@pytest.mark.parametrize('params_str,err_msg', [
+    ("""
+     params:
+        authority: 0
+        name: {type: email, value: blah@example.com}
+     """, "authority.*list",),
+    ("""
+     params:
+        authority: []
+     """, "requires.*name",),
+    ("""
+     params: foo
+     """, "should be specified as a dict",),
+])
+def test_role_syntax_attr_errors(err_msg, params_str):
+    from certomancer.default_plugins import RoleSyntaxPlugin
+    params = yaml.safe_load(params_str)['params']
+    arch = PKIArchitecture(
+        arch_label=ArchLabel('test'), key_set=RSA_KEYS, entities=ENTITIES,
+        cert_spec_config={}, service_config={},
+        external_url_prefix='http://test.test',
+    )
+    with pytest.raises(ConfigurationError, match=err_msg):
+        RoleSyntaxPlugin().provision(None, arch, params)
