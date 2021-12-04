@@ -1,7 +1,9 @@
 import binascii
 import itertools
+from typing import Optional
 
 from asn1crypto import x509, core, cms
+from asn1crypto.core import ObjectIdentifier
 
 from dateutil.parser import parse as parse_dt
 from .config_utils import ConfigurationError, check_config_keys, \
@@ -13,7 +15,7 @@ from .registry import ExtensionPlugin, PKIArchitecture, \
 __all__ = [
     'CRLDistributionPointsPlugin', 'KeyUsagePlugin', 'AIAUrlPlugin',
     'GeneralNamesPlugin', 'ACTargetsPlugin',
-    'IetfAttrSyntaxPlugin', 'RoleSyntaxPlugin'
+    'IetfAttrSyntaxPlugin', 'RoleSyntaxPlugin', 'ServiceAuthInfoPlugin'
 ]
 
 
@@ -238,7 +240,6 @@ class ACTargetsPlugin(ExtensionPlugin):
 @attr_plugin_registry.register
 class RoleSyntaxPlugin(AttributePlugin):
     schema_label = 'role-syntax'
-    extension_type = None
 
     def provision(self, attr_id, arch: 'PKIArchitecture', params):
         if not isinstance(params, dict):
@@ -331,7 +332,6 @@ def _parse_ietf_attr_value(params):
 @attr_plugin_registry.register
 class IetfAttrSyntaxPlugin(AttributePlugin):
     schema_label = 'ietf-attribute'
-    extension_type = None
 
     def provision(self, attr_id, arch: 'PKIArchitecture', params):
         if isinstance(params, dict):
@@ -372,6 +372,57 @@ class IetfAttrSyntaxPlugin(AttributePlugin):
                 process_general_name(arch.entities, p) for p in policy_authority
             ]
         return cms.IetfAttrSyntax(result)
+
+
+@attr_plugin_registry.register
+class ServiceAuthInfoPlugin(AttributePlugin):
+    schema_label = 'service-auth-info'
+
+    def provision(self, attr_id: Optional[ObjectIdentifier],
+                  arch: 'PKIArchitecture', params):
+
+        if not isinstance(params, dict):
+            raise ConfigurationError(
+                "'params' for service-auth-info plugin should be a dict."
+            )
+
+        check_config_keys(
+            'service-auth-info', ('service', 'ident', 'auth-info'),
+            params
+        )
+
+        try:
+            service_raw = params['service']
+            ident_raw = params['ident']
+        except KeyError:
+            raise ConfigurationError(
+                "'service' and 'ident' are required in a service-auth-info "
+                "attribute value."
+            )
+
+        service = process_general_name(arch.entities, service_raw)
+        ident = process_general_name(arch.entities, ident_raw)
+        result = {'service': service, 'ident': ident}
+
+        try:
+            auth_info = params['auth-info']
+            if not isinstance(auth_info, str):
+                raise ConfigurationError(
+                    "'auth-info' must be a hexadecimal string"
+                )
+        except KeyError:
+            auth_info = None
+
+        if auth_info is not None:
+            try:
+                result['auth_info'] = core.OctetString(
+                    binascii.unhexlify(auth_info)
+                )
+            except ValueError:
+                raise ConfigurationError(
+                    "'auth-info' must be a hexadecimal string"
+                )
+        return cms.SvceAuthInfo(result)
 
 
 @extension_plugin_registry.register

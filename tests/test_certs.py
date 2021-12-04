@@ -189,6 +189,13 @@ def test_attr_cert_spec():
             smart-value:
                 schema: ietf-attribute
                 params: ["Big Corp Inc."]
+          - id: authentication_info
+            smart-value:
+                schema: service-auth-info
+                params:
+                    service: {type: dns_name, value: admin.example.com}
+                    ident: {type: email, value: blah@example.com}
+                    auth-info: deadbeef
       validity:
         valid-from: "2010-01-01T00:00:00+0000"
         valid-to: "2011-01-01T00:00:00+0000"
@@ -205,6 +212,7 @@ def test_attr_cert_spec():
     assert test_ac_spec.attributes[0].id == 'role'
     assert test_ac_spec.attributes[1].id == 'group'
     assert test_ac_spec.attributes[2].id == 'charging_identity'
+    assert test_ac_spec.attributes[3].id == 'authentication_info'
     test_ac = arch.get_attr_cert(CertLabel('test-ac'))
     attrs = test_ac['ac_info']['attributes']
     assert attrs[0]['type'].native == 'role'
@@ -219,6 +227,11 @@ def test_attr_cert_spec():
     assert attrs[2]['values'][0]['values'][0].native == "Big Corp Inc."
     ac_iss = arch.get_cert(CertLabel('ac-issuer'))
     assert len(ac_iss['tbs_certificate']['extensions']) == 4
+
+    assert attrs[3]['type'].native == 'authentication_info'
+    assert attrs[3]['values'][0]['service'].native == 'admin.example.com'
+    assert attrs[3]['values'][0]['ident'].native == 'blah@example.com'
+    assert attrs[3]['values'][0]['auth_info'].native == b'\xde\xad\xbe\xef'
 
 
 def test_attr_cert_targets():
