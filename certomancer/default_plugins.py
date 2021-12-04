@@ -12,7 +12,8 @@ from .registry import ExtensionPlugin, PKIArchitecture, \
 
 __all__ = [
     'CRLDistributionPointsPlugin', 'KeyUsagePlugin', 'AIAUrlPlugin',
-    'GeneralNamesPlugin'
+    'GeneralNamesPlugin', 'ACTargetsPlugin',
+    'IetfAttrSyntaxPlugin', 'RoleSyntaxPlugin'
 ]
 
 
@@ -270,8 +271,15 @@ def _parse_ietf_attr_value(params):
         check_config_keys(
             'IETF attribute syntax constituent value', ('type', 'value'), params
         )
-        alt = params['type']
-        value_pre = params['value']
+        try:
+            alt = params['type']
+            value_pre = params['value']
+        except KeyError:
+            raise ConfigurationError(
+                "'type' and 'value' entries are required in an "
+                "an IETF attribute syntax constituent value dictionary."
+            )
+
         if not isinstance(value_pre, str):
             raise ConfigurationError(
                 "The 'value' entry in an IETF attribute syntax constituent "
@@ -319,6 +327,9 @@ class IetfAttrSyntaxPlugin(AttributePlugin):
 
     def provision(self, attr_id, arch: 'PKIArchitecture', params):
         if isinstance(params, dict):
+            check_config_keys(
+                'ietf-attribute', ('values', 'authority'), params
+            )
             try:
                 values = params['values']
                 if not isinstance(values, list):
@@ -350,7 +361,7 @@ class IetfAttrSyntaxPlugin(AttributePlugin):
         result = {'values': [_parse_ietf_attr_value(p) for p in values]}
         if policy_authority is not None:
             result['policy_authority'] = [
-                process_general_name(arch.entities, p) for p in params
+                process_general_name(arch.entities, p) for p in policy_authority
             ]
         return cms.IetfAttrSyntax(result)
 

@@ -799,3 +799,195 @@ def test_holder_config_digest2(dot_str_spec):
     assert odi['digest_algorithm']['algorithm'].native == 'sha256'
     assert odi['object_digest'].native \
            == hashlib.sha256(holder_cert.public_key.dump()).digest()
+
+
+def _parse_ietf_syntax(params_str):
+
+    from certomancer.default_plugins import IetfAttrSyntaxPlugin
+    params = yaml.safe_load(params_str)['params']
+    arch = PKIArchitecture(
+        arch_label=ArchLabel('test'), key_set=RSA_KEYS, entities=ENTITIES,
+        cert_spec_config={}, service_config={},
+        external_url_prefix='http://test.test',
+    )
+    return IetfAttrSyntaxPlugin().provision(None, arch, params)
+
+
+@pytest.mark.parametrize('params_str', [
+    """
+    params:
+         - type: string
+           value: "Big Corp Inc. Employees"
+         - type: octets
+           value: deadbeef
+         - type: oid
+           value: "2.999"
+    """,
+    """
+    params:
+        values:
+             - type: string
+               value: "Big Corp Inc. Employees"
+             - type: octets
+               value: deadbeef
+             - type: oid
+               value: "2.999"
+    """,
+    """
+    params:
+         - "Big Corp Inc. Employees"
+         - type: octets
+           value: deadbeef
+         - type: oid
+           value: "2.999"
+    """,
+])
+def test_ietf_attr_value(params_str):
+    result = _parse_ietf_syntax(params_str)
+
+    assert result['policy_authority'].native is None
+    assert result['values'][0].native == "Big Corp Inc. Employees"
+    assert result['values'][1].native == b"\xde\xad\xbe\xef"
+    assert result['values'][2].chosen == core.ObjectIdentifier("2.999")
+
+
+def test_ietf_attr_value_with_authority():
+    params_str = """
+    params:
+        authority:
+             - type: dns_name
+               value: admin.example.com
+        values:
+             - type: string
+               value: "Big Corp Inc. Employees"
+             - type: octets
+               value: deadbeef
+             - type: oid
+               value: "2.999"
+    """
+    result = _parse_ietf_syntax(params_str)
+
+    assert result['policy_authority'].native == ['admin.example.com']
+    assert result['values'][0].native == "Big Corp Inc. Employees"
+    assert result['values'][1].native == b"\xde\xad\xbe\xef"
+    assert result['values'][2].chosen == core.ObjectIdentifier("2.999")
+
+
+@pytest.mark.parametrize('params_str,err_msg', [
+    ("""
+     params:
+         - type: string
+           value: "Big Corp Inc. Employees"
+         - type: octets
+           value: deadbeefz
+         - type: oid
+           value: "2.999"
+     """, "hex string",),
+    ("""
+     params:
+         - type: string
+           value: "Big Corp Inc. Employees"
+         - type: octets
+           value: deadbeef
+         - type: oid
+           value: "2.999z"
+     """, "dotted OID string"),
+    ("""
+     params:
+         - type: string
+           value: "Big Corp Inc. Employees"
+         - type: octets
+           value: deadbeef
+         - type: oid
+           value: 2.999
+     """, "must be a string"),
+    ("""
+     params:
+         - type: string
+           value: "Big Corp Inc. Employees"
+         - type: octets
+           value: 0
+         - type: oid
+           value: "2.999"
+     """, "must be a string"),
+    ("""
+     params:
+         - type: string
+           value: 0
+         - type: octets
+           value: deadbeef
+         - type: oid
+           value: "2.999"
+     """, "must be a string"),
+    ("""
+     params:
+         - type: string
+         - type: octets
+           value: deadbeef
+         - type: oid
+           value: "2.999"
+     """, "'value'.*required",),
+    ("""
+     params:
+         - value: "Big Corp Inc. Employees"
+         - type: octets
+           value: deadbeef
+         - type: oid
+           value: "2.999"
+     """, "'type'.*required",),
+    ("""
+     params:
+         - type: foobar
+           value: "Big Corp Inc. Employees"
+     """, "'type'.*one of",),
+    ("""
+     params:
+        foo: bar
+        values:
+             - type: string
+               value: "Big Corp Inc. Employees"
+             - type: octets
+               value: deadbeef
+             - type: oid
+               value: "2.999"
+     """, "Unexpected.*foo",),
+    ("""
+     params:
+         - 0
+         - type: octets
+           value: deadbeef
+         - type: oid
+           value: "2.999"
+     """, "string or a dict",),
+    ("""
+     params:
+        values: 0
+     """, "'values'.*list",),
+    ("""
+     params: {}
+     """, "requires.*values",),
+    ("""
+     params: 0
+     """, "dict or a list",),
+    ("""
+     params:
+        authority: bar
+        values:
+             - type: string
+               value: "Big Corp Inc. Employees"
+             - type: octets
+               value: deadbeef
+             - type: oid
+               value: "2.999"
+     """, "authority.*list",),
+])
+def test_ietf_attr_value_syntax_errors(err_msg, params_str):
+    from certomancer.default_plugins import IetfAttrSyntaxPlugin
+    params = yaml.safe_load(params_str)['params']
+    arch = PKIArchitecture(
+        arch_label=ArchLabel('test'), key_set=RSA_KEYS, entities=ENTITIES,
+        cert_spec_config={}, service_config={},
+        external_url_prefix='http://test.test',
+    )
+    with pytest.raises(ConfigurationError, match=err_msg):
+        IetfAttrSyntaxPlugin().provision(None, arch, params)
