@@ -1713,6 +1713,13 @@ class PKIArchitecture:
         else:
             try:
                 issuer_cert_lbl = spec.resolve_issuer_cert(self)
+                if issuer_cert_lbl == label:
+                    raise ConfigurationError(
+                        f"Self-reference detected: issuer cert for {label} "
+                        f"resolves to itself, but the certificate is not "
+                        f"self-signed: Authority key: {spec.authority_key}; "
+                        f"subject key: {spec.subject_key}."
+                    )
                 issuer_cert = self.get_cert(issuer_cert_lbl)
                 aki = issuer_cert.key_identifier_value
             except CertomancerServiceError:

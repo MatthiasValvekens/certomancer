@@ -126,6 +126,36 @@ def test_self_signed(label):
     assert root_cert.not_valid_before == datetime(2000, 1, 1, tzinfo=pytz.utc)
 
 
+def test_detect_self_reference():
+    cfg = '''
+      root:
+        subject: root
+        subject-key: root
+        issuer: root
+        authority-key: root
+        validity:
+          valid-from: "2000-01-01T00:00:00+0000"
+          valid-to: "2500-01-01T00:00:00+0000"
+      other:
+        subject: root
+        subject-key: root
+        issuer: root
+        authority-key: interm
+        issuer-cert: other
+        validity:
+          valid-from: "2000-01-01T00:00:00+0000"
+          valid-to: "2500-01-01T00:00:00+0000"
+    '''
+
+    arch = PKIArchitecture(
+        arch_label=ArchLabel('test'), key_set=RSA_KEYS, entities=ENTITIES,
+        cert_spec_config=yaml.safe_load(cfg), service_config={},
+        external_url_prefix='http://test.test',
+    )
+    with pytest.raises(ConfigurationError, match='Self-reference'):
+        arch.get_cert(CertLabel('other'))
+
+
 BASIC_AC_ISSUER_SETUP = '''
   ac-issuer:
     subject: root
