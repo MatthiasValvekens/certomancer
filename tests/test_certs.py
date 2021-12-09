@@ -156,6 +156,36 @@ def test_detect_self_reference():
         arch.get_cert(CertLabel('other'))
 
 
+def test_template_does_not_copy_inferred_authority_key():
+    cfg = '''
+      root:
+        subject: root
+        issuer: root
+        validity:
+          valid-from: "2000-01-01T00:00:00+0000"
+          valid-to: "2500-01-01T00:00:00+0000"
+      tsa:
+        template: root
+        subject: tsa
+        issuer: tsa
+    '''
+
+    arch = PKIArchitecture(
+        arch_label=ArchLabel('test'), key_set=RSA_KEYS, entities=ENTITIES,
+        cert_spec_config=yaml.safe_load(cfg), service_config={},
+        external_url_prefix='http://test.test',
+    )
+    root_cert = arch.get_cert(CertLabel('root'))
+    assert root_cert.subject == ENTITIES[EntityLabel('root')]
+    assert root_cert.issuer == ENTITIES[EntityLabel('root')]
+    assert root_cert.not_valid_before == datetime(2000, 1, 1, tzinfo=pytz.utc)
+    other_cert = arch.get_cert(CertLabel('tsa'))
+    assert other_cert.subject == ENTITIES[EntityLabel('tsa')]
+    assert other_cert.issuer == ENTITIES[EntityLabel('tsa')]
+    # check whether this was copied
+    assert other_cert.not_valid_before == datetime(2000, 1, 1, tzinfo=pytz.utc)
+
+
 BASIC_AC_ISSUER_SETUP = '''
   ac-issuer:
     subject: root

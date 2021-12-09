@@ -1068,30 +1068,20 @@ class CertificateSpec(IssuedItemSpec):
         super().process_entries(config_dict)
 
     @classmethod
-    def from_config(cls, config_dict) -> 'CertificateSpec':
-        if not isinstance(config_dict, dict):
-            raise ConfigurationError(
-                f"Cert config should be a dictionary, not {type(config_dict)}."
-            )
+    def extract_templatable_config(cls, config_dict):
 
         # Do this first for consistency, so we don't put processed values
         # into the template
-
-        def _template_entries():
-            for k, v in config_dict.items():
-                if k.replace('-', '_') in EXCLUDED_FROM_TEMPLATE:
-                    continue
-                elif k == 'extensions':
-                    yield k, [
-                        ext_dict for ext_dict in v
-                        if ext_dict['id'] not in EXTNS_EXCLUDED_FROM_TEMPLATE
-                    ]
-                else:
-                    yield k, v
-
-        config_dict['templatable_config'] = dict(_template_entries())
-
-        return super().from_config(config_dict)
+        for k, v in config_dict.items():
+            if k.replace('-', '_') in EXCLUDED_FROM_TEMPLATE:
+                continue
+            elif k == 'extensions':
+                yield k, [
+                    ext_dict for ext_dict in v
+                    if ext_dict['id'] not in EXTNS_EXCLUDED_FROM_TEMPLATE
+                ]
+            else:
+                yield k, v
 
 
 def _process_cert_spec_settings(cert_spec_config, config_search_dir,
@@ -1124,6 +1114,11 @@ def _process_cert_spec_settings(cert_spec_config, config_search_dir,
                 = extensions + template_extensions
         else:
             effective_cert_config = dict(cert_config)
+
+        # derive templatable config before setting defaults
+        effective_cert_config['templatable_config'] = dict(
+            CertificateSpec.extract_templatable_config(effective_cert_config)
+        )
 
         effective_cert_config['label'] = name.value
         effective_cert_config.setdefault('subject', name.value)
