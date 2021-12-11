@@ -376,7 +376,8 @@ class SimpleOCSPResponder:
                 'extn_id': 'nonce', 'extn_value': nonce
             })
             response_extensions.append(nonce_extension)
-        rdata['response_extensions'] = response_extensions
+        if response_extensions:
+            rdata['response_extensions'] = response_extensions
 
         signature = generic_sign(
             self.responder_key, rdata.dump(),
