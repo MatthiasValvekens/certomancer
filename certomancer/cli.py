@@ -2,7 +2,7 @@ import sys
 from contextlib import contextmanager
 from datetime import datetime
 
-from asn1crypto import pem
+from asn1crypto import pem, ocsp, algos
 from dateutil.parser import parse as parse_dt
 
 import click
@@ -11,7 +11,7 @@ import logging
 
 from .config_utils import ConfigurationError
 from .crypto_utils import pyca_cryptography_present
-from .registry import CertomancerConfig, CertLabel
+from .registry import CertomancerConfig, CertLabel, ServiceLabel
 from .services import CertomancerServiceError
 from .version import __version__
 
@@ -224,7 +224,7 @@ def necronomicon(ctx, architecture, crl_repo, output, no_pem, at_time,
     else:
         at_time = parse_dt(at_time)
     crl = pki_arch.service_registry.get_crl(
-        repo_label=crl_repo, at_time=at_time
+        repo_label=ServiceLabel(crl_repo), at_time=at_time
     )
 
     if output is None and no_pem and not ignore_tty and sys.stdout.isatty():
@@ -236,6 +236,73 @@ def necronomicon(ctx, architecture, crl_repo, output, no_pem, at_time,
     if not no_pem:
         data = pem.armor('X509 CRL', data)
 
+    if output is None:
+        sys.stdout.buffer.write(data)
+    else:
+        with open(output, 'wb') as f:
+            f.write(data)
+
+
+@cli.command(help='query an OCSP responder')
+@click.pass_context
+@click.argument('architecture', type=str, metavar='PKI_ARCH')
+@click.argument('cert_label', type=str, metavar='CERT_LABEL')
+@click.argument('responder', type=str, metavar='OSCP_RESPONDER')
+@click.argument('output', type=click.Path(writable=True, dir_okay=False),
+                required=False)
+@click.option('--ignore-tty', type=bool, is_flag=True,
+              help='never try to prevent binary data from being written '
+                   'to stdout')
+@click.option('--at-time', required=False, type=str,
+              help=('ISO 8601 timestamp at which to evaluate '
+                    'revocation status [default: now]'))
+@exception_manager()
+def seance(ctx, architecture, cert_label, responder, output,
+           ignore_tty, at_time):
+    cfg: CertomancerConfig = next(ctx.obj['config'])
+    pki_arch = cfg.get_pki_arch(architecture)
+    if at_time is None:
+        at_time = datetime.now(tz=tzlocal.get_localzone())
+    else:
+        at_time = parse_dt(at_time)
+
+    # Format CertId value based on certificate spec (or attr cert spec)
+    # We differentiate between attr certs and regular PKCs based on the
+    # responder's service info settings.
+    svc_info = pki_arch.service_registry.get_ocsp_info(ServiceLabel(responder))
+    if svc_info.is_aa_responder:
+        cert_spec = pki_arch.get_attr_cert_spec(CertLabel(cert_label))
+    else:
+        cert_spec = pki_arch.get_cert_spec(CertLabel(cert_label))
+    issuer_cert_label = cert_spec.resolve_issuer_cert(pki_arch)
+    issuer_cert = pki_arch.get_cert(issuer_cert_label)
+    cert_id = ocsp.CertId({
+        'hash_algorithm': algos.DigestAlgorithm(
+            {'algorithm': 'sha256'}
+        ),
+        'issuer_name_hash': pki_arch.entities.get_name_hash(
+            cert_spec.issuer, 'sha256'
+        ),
+        'issuer_key_hash': issuer_cert.public_key.sha256,
+        'serial_number': cert_spec.serial,
+    })
+
+    # Initialise the requested OCSP responder
+    ocsp_responder = pki_arch.service_registry.summon_responder(
+        label=ServiceLabel(responder), at_time=at_time
+    )
+    sing_resp = ocsp_responder.format_single_ocsp_response(
+        cid=cert_id, issuer_cert=issuer_cert
+    )
+    response = \
+        ocsp_responder.assemble_simple_ocsp_responses(responses=[sing_resp])
+
+    if output is None and not ignore_tty and sys.stdout.isatty():
+        raise click.ClickException(
+            "Refusing to write binary output to a TTY. Pass --ignore-tty if "
+            "you really want to ignore this check."
+        )
+    data = response.dump()
     if output is None:
         sys.stdout.buffer.write(data)
     else:

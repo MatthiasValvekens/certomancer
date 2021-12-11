@@ -323,6 +323,27 @@ class SimpleOCSPResponder:
     def build_error_response(error_status):
         return ocsp.OCSPResponse({'response_status': error_status})
 
+    def format_single_ocsp_response(
+            self, cid: ocsp.CertId, issuer_cert: x509.Certificate) \
+            -> ocsp.SingleResponse:
+
+        if not issuer_match(cid, issuer_cert):
+            raise CertomancerServiceError("Responder is not authorised")
+
+        revinfo_interface = self.revinfo_interface
+        cert_status, exts = revinfo_interface.check_revocation_status(
+            cid, self.at_time
+        )
+
+        single_resp = ocsp.SingleResponse({
+            'cert_id': cid,
+            'cert_status': cert_status,
+            'this_update': self.at_time,
+            'next_update': self.at_time + self.validity,
+            'single_extensions': exts or None
+        })
+        return single_resp
+
     def build_ocsp_response(self, req: ocsp.OCSPRequest) -> ocsp.OCSPResponse:
         nonce_asn1 = req.nonce_value
         if nonce_asn1 is not None:
@@ -340,29 +361,19 @@ class SimpleOCSPResponder:
         for req_item in requests:
             cid: ocsp.CertId = req_item['req_cert']
 
-            if not issuer_match(cid, issuer_cert):
-                return err('unauthorized')
-
-            revinfo_interface = self.revinfo_interface
             try:
-                cert_status, exts = revinfo_interface.check_revocation_status(
-                    cid, self.at_time
-                )
+                simple_resp = self.format_single_ocsp_response(cid, issuer_cert)
             except NotImplementedError:
                 return err('internal_error')
             except CertomancerServiceError:
                 return err('unauthorized')
 
-            responses.append(
-                ocsp.SingleResponse({
-                    'cert_id': cid,
-                    'cert_status': cert_status,
-                    'this_update': self.at_time,
-                    'next_update': self.at_time + self.validity,
-                    'single_extensions': exts or None
-                })
-            )
+            responses.append(simple_resp)
+        return self.assemble_simple_ocsp_responses(responses, nonce=nonce)
 
+    def assemble_simple_ocsp_responses(
+            self, responses: List[ocsp.SingleResponse],
+            nonce: Optional[bytes] = None):
         rdata = ocsp.ResponseData({
             'responder_id': ocsp.ResponderId(
                 name='by_key', value=self.responder_cert.public_key.sha1
