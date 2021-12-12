@@ -130,3 +130,25 @@ Note: the `--at-time` flag takes the (simulated) publication schedule of the CRL
 For example, if the `n`th CRL was published on `2021-01-01`, the next one is scheduled for
 `2021-01-31` and a certificate is revoked on `2021-01-02`, then telling Certomancer to generate
 a CRL on `2021-01-03` will *not* cause the recently revoked certificate to be included.
+
+
+# Generating OCSP responses
+
+To generate an OCSP response from the CLI, use the `certomancer seance` subcommand.
+Its general structure is
+
+```
+certomancer seance PKI_ARCH CERT_LABEL OCSP_RESPONDER
+```
+
+Here `PKI_ARCH` refers to a PKI architecture defined in the configuration file, `OCSP_RESPONDER`
+to the label of an OCSP responder defined in the `services.ocsp` section of said PKI
+architecture, and `CERT_LABEL` to the label of a certificate (or attribute certificate)
+defined in the PKI architecture. An OCSP response that applies to that certificate will be
+generated. Finally, `OUTPUT` specifies the (optional) name of the file to write the output to.
+If not specified, data will be written to standard output.
+
+| Flag | Argument | Use |
+| ---- | -------- | --- |
+|`--ignore-tty` | none | Never try to prevent binary data from being written to stdout, even if stdout appears to be a tty. |
+|`--at-time` | ISO 8601 datetime | Generate the OCSP response at the point in time specified (default: now) |
