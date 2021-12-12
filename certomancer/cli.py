@@ -247,7 +247,7 @@ def necronomicon(ctx, architecture, crl_repo, output, no_pem, at_time,
 @click.pass_context
 @click.argument('architecture', type=str, metavar='PKI_ARCH')
 @click.argument('cert_label', type=str, metavar='CERT_LABEL')
-@click.argument('responder', type=str, metavar='OSCP_RESPONDER')
+@click.argument('responder', type=str, metavar='OCSP_RESPONDER')
 @click.argument('output', type=click.Path(writable=True, dir_okay=False),
                 required=False)
 @click.option('--ignore-tty', type=bool, is_flag=True,
