@@ -662,6 +662,28 @@ Simple plugin that parses ISO 8601 timestamp strings into `GeneralizedTime` obje
     params: "2020-11-30T00:00:00+0000"
 ```
 
+
+#### Target information plugin
+
+| **Schema label** | `ac-targets` |
+| --- | --- |
+| **Params type** | dictionary or list |
+
+Helper to populate a targeting information extension, which is intended for use on attribute
+certificates. It indicates the entity or entities to which the AC is targeted.
+The parameters to `ac-targets` can be either a single target designation or a list of them.
+
+In turn, a target designation can either be a string or a dictionary.
+
+ - If the target designation is a string, it will be interpreted as an entity label.
+   The resulting target value will be the corresponding entity's `directoryName`, used in a
+   `targetName`-based `Target` value.
+ - If the target designation is a dictionary, its `type` and `value` entries will be interpreted
+   as in a general name dictionary (see `general-names`). In addition to those, the plugin looks
+   for an `is-group` boolean entry to decide whether to tag the `Target` value as
+   `targetName` or as `targetGroup`.
+
+
 ### Attribute plugins available by default
 
 #### Role syntax plugin
