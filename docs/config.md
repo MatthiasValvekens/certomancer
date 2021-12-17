@@ -268,7 +268,7 @@ Entries in the `extensions` array are themselves dictionaries with the following
 | `id` |string| Mandatory; given by an OID string, or the name of a certificate extension known to `asn1crypto` (see `x509.ExtensionId`).|
 | `critical` |boolean| Indicates whether the extension is critical or not.|
 | `value` |depends| Direct specification of the extension's value, to be fed directly to the `asn1crypto` class that implements the extension.|
-| `smart-value` |dictionary| Indicates that the value of the certificate extension is to be provided by an extension plugin (more details below).
+| `smart-value` |dictionary| Indicates that the value of the certificate extension is to be provided by an extension plugin (more details below).|
 
 Using `value` isn't always feasible in practice: it only works for extensions that are supported in
 `asn1crypto`, and YAML configuration doesn't always directly translate to input that
@@ -852,7 +852,7 @@ settings are available.
 | `for-issuer` |Entity label| Entity label indicating the issuing CA for which the CRLs are generated.|
 | `signing-key` |Key label| Key label to indicate the key that will be used to sign the CRLs. Defaults to the value of `for-issuer`, if a key with the same label exists. |
 | `issuer-cert` |Cert label| Issuer's certificate. If the issuer only has one certificate, you don't need to bother with this setting. |
-| `extra-urls` |list of strings| Additional URLs to register with this CRL distribution point. These don't mean anything within Certomancer.
+| `extra-urls` |list of strings| Additional URLs to register with this CRL distribution point. These don't mean anything within Certomancer.|
 | `simulated-update-schedule` | duration string | The (simulated) time between CRL updates. This should be specified as an ISO 8601-style duration string, e.g. `P30D` for a 30-day period. Month/year indicators are not allowed. This value affects the way CRL numbers are generated, and also how the `thisUpdate` / `nextUpdate` fields are populated. |
 | `crl-extensions` | list of dictionaries| Extra CRL extensions to use. These also follow the same format as certificate extensions.|
 
