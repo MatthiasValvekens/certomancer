@@ -36,11 +36,9 @@ setup(
 
         'License :: OSI Approved :: MIT License',
 
-        'Programming Language :: Python :: 3',
         'Programming Language :: Python :: 3.7',
         'Programming Language :: Python :: 3.8',
         'Programming Language :: Python :: 3.9',
-        'Programming Language :: Python :: 3.10',
 
         'Topic :: Security :: Cryptography',
         'Topic :: Software Development :: Libraries :: Python Modules',
@@ -68,7 +66,7 @@ setup(
     },
     tests_require=[
         'pytest>=6.1.1', 'pytz>=2020.1',
-        'freezegun>=1.1.0', 'pyhanko-certvalidator==0.19.0',
+        'freezegun>=1.1.0', 'pyhanko-certvalidator==0.19.2',
         'requests>=2.0.0', 'pytest-aiohttp>=0.3.0'
     ],
     keywords="pki testing"

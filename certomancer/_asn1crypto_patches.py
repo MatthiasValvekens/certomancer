@@ -139,6 +139,14 @@ def _make_tag_explicit(field_decl):
     del tag_dict['implicit']
 
 
+def _make_tag_implicit(field_decl):
+    tag_dict = field_decl[2]
+    if 'implicit' in tag_dict:
+        return
+    tag_dict['implicit'] = tag_dict['explicit']
+    del tag_dict['explicit']
+
+
 def register_attr_cert_patches():
     global _attr_cert_patches_registered
     if _attr_cert_patches_registered:
@@ -147,6 +155,8 @@ def register_attr_cert_patches():
     # Deal with wbond/asn1crypto#218
     _make_tag_explicit(cms.RoleSyntax._fields[1])
     _make_tag_explicit(cms.SecurityCategory._fields[1])
+    # Deal with wbond/asn1crypto#220
+    _make_tag_implicit(cms.AttCertIssuer._alternatives[1])
 
     # patch in attribute certificate extensions
     # Note: we only make these patches so that we can reliably produce the
