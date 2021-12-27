@@ -700,7 +700,7 @@ def test_raw_extension():
 
 
 @pytest.mark.parametrize('wrong_value', ['"xlkjd"', '[]', 'null'])
-def test_raw_extension(wrong_value):
+def test_raw_extension_error(wrong_value):
     cfg = f'''
       root:
         subject: root
