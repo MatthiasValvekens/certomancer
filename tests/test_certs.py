@@ -800,9 +800,10 @@ async def test_pregenerated_cert():
     ca_from_disk = load_cert_from_pemder('tests/data/pregenerated-ca-cert.crt')
     assert ca.dump() == ca_from_disk.dump()
 
+    moment = datetime(2021, 5, 10, tzinfo=pytz.utc)
     await pyhanko_certvalidator.CertificateValidator(
         end_entity_cert=arch.get_cert(CertLabel('signer')),
-        validation_context=ValidationContext(trust_roots=[ca]),
+        validation_context=ValidationContext(trust_roots=[ca], moment=moment),
     ).async_validate_usage({'digital_signature'})
 
 
