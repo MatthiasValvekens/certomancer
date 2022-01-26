@@ -14,12 +14,13 @@ from asn1crypto import cms, algos
 from oscrypto import asymmetric, symmetric
 
 from certomancer import registry
+from certomancer.registry import plugin_api
 
 logger = logging.getLogger(__name__)
 
 
 @registry.service_plugin_registry.register
-class EncryptEcho(registry.ServicePlugin):
+class EncryptEcho(plugin_api.ServicePlugin):
     content_type = 'application/cms'
     plugin_label = 'encrypt-echo'
 
@@ -29,14 +30,14 @@ class EncryptEcho(registry.ServicePlugin):
         return registry.CertLabel(recpt)
 
     def invoke(self, arch: registry.PKIArchitecture,
-               info: registry.PluginServiceInfo, request: bytes,
+               info: plugin_api.PluginServiceInfo, request: bytes,
                at_time: Optional[datetime] = None) -> bytes:
 
         cfg = info.plugin_config
         assert isinstance(cfg, registry.CertLabel)
         cert = arch.get_cert(cfg)
         if cert.public_key.algorithm != 'rsa':
-            raise registry.CertomancerServiceError(
+            raise plugin_api.CertomancerServiceError(
                 "This test plugin only works with RSA with PKCS #1 v1.5 padding"
             )
 

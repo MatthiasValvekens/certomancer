@@ -20,7 +20,11 @@ def get_version():
 setup(
     name='certomancer',
     version=get_version(),
-    packages=['certomancer', 'certomancer.integrations'],
+    packages=[
+        'certomancer', 'certomancer.integrations',
+        'certomancer.registry', 'certomancer.registry.issued',
+        'certomancer.registry.svc_config'
+    ],
     url='https://github.com/MatthiasValvekens/certomancer',
     license='MIT',
     author='Matthias Valvekens',

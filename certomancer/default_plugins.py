@@ -8,9 +8,12 @@ from asn1crypto.core import ObjectIdentifier
 from dateutil.parser import parse as parse_dt
 from .config_utils import ConfigurationError, check_config_keys, \
     key_dashes_to_underscores
-from .registry import ExtensionPlugin, PKIArchitecture, \
-    extension_plugin_registry, attr_plugin_registry, \
-    ServiceLabel, CertLabel, EntityRegistry, EntityLabel, AttributePlugin
+from .registry import PKIArchitecture, ServiceLabel, CertLabel, EntityLabel
+from .registry.entities import EntityRegistry
+from .registry.plugin_api import (
+    AttributePlugin, ExtensionPlugin,
+    extension_plugin_registry, attr_plugin_registry,
+)
 
 __all__ = [
     'CRLDistributionPointsPlugin', 'KeyUsagePlugin', 'AIAUrlPlugin',

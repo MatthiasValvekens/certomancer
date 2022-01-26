@@ -16,8 +16,11 @@ from pyhanko_certvalidator import ValidationContext
 
 from certomancer.config_utils import SearchDir, ConfigurationError
 from certomancer.crypto_utils import load_cert_from_pemder
-from certomancer.registry import KeySet, EntityRegistry, PKIArchitecture, \
-    CertLabel, EntityLabel, ArchLabel, CertomancerConfig, HolderSpec
+from certomancer.registry import PKIArchitecture, \
+    CertLabel, EntityLabel, ArchLabel, CertomancerConfig
+from certomancer.registry.keys import KeySet
+from certomancer.registry.entities import EntityRegistry
+from certomancer.registry.issued.attr_cert import HolderSpec
 
 importlib.import_module('certomancer.default_plugins')
 
