@@ -3,6 +3,7 @@ import itertools
 import os
 import os.path
 from collections import defaultdict
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Iterable, Tuple
 from zipfile import ZipFile
@@ -47,111 +48,147 @@ __all__ = [
 ]
 
 
-def _process_cert_spec_settings(cert_spec_config, config_search_dir,
-                                cert_cache):
-    cert_specs: Dict[CertLabel, CertificateSpec] = {}
-    cert_labels_by_issuer = defaultdict(list)
-    cert_labels_by_subject = defaultdict(list)
-    serial_by_issuer = defaultdict(lambda: DEFAULT_FIRST_SERIAL)
-    for name, cert_config in cert_spec_config.items():
-        name = CertLabel(name)
-        cert_config = key_dashes_to_underscores(cert_config)
-        template = cert_config.pop('template', None)
-        if template is not None:
-            # we want to merge extensions from the template
-            extensions = cert_config.pop('extensions', [])
-            try:
-                template_spec: CertificateSpec = \
-                    cert_specs[CertLabel(template)]
-            except KeyError as e:
-                raise ConfigurationError(
-                    f"Cert spec '{name}' refers to '{template}' as a "
-                    f"template, but '{template}' hasn't been declared yet."
-                ) from e
-            effective_cert_config = dict(template_spec.templatable_config)
-            template_extensions = \
-                effective_cert_config.get('extensions', [])
-            effective_cert_config.update(cert_config)
-            # add new extensions
-            effective_cert_config['extensions'] \
-                = extensions + template_extensions
-        else:
-            effective_cert_config = dict(cert_config)
+@dataclass(frozen=True)
+class _IssuedItemConfigState:
+    serial_by_issuer: Dict[EntityLabel, int] = field(
+        default_factory=lambda: defaultdict(lambda: DEFAULT_FIRST_SERIAL))
+    cert_labels_by_issuer: Dict[EntityLabel, List[CertLabel]] \
+        = field(default_factory=lambda: defaultdict(list))
 
-        # derive templatable config before setting defaults
-        effective_cert_config['templatable_config'] = dict(
-            CertificateSpec.extract_templatable_config(effective_cert_config)
-        )
 
-        effective_cert_config['label'] = name.value
-        effective_cert_config.setdefault('subject', name.value)
-        effective_cert_config.setdefault(
-            'subject_key', effective_cert_config['subject']
-        )
+@dataclass(frozen=True)
+class _CertSpecConfigState(_IssuedItemConfigState):
+
+    cert_labels_by_subject: Dict[EntityLabel, List[CertLabel]] \
+        = field(default_factory=lambda: defaultdict(list))
+    cert_specs: Dict[CertLabel, CertificateSpec] \
+        = field(default_factory=dict)
+
+
+def _config_issuer_serial(state: _IssuedItemConfigState, name,
+                          effective_cert_config):
+
+    try:
+        issuer = effective_cert_config['issuer']
+    except KeyError as e:
+        raise ConfigurationError(
+            f"Certificate spec {name} does not specify an issuer."
+        ) from e
+    effective_cert_config.setdefault('authority_key', issuer)
+    serial = state.serial_by_issuer[EntityLabel(issuer)]
+    effective_cert_config.setdefault('serial', serial)
+    state.serial_by_issuer[EntityLabel(issuer)] = serial + 1
+    return EntityLabel(issuer)
+
+
+def _process_template_config(state: _CertSpecConfigState, name, cert_config):
+    template = cert_config.pop('template', None)
+    if template is not None:
+        # we want to merge extensions from the template
+        extensions = cert_config.pop('extensions', [])
         try:
-            issuer = effective_cert_config['issuer']
+            template_spec: CertificateSpec = \
+                state.cert_specs[CertLabel(template)]
         except KeyError as e:
             raise ConfigurationError(
-                f"Certificate spec {name} does not specify an issuer."
+                f"Cert spec '{name}' refers to '{template}' as a "
+                f"template, but '{template}' hasn't been declared yet."
             ) from e
-        effective_cert_config.setdefault('authority_key', issuer)
-        serial = serial_by_issuer[issuer]
-        effective_cert_config.setdefault('serial', serial)
-        serial_by_issuer[issuer] = serial + 1
+        effective_cert_config = dict(template_spec.templatable_config)
+        template_extensions = \
+            effective_cert_config.get('extensions', [])
+        effective_cert_config.update(cert_config)
+        # add new extensions
+        effective_cert_config['extensions'] \
+            = extensions + template_extensions
+    else:
+        effective_cert_config = dict(cert_config)
 
-        cert_specs[name] = spec = CertificateSpec.from_config(
-            effective_cert_config
+    # derive templatable config before setting defaults
+    effective_cert_config['templatable_config'] = dict(
+        CertificateSpec.extract_templatable_config(effective_cert_config)
+    )
+    return effective_cert_config
+
+
+def _process_single_cert_spec(state: _CertSpecConfigState, name, cert_config,
+                              config_search_dir, cert_cache):
+    name = CertLabel(name)
+    cert_config = key_dashes_to_underscores(cert_config)
+
+    effective_cert_config = _process_template_config(state, name, cert_config)
+
+    effective_cert_config['label'] = name.value
+    effective_cert_config.setdefault('subject', name.value)
+    effective_cert_config.setdefault(
+        'subject_key', effective_cert_config['subject']
+    )
+    _config_issuer_serial(state, name, effective_cert_config)
+
+    state.cert_specs[name] = spec = CertificateSpec.from_config(
+        effective_cert_config
+    )
+    if spec.certificate_file is not None:
+        if config_search_dir is None:
+            raise ConfigurationError(
+                f"Failed to load pregenerated cert with name {name}"
+                f"from file; external configuration is disabled."
+            )
+        full_path = config_search_dir.resolve(spec.certificate_file)
+        try:
+            pregenerated = load_cert_from_pemder(full_path)
+            cert_cache[name] = pregenerated
+        except (IOError, ValueError) as e:
+            raise ConfigurationError(
+                f"Failed to load pregenerated cert with name {name}"
+                f"from file {full_path}."
+            ) from e
+    state.cert_labels_by_issuer[spec.issuer].append(name)
+    state.cert_labels_by_subject[spec.subject].append(name)
+
+
+def _process_cert_spec_settings(cert_spec_config, config_search_dir,
+                                cert_cache):
+    state = _CertSpecConfigState()
+    for name, cert_config in cert_spec_config.items():
+        _process_single_cert_spec(
+            state, name, cert_config, config_search_dir, cert_cache
         )
-        if spec.certificate_file is not None:
-            if config_search_dir is None:
-                raise ConfigurationError(
-                    f"Failed to load pregenerated cert with name {name}"
-                    f"from file; external configuration is disabled."
-                )
-            full_path = config_search_dir.resolve(spec.certificate_file)
-            try:
-                pregenerated = load_cert_from_pemder(full_path)
-                cert_cache[name] = pregenerated
-            except (IOError, ValueError) as e:
-                raise ConfigurationError(
-                    f"Failed to load pregenerated cert with name {name}"
-                    f"from file {full_path}."
-                ) from e
-        cert_labels_by_issuer[spec.issuer].append(name)
-        cert_labels_by_subject[spec.subject].append(name)
 
-    return cert_specs, cert_labels_by_issuer, cert_labels_by_subject
+    return (
+        state.cert_specs, state.cert_labels_by_issuer,
+        state.cert_labels_by_subject
+    )
+
+
+@dataclass(frozen=True)
+class _ACSpecConfigState(_IssuedItemConfigState):
+
+    cert_labels_by_holder: Dict[EntityLabel, List[CertLabel]] \
+        = field(default_factory=lambda: defaultdict(list))
+    ac_specs: Dict[CertLabel, AttributeCertificateSpec] \
+        = field(default_factory=dict)
 
 
 def _process_ac_spec_config(ac_spec_config):
-    ac_specs: Dict[CertLabel, AttributeCertificateSpec] = {}
-    cert_labels_by_issuer = defaultdict(list)
-    cert_labels_by_holder = defaultdict(list)
-    serial_by_issuer = defaultdict(lambda: DEFAULT_FIRST_SERIAL)
+    state = _ACSpecConfigState()
     for name, ac_config in ac_spec_config.items():
         name = CertLabel(name)
         ac_config = key_dashes_to_underscores(ac_config)
         effective_cert_config = dict(ac_config)
 
         effective_cert_config['label'] = name.value
-        try:
-            issuer = effective_cert_config['issuer']
-        except KeyError as e:
-            raise ConfigurationError(
-                f"AC spec {name} does not specify an issuer."
-            ) from e
-        effective_cert_config.setdefault('authority_key', issuer)
-        serial = serial_by_issuer[issuer]
-        effective_cert_config.setdefault('serial', serial)
-        serial_by_issuer[issuer] = serial + 1
+        _config_issuer_serial(state, name, effective_cert_config)
 
-        ac_specs[name] = spec = AttributeCertificateSpec.from_config(
+        state.ac_specs[name] = spec = AttributeCertificateSpec.from_config(
             effective_cert_config
         )
-        cert_labels_by_issuer[spec.issuer].append(name)
-        cert_labels_by_holder[spec.holder.name].append(name)
+        state.cert_labels_by_issuer[spec.issuer].append(name)
+        state.cert_labels_by_holder[spec.holder.name].append(name)
 
-    return ac_specs, cert_labels_by_issuer, cert_labels_by_holder
+    return (
+        state.ac_specs, state.cert_labels_by_issuer, state.cert_labels_by_holder
+    )
 
 
 DEFAULT_FIRST_SERIAL = 0x1000
