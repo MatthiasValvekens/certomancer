@@ -81,14 +81,13 @@ def _config_issuer_serial(state: _IssuedItemConfigState, name,
     return EntityLabel(issuer)
 
 
-def _process_template_config(state: _CertSpecConfigState, name, cert_config):
+def _process_template_config(cert_specs, name, cert_config):
     template = cert_config.pop('template', None)
     if template is not None:
         # we want to merge extensions from the template
         extensions = cert_config.pop('extensions', [])
         try:
-            template_spec: CertificateSpec = \
-                state.cert_specs[CertLabel(template)]
+            template_spec: CertificateSpec = cert_specs[CertLabel(template)]
         except KeyError as e:
             raise ConfigurationError(
                 f"Cert spec '{name}' refers to '{template}' as a "
@@ -116,7 +115,9 @@ def _process_single_cert_spec(state: _CertSpecConfigState, name, cert_config,
     name = CertLabel(name)
     cert_config = key_dashes_to_underscores(cert_config)
 
-    effective_cert_config = _process_template_config(state, name, cert_config)
+    effective_cert_config = _process_template_config(
+        state.cert_specs, name, cert_config
+    )
 
     effective_cert_config['label'] = name.value
     effective_cert_config.setdefault('subject', name.value)
