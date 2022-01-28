@@ -1,10 +1,10 @@
 import hashlib
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional, List, TYPE_CHECKING
 
 from asn1crypto import x509, cms, keys
 
-from .general import IssuedItemSpec, ExtensionSpec, parse_extension_settings
+from .general import IssuedItemSpec
 from ..common import EntityLabel, CertLabel, KeyLabel
 from ..entities import as_general_name
 from ..plugin_api import process_config_with_smart_value, SmartValueSpec
@@ -184,9 +184,6 @@ class AttributeCertificateSpec(IssuedItemSpec):
     attributes: List[AttrSpec]
     """List of certified attributes."""
 
-    extensions: List[ExtensionSpec] = field(default_factory=list)
-    """Extension settings for the attribute certificate."""
-
     @classmethod
     def process_entries(cls, config_dict):
         try:
@@ -205,14 +202,13 @@ class AttributeCertificateSpec(IssuedItemSpec):
                 f"{type(holder_raw)}."
             )
 
-        parse_extension_settings(config_dict, 'extensions')
-        ext_spec = config_dict.get('attributes', ())
-        if not isinstance(ext_spec, (list, tuple)):
+        attr_spec = config_dict.get('attributes', ())
+        if not isinstance(attr_spec, (list, tuple)):
             raise ConfigurationError(
                 "Applicable attributes must be specified as a list."
             )
         config_dict['attributes'] = [
-            AttrSpec.from_config(sett) for sett in ext_spec
+            AttrSpec.from_config(sett) for sett in attr_spec
         ]
         super().process_entries(config_dict)
 

@@ -2,7 +2,7 @@ import abc
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional, Type, Union, Any, TYPE_CHECKING, List
+from typing import Optional, Type, Union, Any, TYPE_CHECKING, Dict, List
 
 from asn1crypto import core, cms
 from asn1crypto.core import ObjectIdentifier
@@ -523,14 +523,18 @@ class CertProfilePluginRegistry:
         return item in self._dict
 
     def apply_profiles(self, arch: 'PKIArchitecture',
-                       item_spec: 'IssuedItemSpec') -> List['ExtensionSpec']:
-        collected_extensions = []
+                       item_spec: 'IssuedItemSpec') \
+            -> Dict[str, 'ExtensionSpec']:
+
+        collected_extensions = {}
         self_profile_config = item_spec.profiles
         for profile, params in self_profile_config.items():
             extensions = self[profile].extensions_for_self(
                 arch, params, item_spec
             )
-            collected_extensions.extend(extensions)
+            collected_extensions.update({
+                ext_spec.id: ext_spec for ext_spec in extensions
+            })
 
         try:
             issuer_cert_lbl = item_spec.resolve_issuer_cert(arch)
@@ -544,7 +548,9 @@ class CertProfilePluginRegistry:
                 extensions = self[profile].extensions_for_issued(
                     arch, params, issuer_spec, item_spec
                 )
-                collected_extensions.extend(extensions)
+                collected_extensions.update({
+                    ext_spec.id: ext_spec for ext_spec in extensions
+                })
         return collected_extensions
 
 

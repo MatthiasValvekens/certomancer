@@ -18,7 +18,7 @@ from .common import ArchLabel, ServiceLabel, CertLabel, KeyLabel, EntityLabel, \
 from .entities import EntityRegistry, as_general_name
 from .issued.attr_cert import AttributeCertificateSpec
 from .issued.cert import CertificateSpec
-from .issued.general import RevocationStatus
+from .issued.general import RevocationStatus, IssuedItemSpec
 from .keys import KeySet, KeySets
 from .plugin_api import ExtensionPluginRegistry, AttributePluginRegistry, \
     ServicePluginRegistry, PluginServiceInfo, CertProfilePluginRegistry, \
@@ -82,6 +82,31 @@ def _config_issuer_serial(state: _IssuedItemConfigState, name,
     return EntityLabel(issuer)
 
 
+def _combine_extension_cfgs(explicit_exts, template_exts, unique_req: bool):
+    # NOTE for backwards compat:
+    #  extensions + template_extensions was the original order,
+    #  so we need to make sure that's the order in which we process
+    #  the keys when eliminating duplicates, to maximally maintain compatibility
+    #  in terms of output (to the extent possible, that is).
+
+    if unique_req:
+        extensions = []
+        seen = set()
+        for ext_cfg in explicit_exts + template_exts:
+            try:
+                ext_id = ext_cfg['id']
+            except KeyError:
+                raise ConfigurationError(
+                    "'id' is required in extension dictionaries"
+                )
+            if ext_id not in seen:
+                extensions.append(ext_cfg)
+                seen.add(ext_id)
+    else:
+        extensions = explicit_exts + template_exts
+    return extensions
+
+
 def _process_template_config(cert_specs, name, cert_config):
     template = cert_config.pop('template', None)
     if template is not None:
@@ -98,9 +123,12 @@ def _process_template_config(cert_specs, name, cert_config):
         template_extensions = \
             effective_cert_config.get('extensions', [])
         effective_cert_config.update(cert_config)
+
         # add new extensions
-        effective_cert_config['extensions'] \
-            = extensions + template_extensions
+        effective_cert_config['extensions'] = _combine_extension_cfgs(
+            extensions, template_extensions,
+            effective_cert_config.get('unique_extensions', True)
+        )
     else:
         effective_cert_config = dict(cert_config)
 
@@ -181,6 +209,11 @@ def _process_ac_spec_config(ac_spec_config):
 
         effective_cert_config['label'] = name.value
         _config_issuer_serial(state, name, effective_cert_config)
+
+        if effective_cert_config.get('unique_extensions', True):
+            effective_cert_config['extensions'] = _combine_extension_cfgs(
+                effective_cert_config.get('extensions', []), [], True
+            )
 
         state.ac_specs[name] = spec = AttributeCertificateSpec.from_config(
             effective_cert_config
@@ -616,6 +649,33 @@ class PKIArchitecture:
             zip_file.writestr(fname, data)
         zip_file.close()
 
+    def _collect_extensions(self, spec: IssuedItemSpec,
+                            extension_dict: Dict[str, x509.Extension]) \
+            -> List[x509.Extension]:
+
+        if spec.unique_extensions:
+            # apply profiles
+            exts_from_profile = \
+                self.profile_registry.apply_profiles(arch=self, item_spec=spec)
+            extension_dict.update({
+                k: ext_spec.to_asn1(self, x509.Extension)
+                for k, ext_spec in exts_from_profile.items()
+            })
+            # add extensions from config
+            extension_dict.update({
+                ext_spec.id: ext_spec.to_asn1(self, x509.Extension)
+                for ext_spec in spec.extensions
+            })
+            extensions = list(extension_dict.values())
+        else:
+            # no profiles in non-unique mode
+            extensions = list(extension_dict.values())
+            extensions.extend(
+                ext_spec.to_asn1(self, x509.Extension)
+                for ext_spec in spec.extensions
+            )
+        return extensions
+
     def get_attr_cert(self, label: CertLabel) -> cms.AttributeCertificateV2:
         try:
             return self._ac_cache[label]
@@ -641,26 +701,16 @@ class PKIArchitecture:
         if aki is None:
             aki = authority_key.public_key_info.sha1
 
-        # apply profiles
-        exts_from_profile = \
-            self.profile_registry.apply_profiles(arch=self, item_spec=spec)
-
         aki_value = x509.AuthorityKeyIdentifier({'key_identifier': aki})
         aki_extension = x509.Extension({
             'extn_id': 'authority_key_identifier',
             'critical': False,
             'extn_value': aki_value
         })
-        extensions = [aki_extension]
-        extensions.extend(
-            ext_spec.to_asn1(self, x509.Extension)
-            for ext_spec in exts_from_profile
-        )
-        # add extensions from config
-        extensions.extend(
-            ext_spec.to_asn1(self, x509.Extension)
-            for ext_spec in spec.extensions
-        )
+        extension_dict = {
+            'authority_key_identifier': aki_extension
+        }
+        extensions = self._collect_extensions(spec, extension_dict)
 
         attributes = [attr.to_asn1(self) for attr in spec.attributes]
         tbs = cms.AttributeCertificateInfoV2({
@@ -745,26 +795,17 @@ class PKIArchitecture:
             # by Certomancer)
             aki = authority_key.public_key_info.sha1
 
-        # apply profiles
-        exts_from_profile = \
-            self.profile_registry.apply_profiles(arch=self, item_spec=spec)
-
         aki_value = x509.AuthorityKeyIdentifier({'key_identifier': aki})
         aki_extension = x509.Extension({
             'extn_id': 'authority_key_identifier',
             'critical': False,
             'extn_value': aki_value
         })
-        extensions = [ski_extension, aki_extension]
-        # add extensions from profile
-        extensions.extend(
-            ext_spec.to_asn1(self, x509.Extension)
-            for ext_spec in exts_from_profile
-        )
-        # add extensions from config
-        extensions.extend(
-            ext_spec.to_asn1(self, x509.Extension)
-            for ext_spec in spec.extensions
+        extensions = self._collect_extensions(
+            spec, {
+                'key_identifier': ski_extension,
+                'authority_key_identifier': aki_extension
+            }
         )
         tbs = x509.TbsCertificate({
             'version': 'v3',

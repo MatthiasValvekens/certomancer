@@ -1,8 +1,8 @@
-from dataclasses import dataclass, field
-from typing import Optional, List, Dict
+from dataclasses import dataclass
+from typing import Optional
 
-from .general import IssuedItemSpec, ExtensionSpec, parse_extension_settings
-from ..common import EntityLabel, CertLabel, KeyLabel, PluginLabel
+from .general import IssuedItemSpec
+from ..common import EntityLabel, CertLabel, KeyLabel
 
 EXCLUDED_FROM_TEMPLATE = frozenset(
     {'subject', 'subject_key', 'serial', 'certificate_file'}
@@ -25,17 +25,6 @@ class CertificateSpec(IssuedItemSpec):
 
     templatable_config: dict
     """Configuration that can be reused by other certificate specs."""
-
-    extensions: List[ExtensionSpec] = field(default_factory=list)
-    """
-    Extension settings for the certificate.
-
-    .. note::
-        The ``subjectKeyIdentifier`` and ``authorityKeyIdentifier`` extensions
-        are supplied automatically, but any other extensions (including
-        ``basicConstraints`` for CA certificates) need to be explicitly
-        specified in the configuration.
-    """
 
     certificate_file: Optional[str] = None
     """
@@ -81,12 +70,6 @@ class CertificateSpec(IssuedItemSpec):
         i.e. whether the signer's (public) key is the same as the subject key.
         """
         return self.subject_key == self.authority_key
-
-    @classmethod
-    def process_entries(cls, config_dict):
-        parse_extension_settings(config_dict, 'extensions')
-
-        super().process_entries(config_dict)
 
     @classmethod
     def extract_templatable_config(cls, config_dict):

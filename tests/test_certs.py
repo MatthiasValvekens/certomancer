@@ -1172,3 +1172,94 @@ def test_svce_auth_info_errors(err_msg, params_str):
     )
     with pytest.raises(ConfigurationError, match=err_msg):
         ServiceAuthInfoPlugin().provision(None, arch, params)
+
+
+def test_template_extension_uniqueness():
+    cfg = '''
+      root-ca:
+        subject: root
+        subject-key: root
+        issuer: root
+        authority-key: root
+        validity:
+          valid-from: "2000-01-01T00:00:00+0000"
+          valid-to: "2500-01-01T00:00:00+0000"
+        extensions:
+          - id: basic_constraints
+            critical: true
+            value:
+              ca: true
+          - id: key_usage
+            critical: true
+            smart-value:
+              schema: key-usage
+              params: [digital_signature, key_cert_sign, crl_sign]
+      intermediate-ca:
+        template: root-ca
+        subject: interm
+        issuer: root
+        extensions:
+          - id: basic_constraints
+            critical: true
+            value:
+              ca: true
+              path-len-constraint: 0
+    '''
+
+    arch = PKIArchitecture(
+        arch_label=ArchLabel('test'), key_set=RSA_KEYS, entities=ENTITIES,
+        cert_spec_config=yaml.safe_load(cfg), service_config={},
+        external_url_prefix='http://test.test',
+    )
+    root_cert = arch.get_cert(CertLabel('root-ca'))
+    interm_cert = arch.get_cert(CertLabel('intermediate-ca'))
+    assert \
+        root_cert.basic_constraints_value['path_len_constraint'].native is None
+    assert \
+        interm_cert.basic_constraints_value['path_len_constraint'].native == 0
+    assert \
+        root_cert.key_usage_value.dump() == interm_cert.key_usage_value.dump()
+
+
+def test_duplicate_exts():
+    cfg = '''
+      root-ca:
+        subject: root
+        subject-key: root
+        issuer: root
+        authority-key: root
+        validity:
+          valid-from: "2000-01-01T00:00:00+0000"
+          valid-to: "2500-01-01T00:00:00+0000"
+        unique-extensions: false
+        extensions:
+          - id: basic_constraints
+            critical: true
+            value:
+              ca: true
+          - id: key_usage
+            critical: true
+            smart-value:
+              schema: key-usage
+              params: [digital_signature, key_cert_sign, crl_sign]
+          - id: '2.999'
+            smart-value:
+                schema: der-bytes
+                params: "0404deadbeef"
+          - id: '2.999'
+            smart-value:
+                schema: der-bytes
+                params: "0404cafebabe"
+    '''
+
+    arch = PKIArchitecture(
+        arch_label=ArchLabel('test'), key_set=RSA_KEYS, entities=ENTITIES,
+        cert_spec_config=yaml.safe_load(cfg), service_config={},
+        external_url_prefix='http://test.test',
+    )
+    cert = arch.get_cert(CertLabel('root-ca'))
+    values_seen = []
+    for ext in cert['tbs_certificate']['extensions']:
+        if ext['extn_id'].native == '2.999':
+            values_seen.append(ext['extn_value'].parsed.native)
+    assert values_seen == [b'\xde\xad\xbe\xef', b'\xca\xfe\xba\xbe']
