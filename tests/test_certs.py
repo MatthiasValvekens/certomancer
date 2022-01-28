@@ -1263,3 +1263,121 @@ def test_duplicate_exts():
         if ext['extn_id'].native == '2.999':
             values_seen.append(ext['extn_value'].parsed.native)
     assert values_seen == [b'\xde\xad\xbe\xef', b'\xca\xfe\xba\xbe']
+
+
+def test_apply_profiles():
+    cfg = """
+      root:
+        subject: root
+        subject-key: root
+        issuer: root
+        authority-key: root
+        validity:
+          valid-from: "2000-01-01T00:00:00+0000"
+          valid-to: "2500-01-01T00:00:00+0000"
+        profiles:
+          - id: simple-ca
+            params:
+              crl-repo: root
+      interm:
+        issuer: root
+        validity:
+          valid-from: "2000-01-01T00:00:00+0000"
+          valid-to: "2100-01-01T00:00:00+0000"
+        profiles:
+          - id: simple-ca
+            params:
+              ocsp-service: interm
+      interm-ocsp:
+        issuer: interm
+        validity:
+          valid-from: "2000-01-01T00:00:00+0000"
+          valid-to: "2100-01-01T00:00:00+0000"
+        profiles:
+          - ocsp-responder
+      leaf:
+        subject: signer1
+        subject-key: signer
+        issuer: interm
+        validity:
+          valid-from: "2020-01-01T00:00:00+0000"
+          valid-to: "2022-01-01T00:00:00+0000"
+        profiles:
+          - digsig-commitment
+    """
+
+    srv_cfg = """
+    ocsp:
+        interm:
+          for-issuer: interm
+          responder-cert: interm-ocsp
+          signing-key: interm-ocsp
+    crl-repo:
+        root:
+          for-issuer: root
+          signing-key: root
+          simulated-update-schedule: "P90D"
+    """
+    arch = PKIArchitecture(
+        arch_label=ArchLabel('test'), key_set=RSA_KEYS, entities=ENTITIES,
+        cert_spec_config=yaml.safe_load(cfg),
+        service_config=yaml.safe_load(srv_cfg),
+        external_url_prefix='http://test.test',
+    )
+    cert = arch.get_cert(CertLabel('leaf'))
+    assert cert.ocsp_urls == ['http://test.test/test/ocsp/interm']
+    assert cert.key_usage_value.native \
+           == {"digital_signature", "non_repudiation"}
+
+    cert = arch.get_cert(CertLabel('interm'))
+    assert cert.ocsp_urls == []
+    crl_urls = [
+        dp['distribution_point'].native[0]
+        for dp in cert.crl_distribution_points
+    ]
+    assert crl_urls == ['http://test.test/test/crls/root/latest.crl']
+    assert cert.key_usage_value.native \
+           == {"digital_signature", "crl_sign", "key_cert_sign"}
+
+
+def test_apply_simple_ca_skip_ocsp():
+    cfg = """
+      root:
+        subject: root
+        subject-key: root
+        issuer: root
+        authority-key: root
+        validity:
+          valid-from: "2000-01-01T00:00:00+0000"
+          valid-to: "2500-01-01T00:00:00+0000"
+        profiles:
+          - id: simple-ca
+            params:
+                ocsp-service: root
+      ocsp:
+        issuer: root
+        subject: interm-ocsp
+        validity:
+          valid-from: "2000-01-01T00:00:00+0000"
+          valid-to: "2100-01-01T00:00:00+0000"
+        profiles:
+          - ocsp-responder
+    """
+
+    srv_cfg = """
+    ocsp:
+        root:
+          for-issuer: root
+          responder-cert: ocsp
+          signing-key: interm-ocsp
+    """
+
+    arch = PKIArchitecture(
+        arch_label=ArchLabel('test'), key_set=RSA_KEYS, entities=ENTITIES,
+        cert_spec_config=yaml.safe_load(cfg),
+        service_config=yaml.safe_load(srv_cfg),
+        external_url_prefix='http://test.test',
+    )
+    cert = arch.get_cert(CertLabel('ocsp'))
+    assert cert.ocsp_urls == []
+    assert cert.ocsp_no_check_value == core.Null()
