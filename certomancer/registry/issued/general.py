@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional, List, TYPE_CHECKING, Dict
+from typing import Optional, List, TYPE_CHECKING, Dict, Any
 
 from asn1crypto import x509, core, ocsp, crl, cms
 from dateutil.parser import parse as parse_dt
@@ -234,7 +234,7 @@ class IssuedItemSpec(ConfigurableMixin):
     revocation: Optional[RevocationStatus]
     """Revocation status of the certificate, if relevant."""
 
-    profiles: Dict[PluginLabel, dict]
+    profiles: Dict[PluginLabel, Any]
     """
     Certificate profile plugins applied to the certificate.
     """
@@ -280,7 +280,6 @@ class IssuedItemSpec(ConfigurableMixin):
         config_dict.setdefault('issuer_cert', None)
         config_dict.setdefault('revocation', None)
         config_dict.setdefault('digest_algo', 'sha256')
-        config_dict.setdefault('profiles', {})
         config_dict.setdefault('extensions', [])
         config_dict.setdefault('unique_extensions', True)
 
@@ -295,6 +294,32 @@ class IssuedItemSpec(ConfigurableMixin):
             config_dict['revocation'] = RevocationStatus.from_config(revocation)
 
         parse_extension_settings(config_dict, 'extensions')
+
+        profile_cfgs = config_dict.get('profiles', [])
+        if not isinstance(profile_cfgs, list):
+            raise ConfigurationError(
+                f"Value of 'profiles' must be a list, not {type(profile_cfgs)}."
+            )
+        profiles = {}
+        for profile in config_dict.get('profiles', []):
+            if isinstance(profile, dict):
+                try:
+                    profile_id = profile['id']
+                    params = profile.get('params', None)
+                except KeyError:
+                    raise ConfigurationError(
+                        "'id' is required for all entries in 'profiles'"
+                    )
+            elif isinstance(profile, str):
+                profile_id = profile
+                params = None
+            else:
+                raise ConfigurationError(
+                    f"Entries in 'profiles' must be of type str or dict, not "
+                    f"{type(profile)}."
+                )
+            profiles[PluginLabel(profile_id)] = params
+        config_dict['profiles'] = profiles
         super().process_entries(config_dict)
 
     def resolve_issuer_cert(self, arch: 'PKIArchitecture') -> CertLabel:
