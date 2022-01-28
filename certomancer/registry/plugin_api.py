@@ -463,6 +463,7 @@ class ServicePluginRegistry:
 # TODO document these
 
 class CertProfilePlugin(abc.ABC):
+    profile_label: str
 
     def extensions_for_self(self, arch: 'PKIArchitecture',
                             profile_params: Any, spec: 'IssuedItemSpec') \

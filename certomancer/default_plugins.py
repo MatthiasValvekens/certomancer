@@ -1,6 +1,6 @@
 import binascii
 import itertools
-from typing import Optional
+from typing import Optional, Any, List
 
 from asn1crypto import x509, core, cms
 from asn1crypto.core import ObjectIdentifier
@@ -8,11 +8,14 @@ from asn1crypto.core import ObjectIdentifier
 from dateutil.parser import parse as parse_dt
 from .config_utils import ConfigurationError, check_config_keys, \
     key_dashes_to_underscores
-from .registry import PKIArchitecture, ServiceLabel, CertLabel, EntityLabel
+from .registry import PKIArchitecture, ServiceLabel, CertLabel, EntityLabel, \
+    CertificateSpec, PluginLabel
 from .registry.entities import EntityRegistry
+from .registry.issued.general import ExtensionSpec, IssuedItemSpec
 from .registry.plugin_api import (
     AttributePlugin, ExtensionPlugin,
-    extension_plugin_registry, attr_plugin_registry,
+    extension_plugin_registry, attr_plugin_registry, CertProfilePlugin,
+    SmartValueSpec, cert_profile_plugin_registry,
 )
 
 __all__ = [
@@ -458,3 +461,83 @@ class RawDERBytes(ExtensionPlugin):
             )
 
         return core.ParsableOctetString(der_bytes)
+
+
+@cert_profile_plugin_registry.register
+class SimpleCAProfile(CertProfilePlugin):
+    profile_label = 'simple-ca'
+
+    @classmethod
+    def _normalise_params(cls, profile_params):
+        profile_params = profile_params or {}
+        if not isinstance(profile_params, dict):
+            raise ConfigurationError(
+                "parameters for 'simple-ca' must be specified as a dict"
+            )
+        return profile_params
+
+    def extensions_for_self(self, arch: 'PKIArchitecture', profile_params: Any,
+                            spec: IssuedItemSpec) -> List[ExtensionSpec]:
+        if not isinstance(spec, CertificateSpec):
+            raise ConfigurationError(
+                "'simple-ca' can only be used on public-key certificates"
+            )
+        profile_params = self._normalise_params(profile_params)
+        bc_value = {'ca': True}
+        try:
+            path_len = int(profile_params['max-path-len'])
+            bc_value['path_len_constraint'] = path_len
+        except KeyError:
+            pass
+        except ValueError:
+            raise ConfigurationError("'max-path-len' must be a numeric value")
+
+        bc_ext = ExtensionSpec(
+            id='basic_constraints', critical=True, value=bc_value
+        )
+
+        key_usages = {'digital_signature', 'key_cert_sign', 'crl_sign'}
+        key_usage_ext = ExtensionSpec(
+            id='key_usage', critical=True,
+            value=x509.KeyUsage(key_usages)
+        )
+        return [bc_ext, key_usage_ext]
+
+    def extensions_for_issued(self, arch: 'PKIArchitecture',
+                              profile_params: Any,
+                              issuer_spec: CertificateSpec,
+                              issued_spec: IssuedItemSpec) \
+            -> List[ExtensionSpec]:
+        profile_params = self._normalise_params(profile_params)
+
+        results = []
+        try:
+            crl_repo_lbl = ServiceLabel(profile_params['crl-repo'])
+            crl_distpoints_ext = ExtensionSpec(
+                id='crl_distribution_points',
+                smart_value=SmartValueSpec(
+                    schema=PluginLabel('crl-dist-url'),
+                    params={'crl-repo-names': [crl_repo_lbl]}
+                )
+            )
+            results.append(crl_distpoints_ext)
+        except KeyError:
+            pass
+        except (ValueError, TypeError):
+            raise ConfigurationError("'crl-repo' must be a string")
+
+        try:
+            ocsp_service_lbl = ServiceLabel(profile_params['ocsp-service'])
+            aia_ext = ExtensionSpec(
+                id='authority_information_access',
+                smart_value=SmartValueSpec(
+                    schema=PluginLabel('aia-urls'),
+                    params={'ocsp-responder-names': [ocsp_service_lbl]}
+                )
+            )
+            results.append(aia_ext)
+        except KeyError:
+            pass
+        except (ValueError, TypeError):
+            raise ConfigurationError("'ocsp-service' must be a string")
+        return results

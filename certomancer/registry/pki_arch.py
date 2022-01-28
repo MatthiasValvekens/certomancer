@@ -757,7 +757,7 @@ class PKIArchitecture:
         })
         extensions = [ski_extension, aki_extension]
         # add extensions from profile
-        exts_from_profile.extend(
+        extensions.extend(
             ext_spec.to_asn1(self, x509.Extension)
             for ext_spec in exts_from_profile
         )
