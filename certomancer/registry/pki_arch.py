@@ -21,7 +21,8 @@ from .issued.cert import CertificateSpec
 from .issued.general import RevocationStatus
 from .keys import KeySet, KeySets
 from .plugin_api import ExtensionPluginRegistry, AttributePluginRegistry, \
-    ServicePluginRegistry, PluginServiceInfo
+    ServicePluginRegistry, PluginServiceInfo, CertProfilePluginRegistry, \
+    cert_profile_plugin_registry
 from .svc_config.cert_repo import (
     CertRepoServiceInfo, AttrCertRepoServiceInfo,
     BaseCertRepoServiceInfo
@@ -343,7 +344,8 @@ class PKIArchitecture:
                  ac_spec_config=None,
                  extension_plugins: ExtensionPluginRegistry = None,
                  attr_plugins: AttributePluginRegistry = None,
-                 service_plugins: 'ServicePluginRegistry' = None,
+                 service_plugins: ServicePluginRegistry = None,
+                 profile_plugins: CertProfilePluginRegistry = None,
                  config_search_dir: Optional[SearchDir] = None,
                  cert_cache=None, ac_cache=None):
 
@@ -355,6 +357,9 @@ class PKIArchitecture:
             extension_plugins or plugin_api.extension_plugin_registry
         self.attr_plugin_registry = \
             attr_plugins or plugin_api.attr_plugin_registry
+
+        self.profile_registry: CertProfilePluginRegistry = \
+            profile_plugins or cert_profile_plugin_registry
 
         self.service_registry: ServiceRegistry = ServiceRegistry(
             self, external_url_prefix, service_config,
@@ -636,6 +641,10 @@ class PKIArchitecture:
         if aki is None:
             aki = authority_key.public_key_info.sha1
 
+        # apply profiles
+        exts_from_profile = \
+            self.profile_registry.apply_profiles(arch=self, item_spec=spec)
+
         aki_value = x509.AuthorityKeyIdentifier({'key_identifier': aki})
         aki_extension = x509.Extension({
             'extn_id': 'authority_key_identifier',
@@ -643,6 +652,10 @@ class PKIArchitecture:
             'extn_value': aki_value
         })
         extensions = [aki_extension]
+        extensions.extend(
+            ext_spec.to_asn1(self, x509.Extension)
+            for ext_spec in exts_from_profile
+        )
         # add extensions from config
         extensions.extend(
             ext_spec.to_asn1(self, x509.Extension)
@@ -731,6 +744,11 @@ class PKIArchitecture:
             # the user loaded in certificates that weren't generated
             # by Certomancer)
             aki = authority_key.public_key_info.sha1
+
+        # apply profiles
+        exts_from_profile = \
+            self.profile_registry.apply_profiles(arch=self, item_spec=spec)
+
         aki_value = x509.AuthorityKeyIdentifier({'key_identifier': aki})
         aki_extension = x509.Extension({
             'extn_id': 'authority_key_identifier',
@@ -738,6 +756,11 @@ class PKIArchitecture:
             'extn_value': aki_value
         })
         extensions = [ski_extension, aki_extension]
+        # add extensions from profile
+        exts_from_profile.extend(
+            ext_spec.to_asn1(self, x509.Extension)
+            for ext_spec in exts_from_profile
+        )
         # add extensions from config
         extensions.extend(
             ext_spec.to_asn1(self, x509.Extension)

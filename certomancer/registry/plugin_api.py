@@ -2,7 +2,7 @@ import abc
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional, Type, Union, Any, TYPE_CHECKING
+from typing import Optional, Type, Union, Any, TYPE_CHECKING, List
 
 from asn1crypto import core, cms
 from asn1crypto.core import ObjectIdentifier
@@ -15,6 +15,8 @@ from ..config_utils import (
 from ..services import CertomancerServiceError
 
 if TYPE_CHECKING:
+    from .issued.general import ExtensionSpec, IssuedItemSpec
+    from .issued.cert import CertificateSpec
     from .pki_arch import PKIArchitecture
 
 logger = logging.getLogger(__name__)
@@ -23,16 +25,19 @@ __all__ = [
     'ExtensionPlugin',
     'AttributePlugin',
     'ServicePlugin',
+    'CertProfilePlugin',
     'SmartValueSpec',
     'PluginServiceInfo',
     'ExtensionPluginRegistry',
     'AttributePluginRegistry',
     'ServicePluginRegistry',
     'PluginServiceRequestError',
+    'CertProfilePluginRegistry',
     'process_config_with_smart_value',
     'extension_plugin_registry',
     'attr_plugin_registry',
     'service_plugin_registry',
+    'cert_profile_plugin_registry'
 ]
 
 
@@ -455,6 +460,93 @@ class ServicePluginRegistry:
             raise ConfigurationError(f"Plugin '{item}' is not registered.")
 
 
+# TODO document these
+
+class CertProfilePlugin(abc.ABC):
+
+    def extensions_for_self(self, arch: 'PKIArchitecture',
+                            profile_params: Any, spec: 'IssuedItemSpec') \
+            -> List['ExtensionSpec']:
+        raise NotImplementedError
+
+    def extensions_for_issued(self, arch: 'PKIArchitecture',
+                              profile_params: Any,
+                              issuer_spec: 'CertificateSpec',
+                              issued_spec: 'IssuedItemSpec') \
+            -> List['ExtensionSpec']:
+        return []
+
+
+class CertProfilePluginRegistry:
+
+    def __init__(self):
+        self._dict = {}
+
+    def register(self,
+                 plugin: Union[CertProfilePlugin, Type[CertProfilePlugin]]):
+        """
+        Register a plugin object.
+
+        As a convenience, you can also use this method as a class decorator
+        on plugin classes. In this case latter case, the plugin class should
+        have a no-arguments ``__init__`` method.
+
+        :param plugin:
+            A subclass of :class:`CertProfilePlugin`, or an instance of
+            such a subclass.
+        """
+
+        orig_input = plugin
+
+        plugin, cls = plugin_instantiate_util(plugin)
+
+        profile_label = plugin.profile_label
+        if not isinstance(profile_label, str):
+            raise ConfigurationError(
+                f"Profile plugin {cls.__name__} does not declare a string-type "
+                f"'profile_label' attribute."
+            )
+
+        self._dict[PluginLabel(profile_label)] = plugin
+        return orig_input
+
+    def __getitem__(self, item: PluginLabel) -> CertProfilePlugin:
+        try:
+            return self._dict[item]
+        except KeyError as e:
+            raise CertomancerObjectNotFoundError(
+                f"There is no profile labelled '{item}'."
+            ) from e
+
+    def __contains__(self, item: PluginLabel):
+        return item in self._dict
+
+    def apply_profiles(self, arch: 'PKIArchitecture',
+                       item_spec: 'IssuedItemSpec') -> List['ExtensionSpec']:
+        collected_extensions = []
+        self_profile_config = item_spec.profiles
+        for profile, params in self_profile_config.items():
+            extensions = self[profile].extensions_for_self(
+                arch, params, item_spec
+            )
+            collected_extensions.extend(extensions)
+
+        try:
+            issuer_cert_lbl = item_spec.resolve_issuer_cert(arch)
+            issuer_spec = arch.get_cert_spec(issuer_cert_lbl)
+        except CertomancerObjectNotFoundError:
+            issuer_spec = None
+
+        if issuer_spec is not None:
+            issuer_profile_config = issuer_spec.profiles
+            for profile, params in issuer_profile_config.items():
+                extensions = self[profile].extensions_for_issued(
+                    arch, params, issuer_spec, item_spec
+                )
+                collected_extensions.extend(extensions)
+        return collected_extensions
+
+
 extension_plugin_registry = ExtensionPluginRegistry()
 """
 The default extension plugin registry.
@@ -471,4 +563,7 @@ service_plugin_registry = ServicePluginRegistry()
 The default service plugin registry.
 """
 
-
+cert_profile_plugin_registry = CertProfilePluginRegistry()
+"""
+The default certificate profile plugin registry.
+"""

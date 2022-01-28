@@ -1,11 +1,11 @@
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional, List, TYPE_CHECKING
+from typing import Optional, List, TYPE_CHECKING, Dict
 
 from asn1crypto import x509, core, ocsp, crl, cms
 from dateutil.parser import parse as parse_dt
 
-from ..common import CertLabel, EntityLabel, KeyLabel
+from ..common import CertLabel, EntityLabel, KeyLabel, PluginLabel
 from ..plugin_api import process_config_with_smart_value, SmartValueSpec
 from ...config_utils import (
     ConfigurationError, ConfigurableMixin
@@ -119,7 +119,9 @@ def parse_extension_settings(sett_dict, sett_key):
                 "Applicable extensions must be specified as a list."
             )
         sett_dict[sett_key] = result = [
-            ExtensionSpec.from_config(sett) for sett in ext_spec
+            sett if isinstance(sett, ExtensionSpec)
+            else ExtensionSpec.from_config(sett)
+            for sett in ext_spec
         ]
         return result
     except KeyError:
@@ -232,6 +234,11 @@ class IssuedItemSpec(ConfigurableMixin):
     revocation: Optional[RevocationStatus]
     """Revocation status of the certificate, if relevant."""
 
+    profiles: Dict[PluginLabel, dict]
+    """
+    Certificate profile plugins applied to the certificate.
+    """
+
     @classmethod
     def process_entries(cls, config_dict):
         # we can't set these at the dataclass level because of dataclass
@@ -242,6 +249,7 @@ class IssuedItemSpec(ConfigurableMixin):
         config_dict.setdefault('issuer_cert', None)
         config_dict.setdefault('revocation', None)
         config_dict.setdefault('digest_algo', 'sha256')
+        config_dict.setdefault('profiles', {})
 
         try:
             val_spec = config_dict['validity']

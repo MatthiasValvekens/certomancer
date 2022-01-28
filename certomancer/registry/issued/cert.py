@@ -1,8 +1,8 @@
 from dataclasses import dataclass, field
-from typing import Optional, List
+from typing import Optional, List, Dict
 
 from .general import IssuedItemSpec, ExtensionSpec, parse_extension_settings
-from ..common import EntityLabel, CertLabel, KeyLabel
+from ..common import EntityLabel, CertLabel, KeyLabel, PluginLabel
 
 EXCLUDED_FROM_TEMPLATE = frozenset(
     {'subject', 'subject_key', 'serial', 'certificate_file'}
