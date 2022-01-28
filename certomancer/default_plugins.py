@@ -508,6 +508,11 @@ class SimpleCAProfile(CertProfilePlugin):
                               issuer_spec: CertificateSpec,
                               issued_spec: IssuedItemSpec) \
             -> List[ExtensionSpec]:
+
+        # if issued item has the ocsp-responder profile, don't do anything
+        if OCSPResponderProfile.profile_label in issued_spec.profiles:
+            return []
+
         profile_params = self._normalise_params(profile_params)
 
         results = []
@@ -541,3 +546,43 @@ class SimpleCAProfile(CertProfilePlugin):
         except (ValueError, TypeError):
             raise ConfigurationError("'ocsp-service' must be a string")
         return results
+
+
+@cert_profile_plugin_registry.register
+class OCSPResponderProfile(CertProfilePlugin):
+    profile_label = 'ocsp-responder'
+
+    def extensions_for_self(self, arch: 'PKIArchitecture', profile_params: Any,
+                            spec: IssuedItemSpec) -> List[ExtensionSpec]:
+        if not isinstance(spec, CertificateSpec):
+            raise ConfigurationError(
+                "'ocsp-responder' can only be used on public-key certificates"
+            )
+        ku_ext = ExtensionSpec(
+            id='key_usage', critical=True,
+            value=x509.KeyUsage({'digital_signature'})
+        )
+        eku_ext = ExtensionSpec(
+            id='extended_key_usage', critical=True,
+            value=['ocsp_signing']
+        )
+        no_revo = ExtensionSpec(id='ocsp_no_check')
+        return [ku_ext, eku_ext, no_revo]
+
+
+@cert_profile_plugin_registry.register
+class CommittingSigner(CertProfilePlugin):
+    profile_label = 'digsig-commitment'
+
+    def extensions_for_self(self, arch: 'PKIArchitecture', profile_params: Any,
+                            spec: IssuedItemSpec) -> List[ExtensionSpec]:
+        if not isinstance(spec, CertificateSpec):
+            raise ConfigurationError(
+                "'digsig-commitment' can "
+                "only be used on public-key certificates"
+            )
+        ku_ext = ExtensionSpec(
+            id='key_usage', critical=True,
+            value=x509.KeyUsage({'digital_signature', 'non_repudiation'})
+        )
+        return [ku_ext]
