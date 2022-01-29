@@ -34,7 +34,7 @@ setup(
     long_description_content_type='text/markdown',
     package_data={'certomancer.integrations': ['animator_templates/*.html']},
     classifiers=[
-        'Development Status :: 3 - Alpha',
+        'Development Status :: 4 - Beta',
 
         'Intended Audience :: Developers',
 
