@@ -4,6 +4,7 @@ import os
 import re
 from datetime import datetime
 from io import BytesIO
+from typing import Any
 from zipfile import ZipFile
 
 import pyhanko_certvalidator
@@ -14,13 +15,16 @@ from oscrypto import keys as oskeys
 from asn1crypto import x509, cms, core
 from pyhanko_certvalidator import ValidationContext
 
+from certomancer import CertProfilePlugin
 from certomancer.config_utils import SearchDir, ConfigurationError
 from certomancer.crypto_utils import load_cert_from_pemder
 from certomancer.registry import PKIArchitecture, \
     CertLabel, EntityLabel, ArchLabel, CertomancerConfig
+from certomancer.registry.issued.general import ExtensionSpec
 from certomancer.registry.keys import KeySet
 from certomancer.registry.entities import EntityRegistry
 from certomancer.registry.issued.attr_cert import HolderSpec
+from certomancer.registry.plugin_api import CertProfilePluginRegistry
 
 importlib.import_module('certomancer.default_plugins')
 
@@ -1381,3 +1385,51 @@ def test_apply_simple_ca_skip_ocsp():
     cert = arch.get_cert(CertLabel('ocsp'))
     assert cert.ocsp_urls == []
     assert cert.ocsp_no_check_value == core.Null()
+
+
+class SampleACProfile(CertProfilePlugin):
+    profile_label = 'test-profile'
+
+    def extensions_for_self(self, arch: 'PKIArchitecture',
+                            profile_params: Any, spec):
+        return [ExtensionSpec(id='no_rev_avail')]
+
+
+def test_ac_profiles():
+    attr_cert_cfg = '''
+    test-ac:
+      holder:
+          name: signer
+          cert: signer
+      issuer: root
+      profiles:
+        - test-profile
+      attributes:
+          - id: role
+            smart-value:
+              schema: role-syntax
+              params:
+                  name: {type: email, value: blah@example.com}
+      validity:
+        valid-from: "2010-01-01T00:00:00+0000"
+        valid-to: "2011-01-01T00:00:00+0000"
+    '''
+    test_registry = CertProfilePluginRegistry()
+    test_registry.register(SampleACProfile)
+
+    arch = PKIArchitecture(
+        arch_label=ArchLabel('test'), key_set=RSA_KEYS, entities=ENTITIES,
+        cert_spec_config=yaml.safe_load(BASIC_AC_ISSUER_SETUP),
+        ac_spec_config=yaml.safe_load(attr_cert_cfg),
+        service_config={},
+        external_url_prefix='http://test.test',
+        profile_plugins=test_registry
+    )
+    test_ac = arch.get_attr_cert(CertLabel('test-ac'))
+
+    ext_value = next(
+        ext['extn_value'].parsed for ext in
+        test_ac['ac_info']['extensions']
+        if ext['extn_id'].native == 'no_rev_avail'
+    )
+    assert ext_value == core.Null()
