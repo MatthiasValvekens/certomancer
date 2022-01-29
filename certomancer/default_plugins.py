@@ -467,12 +467,19 @@ class RawDERBytes(ExtensionPlugin):
 class SimpleCAProfile(CertProfilePlugin):
     profile_label = 'simple-ca'
 
+    supported_params = {'max-path-len', 'crl-repo', 'ocsp-service'}
+
     @classmethod
     def _normalise_params(cls, profile_params):
         profile_params = profile_params or {}
         if not isinstance(profile_params, dict):
             raise ConfigurationError(
-                "parameters for 'simple-ca' must be specified as a dict"
+                "Parameters for 'simple-ca' must be specified as a dict"
+            )
+        if not (set(profile_params.keys()) <= cls.supported_params):
+            raise ConfigurationError(
+                f"The 'simple-ca' profile only supports parameters "
+                f"{', '.join(cls.supported_params)}."
             )
         return profile_params
 
