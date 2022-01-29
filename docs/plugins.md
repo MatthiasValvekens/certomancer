@@ -1,11 +1,15 @@
 # Certomancer plugin API
 
 
-There are two types of plugin in Certomancer.
+There are four types of plugin in Certomancer.
 
 * **Extension plugins** &mdash; These are plugins that calculate & format values of certificate
   extensions (and other extension types in PKIX).
   See [default_plugins.py](../certomancer/default_plugins.py) for a few examples.
+* **Attribute plugins** &mdash; These are plugins that calculate & format attributes for inclusion
+  in X.509 attribute certificates, and are otherwise very similar to extension plugins.
+* **Certificate profile plugins** &mdash; These are used to provision groups of extensions for
+  (possibly multiple) certificates in a coherent, succinct way.
 * **Service plugins** &mdash; These can be used define additional trust services that integrate
   with Certomancer in a way that is very similar to the "core" trust services that Certomancer
   supports (see [the section on service configuration](config.md#defining-service-endpoints)).
@@ -13,11 +17,12 @@ There are two types of plugin in Certomancer.
   simple example service plugin.
   
 
-In general, extension plugins in Certomancer must be **stateless** (or at least, their API should
-be), and not assume that they will always be called within the same PKI architecture. 
-Service plugins should ideally follow the same rules. Plugin instances are created when Certomancer
-starts, and will be used throughout the lifetime of the application.
-See [further down](#registering-and-loading-plugins) for details on the loading process.
+In general, extension, attribute and certificate profile plugins in Certomancer must be
+**stateless** (or at least, their API should be), and not assume that they will always be called
+within the same PKI architecture. Service plugins should ideally follow the same rules.
+Plugin instances are created when Certomancer starts, and will be used throughout the lifetime of
+the application. See [further down](#registering-and-loading-plugins) for details on the loading
+process.
 
 Problems in plugin configuration should be signalled using the `ConfigurationError` exception class.
 
@@ -56,6 +61,43 @@ the entity name `alice`, a reference to the current PKI architecture will be pas
 parameter. Since `general-names` is a generic plugin, its `extension_type` is `None`. Therefore,
 Certomancer will not attempt to interpret the `subject_alt_name` reference before invoking the
 plugin.
+
+
+## Certificate profile API
+
+Certificate profile plugins inherit from `certomancer.CertProfilePlugin`.
+Subclasses are expected to provide a (string) value for the `profile_label` attribute, which
+will be used to identify the profile plugin within Certomancer.
+
+The `certomancer.CertProfilePlugin` base class defines two methods: `extensions_for_self` and
+`extensions_for_issued`. Both are expected to return a list of `ExtensionSpec` objects.
+
+The `extensions_for_self` method must be overridden by all subclasses, and determines
+the extensions to put on the certificate on which the profile is declared.
+On the other hand, the `extensions_for_issued` method is optional, and determines the
+extensions to put on certificates issued under the one on which the profile is declared.
+By default, it simply returns an empty list. It goes without saying that this method is
+meaningless (and never called) for profiles that are used on attribute certificate definitions.
+
+The parameters provided to these methods are as follows:
+
+ - A reference to the active PKI architecture
+ - The parameters provided to the profile (if any) at the place where it was declared.
+ - The specification for the item to which the extensions will be applied.
+ - (`extensions_for_issued` only) The specification for the issuer's certificate.
+
+The following points are important to keep in mind when implementing new profiles:
+
+ - It's possible for a given profile to be invoked twice to provide extensions for one and the same
+   certificate, once through `extensions_for_self`, and once more through `extensions_for_issued`.
+   This can happen e.g. when defining a CA hierarchy with multiple layers, all of which use the
+   built-in `simple-ca` profile.
+ - Since the item spec passed to the `CertProfilePlugin` includes the `profiles` dictionary
+   for the item in question as part of its data, it's possible to inspect which other profiles
+   will be applied. This allows for some form of cooperation between different profile plugins.
+   Note that profiles are invoked in the order in which they are declared in the configuration,
+   and that (generally) the last plugin to be invoked "wins" in case the same certificate extension
+   is emitted more than once.
 
 
 ## Service plugin API
@@ -138,7 +180,7 @@ to do whatever you want in the WSGI layer.
 
 ## Registering and loading plugins
 
-Both for extension plugins and for service plugins, there are two steps to take care of:
+For any type of plugin, there are two steps to take care of:
 
  * registering the plugin.
  * making sure the module containing the plugin registration gets executed;

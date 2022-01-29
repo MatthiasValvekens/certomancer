@@ -71,6 +71,7 @@ pki-architectures:
         profiles:
           - id: simple-ca
             params:
+              max-path-len: 0
               crl-repo: interm
               ocsp-service: interm
       interm-ocsp:
