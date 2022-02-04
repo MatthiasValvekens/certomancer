@@ -12,12 +12,11 @@
 Quickly construct, mock & deploy PKI test configurations using simple declarative configuration.
 Includes CRL, OCSP and time stamping service provisioning.
 
-Install with `python setup.py install`. See `example.yml` for an example config file, and
-[below](#Documentation) for more detailed documentation.
-
 Requires Python 3.7 or later.
 
 ## Quick start
+
+Certomancer is [available on PyPI](https://pypi.org/project/certomancer/). See `example.yml` for an example config file.
 
 ```bash
 $ pip install 'certomancer[web-api,pkcs12]' 
@@ -27,6 +26,19 @@ $ certomancer --config example.yml animate
 This will run the Certomancer Animator WSGI app on your local machine, behind a development web
 server. Point your browser to `http://localhost:9000` and take a look around.
 For more information, see the [documentation](#Documentation) below.
+
+
+## Installing the development version
+
+To build and install an (unreleased) development version, you can proceed as follows.
+
+```bash
+$ git clone https://github.com/MatthiasValvekens/certomancer
+$ cd certomancer
+$ python -m build
+$ pip install dist/certomancer*.whl
+```
+
 
 ## Demo
 
