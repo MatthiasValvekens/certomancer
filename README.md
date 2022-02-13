@@ -47,6 +47,12 @@ There's a demo on asciinema.org, demonstrating some of the core features of Cert
 [![asciicast](https://asciinema.org/a/406798.svg)](https://asciinema.org/a/406798)
 
 
+## FOSDEM '22 talk
+
+I gave a lightning talk on testing & mocking PKI services in the [Testing & Automation devroom](https://fosdem.org/2022/schedule/track/testing_and_automation/) at [FOSDEM 2022](https://fosdem.org/2022/). Certomancer was (of course) featured in the presentation.
+If you want to learn more, or watch the recording, have a look at [the talk page](https://fosdem.org/2022/schedule/event/mockery_of_trust/) for further info. Slides are included as well.
+
+
 ## Features
 
  * Certomancer's core APIs are stateless: the same request should always return the same result.
