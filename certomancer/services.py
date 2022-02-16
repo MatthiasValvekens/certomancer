@@ -83,10 +83,9 @@ class TimeStamper:
                 name='directory_name', value=self.tsa_cert.subject
             )
         }
-        try:
+
+        if isinstance(req['nonce'], core.Integer):
             tst_info['nonce'] = req['nonce']
-        except KeyError:
-            pass
 
         tst_info = tsp.TSTInfo(tst_info)
         tst_info_data = tst_info.dump()
