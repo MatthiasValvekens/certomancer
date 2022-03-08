@@ -54,7 +54,7 @@ setup(
         ]
     },
     install_requires=[
-        'asn1crypto>=1.4.0',
+        'asn1crypto>=1.5.0',
         'click>=7.1.2',
         'oscrypto>=1.2.1',
         'pyyaml>=5.4.1',
