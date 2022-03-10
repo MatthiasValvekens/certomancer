@@ -10,7 +10,7 @@ from zipfile import ZipFile
 
 import yaml
 from asn1crypto import x509, core, pem, ocsp, crl, cms
-from dateutil.tz import tzlocal
+import tzlocal
 
 from . import plugin_api
 from .common import ArchLabel, ServiceLabel, CertLabel, KeyLabel, EntityLabel, \
