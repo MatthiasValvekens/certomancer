@@ -66,13 +66,16 @@ class KeyFromFile:
 
     def _load(self):
         if self._key is None:
-            with open(self.path, 'rb') as keyf:
-                key_bytes = keyf.read()
-            if self.public_only:
-                public = load_public_key(key_bytes)
-                private = None
-            else:
-                private, public = load_private_key(key_bytes, self.password)
+            try:
+                with open(self.path, 'rb') as keyf:
+                    key_bytes = keyf.read()
+                if self.public_only:
+                    public = load_public_key(key_bytes)
+                    private = None
+                else:
+                    private, public = load_private_key(key_bytes, self.password)
+            except Exception as e:
+                raise IOError(f"Failed to load key in {self.path}") from e
             self._key = AsymKey(public=public, private=private)
 
     @property
