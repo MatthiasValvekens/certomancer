@@ -16,12 +16,13 @@ that'll make testing your code less cumbersome. It can be used to
 In particular, the CLI allows you to use Certomancer as a certificate generation tool without
 actually deploying any of its 'live' components.
 
-The `certomancer` script currently has four subcommands:
+The `certomancer` script currently has five subcommands:
 
  * `animate`: run the Certomancer Animator behind a development server
  * `summon`: create and output a single certificate for a Certomancer PKI architecture
  * `mass-summon`: create and output all certificates for a Certomancer PKI architecture
  * `necronomicon`: create and output a CRL
+ * `seance`: generate OCSP responses
 
 ## Core config flags
 
