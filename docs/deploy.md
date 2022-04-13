@@ -33,8 +33,14 @@ still apply.
    as a vassal (this is how I've set it up on my Raspberry Pi).
    
 If you prefer a Docker-based workflow, I recommend using
-[this image](https://hub.docker.com/r/tiangolo/uwsgi-nginx/) as the base image for your container.
+[this image](https://hub.docker.com/r/tiangolo/uwsgi-nginx/) as the base image for your container
+if you just want to get something up and running quickly.
 Documentation and examples can be found [here](https://github.com/tiangolo/uwsgi-nginx-docker).
+
+A somewhat more advanced Docker setup that uses Certomancer together with `redis`
+to manage on-the-fly configuration is available
+[over in this repository](https://github.com/itext/certomancer-as-a-service).
+That one also comes with some Java-specific integrations.
 
 
 ## Environment variables
