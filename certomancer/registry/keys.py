@@ -75,7 +75,11 @@ class KeyFromFile:
                 else:
                     private, public = load_private_key(key_bytes, self.password)
             except Exception as e:
-                raise IOError(f"Failed to load key in {self.path}") from e
+                raise IOError(
+                    f"Failed to load key in {self.path}.\nGenerate one with "
+                    f"`openssl genrsa -out {repr(self.path)}` (RSA example) "
+                    f"or another appropriate tool."
+                ) from e
             self._key = AsymKey(public=public, private=private)
 
     @property
