@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 class CryptoBackend:
 
-    def load_private_key(self, key_bytes: bytes, password: Optional[str]) \
+    def load_private_key(self, key_bytes: bytes, password: Optional[bytes]) \
             -> Tuple[keys.PrivateKeyInfo, keys.PublicKeyInfo]:
         raise NotImplementedError
 
@@ -28,7 +28,7 @@ class CryptoBackend:
 
 class OscryptoBackend(CryptoBackend):
 
-    def load_private_key(self, key_bytes: bytes, password: Optional[str]) \
+    def load_private_key(self, key_bytes: bytes, password: Optional[bytes]) \
             -> Tuple[keys.PrivateKeyInfo, keys.PublicKeyInfo]:
         from oscrypto import asymmetric, keys as oskeys
         private = oskeys.parse_private(
@@ -100,7 +100,7 @@ class OscryptoBackend(CryptoBackend):
 
 class PycaCryptographyBackend(CryptoBackend):
 
-    def load_private_key(self, key_bytes: bytes, password: Optional[str]) \
+    def load_private_key(self, key_bytes: bytes, password: Optional[bytes]) \
             -> Tuple[keys.PrivateKeyInfo, keys.PublicKeyInfo]:
         from cryptography.hazmat.primitives import serialization
         from oscrypto import keys as oskeys
@@ -285,7 +285,7 @@ def generic_sign(private_key: keys.PrivateKeyInfo, tbs_bytes: bytes,
     return CRYPTO_BACKEND.generic_sign(private_key, tbs_bytes, signature_algo)
 
 
-def load_private_key(key_bytes: bytes, password: Optional[str]) \
+def load_private_key(key_bytes: bytes, password: Optional[bytes]) \
         -> Tuple[keys.PrivateKeyInfo, keys.PublicKeyInfo]:
     return CRYPTO_BACKEND.load_private_key(key_bytes, password)
 
