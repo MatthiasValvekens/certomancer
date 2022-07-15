@@ -125,6 +125,7 @@ def test_aia_ca_issuers(setup):
 
 
 @freeze_time('2020-11-01')
+@pytest.mark.asyncio
 @pytest.mark.parametrize('setup', [RSA_SETUP, DSA_SETUP, ECDSA_SETUP])
 async def test_validate(requests_mock, setup):
     setup.illusionist.register(requests_mock)

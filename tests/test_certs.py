@@ -795,6 +795,7 @@ def test_keyset_templates_in_arch():
     assert algo == 'ed25519'
 
 
+@pytest.mark.asyncio
 async def test_pregenerated_cert():
     cfg = CertomancerConfig.from_file(
         'tests/data/with-pregenerated-cert.yml', 'tests/data'
