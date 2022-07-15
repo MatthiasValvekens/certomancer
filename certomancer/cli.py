@@ -14,9 +14,14 @@ from .crypto_utils import pyca_cryptography_present
 from .registry import CertomancerConfig, CertLabel, ServiceLabel
 from .services import CertomancerServiceError
 from .version import __version__
+from ._asn1_types import register_extensions
 
 DEFAULT_CONFIG_FILE = 'certomancer.yml'
 logger = logging.getLogger(__name__)
+
+# This is a no-op since the registration happens automatically,
+# but explicit is better than implicit
+register_extensions()
 
 
 def _log_config():
