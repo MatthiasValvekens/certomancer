@@ -3,7 +3,7 @@ from typing import Optional, List, Set, Tuple, Dict, Any
 import pkcs11
 from pkcs11.util import rsa, dsa, ec, biginteger, x509 as p11_x509
 
-from asn1crypto import keys, x509
+from asn1crypto import keys, x509, core
 
 from certomancer import PKIArchitecture
 from certomancer.registry import CertLabel
@@ -120,8 +120,16 @@ class DefaultAlchemistBackend(AlchemistBackend):
                 rsa.decode_rsa_private_key(key_bytes, pkcs11.MechanismFlag(0))
             )
         elif algo == 'ec':
-            key_bytes = bytes(key['private_key'])
-            obj_attrs.update(ec.decode_ec_private_key(key_bytes))
+            ec_key: keys.ECPrivateKey = key['private_key'].parsed
+            params = ec_key['parameters']
+            if params is core.VOID:
+                params = key['private_key_algorithm']['parameters']
+            obj_attrs.update({
+                pkcs11.Attribute.KEY_TYPE: pkcs11.KeyType.EC,
+                pkcs11.Attribute.CLASS: pkcs11.ObjectClass.PRIVATE_KEY,
+                pkcs11.Attribute.EC_PARAMS: params.dump(),
+                pkcs11.Attribute.VALUE: ec_key['private_key'].contents,
+            })
         elif algo == 'dsa':
             obj_attrs = dsa.decode_dsa_domain_parameters(
                 key['private_key_algorithm']['parameters'].dump()
