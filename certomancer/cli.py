@@ -16,6 +16,7 @@ from .services import CertomancerServiceError
 from .version import __version__
 from ._asn1_types import register_extensions
 
+
 DEFAULT_CONFIG_FILE = 'certomancer.yml'
 logger = logging.getLogger(__name__)
 
@@ -352,3 +353,67 @@ def animate(ctx, port, no_web_ui, no_time_override, wsgi_prefix):
         # more convenient to run from the CLI in this way)
         app = DispatcherMiddleware(NotFound(), {wsgi_prefix: app})
     run_simple('127.0.0.1', port, app)
+
+
+@click.pass_context
+@click.argument('pki_arch', type=str, metavar='PKI_ARCH')
+@click.option('--cert', type=str, metavar='CERT_LABEL',  multiple=True,
+              help='add cert with its private key (multiple allowed)')
+# TODO add option to prompt for PIN
+@click.option('--pin', type=str, help='PKCS#11 token PIN', metavar='PIN',
+              required=False, default=None)
+@click.option('--module', help='PKCS#11 module path (.so/.dll/.dylib)',
+              type=click.Path(readable=True, dir_okay=False))
+@click.option('--include-chain', type=bool, is_flag=True,
+              help='include certs relevant for chain of trust')
+@click.option('--token-label', help='PKCS#11 token label', type=str,
+              required=False, metavar='TOKEN')
+@click.option('--slot-no', help='specify PKCS#11 slot to use',
+              required=False, type=int, default=None, metavar='SLOT')
+@exception_manager()
+def alch(ctx, pki_arch, token_label, slot_no, pin, module,
+         include_chain, cert):
+
+    from certomancer.integrations import alchemist
+
+    cfg: CertomancerConfig = next(ctx.obj['config'])
+    arch = cfg.get_pki_arch(pki_arch)
+
+    session = alchemist.open_pkcs11_session(
+        lib_location=module, slot_no=slot_no,
+        token_label=token_label, pin=pin
+    )
+    try:
+        backend = alchemist.DefaultAlchemistBackend(session)
+        alchemist.Alchemist(backend, arch).store_key_bundles(
+            certs=set(cert), include_chains=include_chain
+        )
+    finally:
+        session.close()
+
+
+def _maybe_enable_alchemist():
+    try:
+        from certomancer.integrations import alchemist
+    except ImportError:
+        alchemist = None
+
+    hlp = 'write generated certs and keys to a PKCS#11 token'
+    if alchemist is not None:
+        cli.command(
+            short_help=hlp,
+            help=(
+                'This command is intended to facilitate populating hardware '
+                'devices (or software modules with PKCS#11 support) with '
+                'data to run tests.'
+            )
+        )(alch)
+    else:
+        def _unavailable():
+            raise click.ClickException(
+                "This command requires python-pkcs11 to be installed."
+            )
+        cli.command(help=hlp + ' [dependencies missing]')(_unavailable)
+
+
+_maybe_enable_alchemist()
