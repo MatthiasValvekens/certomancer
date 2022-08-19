@@ -1,7 +1,7 @@
 from typing import Optional, List, Set, Tuple, Dict, Any
 
 import pkcs11
-from pkcs11.util import rsa, dsa, ec, biginteger, x509 as p11_x509
+from pkcs11.util import rsa, dsa, biginteger, x509 as p11_x509
 
 from asn1crypto import keys, x509, core
 
