@@ -20,9 +20,10 @@ class TSAServiceInfo(ServiceInfo):
     Label of the signer's certificate.
     """
 
-    signing_key: Optional[KeyLabel] = None
+    signing_key: KeyLabel
     """
-    Key to sign responses with. Ordinarily derived from :attr:`signing_cert`.
+    Key to sign responses with. Ordinarily derived from :attr:`signing_cert`
+    when not specified in config.
     """
 
     signature_algo: Optional[str] = None

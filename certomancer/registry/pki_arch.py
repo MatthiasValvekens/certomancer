@@ -5,12 +5,13 @@ import os.path
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Optional, List, Dict, Iterable, Tuple
+from typing import Optional, List, Dict, Iterable, Tuple, Union, Any
 from zipfile import ZipFile
 
 import yaml
 from asn1crypto import x509, core, pem, ocsp, crl, cms
 import tzlocal
+from cryptography.hazmat.primitives._serialization import KeySerializationEncryption
 
 from . import plugin_api
 from .common import ArchLabel, ServiceLabel, CertLabel, KeyLabel, EntityLabel, \
@@ -292,13 +293,15 @@ class PKIArchitecture:
         )
 
     @classmethod
-    def build_architectures(cls, key_sets: KeySets, cfgs, external_url_prefix,
+    def build_architectures(cls, key_sets: KeySets,
+                            cfgs: Dict[str, Any],
+                            external_url_prefix: str,
                             config_search_dir: Optional[SearchDir],
                             extension_plugins: ExtensionPluginRegistry = None,
                             service_plugins: 'ServicePluginRegistry' = None):
-        arch_specs = {}
-        for arch_label, cfg in cfgs.items():
-            arch_label = ArchLabel(arch_label)
+        arch_specs: Dict[ArchLabel, Dict[str, Any]] = {}
+        for lbl, cfg in cfgs.items():
+            arch_label = ArchLabel(lbl)
             # external config
             if isinstance(cfg, str):
                 if config_search_dir is None:
@@ -510,6 +513,7 @@ class PKIArchitecture:
 
     def enumerate_attr_certs_of_holder(self, holder_name: EntityLabel,
                                        issuer: Optional[EntityLabel] = None):
+        relevant: Iterable[CertLabel]
         # slow, but eh, it'll do
         if issuer is None:
             relevant = itertools.chain(*self._ac_labels_by_issuer.values())
@@ -539,6 +543,9 @@ class PKIArchitecture:
                 pkcs12, load_der_private_key, NoEncryption,
                 BestAvailableEncryption
             )
+            from cryptography.hazmat.primitives.asymmetric import (
+                rsa, dsa, ec, ed25519, ed448
+            )
             from cryptography import x509 as pyca_x509
         except ImportError as e:  # pragma: nocover
             raise CertomancerServiceError(
@@ -559,8 +566,16 @@ class PKIArchitecture:
         # convert DER to pyca/cryptography internal objects
         cert = pyca_x509.load_der_x509_certificate(cert_der)
         key = load_der_private_key(key_der, password=None)
+        assert isinstance(key, (
+            rsa.RSAPrivateKey,
+            dsa.DSAPrivateKey,
+            ec.EllipticCurvePrivateKey,
+            ed25519.Ed25519PrivateKey,
+            ed448.Ed448PrivateKey,
+        ))
         chain = [pyca_x509.load_der_x509_certificate(c) for c in chain_der]
 
+        encryption_alg: KeySerializationEncryption
         if not password:
             encryption_alg = NoEncryption()
         else:
@@ -1154,6 +1169,7 @@ class ServiceRegistry:
                                cert_label: CertLabel, is_attr=False):
         # check if the cert in question actually belongs to the repo
         # (i.e. whether it is issued by the right entity)
+        cert_spec: IssuedItemSpec
         if is_attr:
             cert_spec = self.pki_arch.get_attr_cert_spec(cert_label)
         else:

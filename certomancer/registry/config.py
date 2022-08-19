@@ -106,13 +106,16 @@ class CertomancerConfig:
                 "'pki-architectures' must be present in configuration"
             ) from e
 
-        if config_search_dir is not None:
-            config_search_dir = SearchDir(config_search_dir)
+        search_dir = (
+            SearchDir(config_search_dir)
+            if config_search_dir is not None
+            else None
+        )
         self.pki_archs = {
             arch.arch_label: arch
             for arch in PKIArchitecture.build_architectures(
                 key_sets, arch_cfgs, external_url_prefix=external_url_prefix,
-                config_search_dir=config_search_dir
+                config_search_dir=search_dir
             )
         }
 

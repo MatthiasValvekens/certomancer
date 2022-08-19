@@ -13,7 +13,7 @@ import os.path
 from collections.abc import Callable
 
 from datetime import timedelta
-
+from typing import Optional, Any, Tuple
 
 __all__ = [
     'ConfigurationError', 'ConfigurableMixin', 'check_config_keys',
@@ -21,8 +21,6 @@ __all__ = [
     'LabelString', 'SearchDir',
     'plugin_instantiate_util'
 ]
-
-from typing import Optional
 
 _noneType = type(None)
 
@@ -40,7 +38,7 @@ class LabelString:
     __slots__ = ['value']
 
     @staticmethod
-    def get_subclass(thing) -> Optional[type]:
+    def get_subclass(thing) -> Optional[type]:  # type: ignore
         """
         Figure out if the annotation 'thing' describes a label type.
         Used in config ingestion logic to instantiate dataclasses.
@@ -55,7 +53,7 @@ class LabelString:
             try:
                 from typing import get_args
             except ImportError:
-                def get_args(tp):
+                def get_args(tp: Any) -> Tuple[Any, ...]:
                     try:
                         return tp.__args__
                     except AttributeError:

@@ -69,8 +69,8 @@ class ExtensionPlugin(abc.ABC):
     Plugins must be stateless.
     """
 
-    schema_label: str = None
-    extension_type: Type[ObjectIdentifier] = None
+    schema_label: str
+    extension_type: Optional[Type[ObjectIdentifier]] = None
 
     def provision(self, extn_id: Optional[ObjectIdentifier],
                   arch: 'PKIArchitecture', params):
@@ -152,11 +152,13 @@ class ExtensionPluginRegistry:
                 f"There is no registered plugin for the schema "
                 f"'{spec.schema}'."
             ) from e
+
+        extn_oid: Optional[ObjectIdentifier]
         if proc.extension_type is not None:
-            extn_id = proc.extension_type(extn_id)
+            extn_oid = proc.extension_type(extn_id)
         else:
-            extn_id = None
-        provisioned_value = proc.provision(extn_id, arch, spec.params)
+            extn_oid = None
+        provisioned_value = proc.provision(extn_oid, arch, spec.params)
         if isinstance(provisioned_value, core.Asn1Value) and \
                 not isinstance(provisioned_value, core.ParsableOctetString):
             # this allows plugins to keep working with extensions for which
@@ -169,7 +171,7 @@ class ExtensionPluginRegistry:
 class AttributePlugin(abc.ABC):
     # FIXME give attribute plugins an API to determine how they want
     #  to handle multivalued attrs (repeated invocation or in bulk)
-    schema_label: str = None
+    schema_label: str
 
     def provision(self, attr_id: Optional[ObjectIdentifier],
                   arch: 'PKIArchitecture', params):
@@ -358,7 +360,7 @@ class ServicePlugin(abc.ABC):
         course always implement a no-op :meth:`invoke`, and wrap the Animator
         WSGI application to intercept requests as necessary.
     """
-    plugin_label: str = None
+    plugin_label: str
 
     content_type: str = 'application/octet-stream'
     """

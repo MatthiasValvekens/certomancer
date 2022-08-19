@@ -73,7 +73,7 @@ class TimeStamper:
             'algorithm': md_algorithm
         })
         dt = self.fixed_dt or datetime.now(tz=tzlocal.get_localzone())
-        tst_info = {
+        tst_info_dict = {
             'version': 'v1',
             'policy': self.policy,
             'message_imprint': message_imprint,
@@ -85,9 +85,9 @@ class TimeStamper:
         }
 
         if isinstance(req['nonce'], core.Integer):
-            tst_info['nonce'] = req['nonce']
+            tst_info_dict['nonce'] = req['nonce']
 
-        tst_info = tsp.TSTInfo(tst_info)
+        tst_info: tsp.TSTInfo = tsp.TSTInfo(tst_info_dict)
         tst_info_data = tst_info.dump()
         message_digest = getattr(hashlib, md_algorithm)(tst_info_data).digest()
         signing_cert_id = tsp.ESSCertID({
