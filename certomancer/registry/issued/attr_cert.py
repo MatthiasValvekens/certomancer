@@ -1,6 +1,6 @@
 import hashlib
 from dataclasses import dataclass
-from typing import Optional, List, TYPE_CHECKING
+from typing import Optional, List, TYPE_CHECKING, Dict, Any
 
 from asn1crypto import x509, cms, keys
 
@@ -85,7 +85,7 @@ class HolderSpec(ConfigurableMixin):
             pass
 
     def to_asn1(self, arch: 'PKIArchitecture') -> cms.Holder:
-        result = {}
+        result: Dict[str, Any] = {}
         holder_cert_label = self.cert \
                             or arch.get_unique_cert_for_entity(self.name)
         holder_cert: x509.Certificate = arch.get_cert(holder_cert_label)

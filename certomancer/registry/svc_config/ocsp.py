@@ -37,14 +37,11 @@ class OCSPResponderServiceInfo(ServiceInfo):
 
     """
 
-    signing_key: Optional[KeyLabel] = None
+    signing_key: KeyLabel
     """
     Key to use to sign the OCSP response.
 
-    Will be derived from ``responder_cert`` if not specified.
-
-    .. note::
-        This option exists only to allow invalid OCSP responses to be created.
+    Will be derived from ``responder_cert`` if not specified in config.
     """
 
     signature_algo: Optional[str] = None

@@ -85,17 +85,23 @@ class KeyFromFile:
     @property
     def public_key_info(self) -> PublicKeyInfo:
         self._load()
-        return self._key.public
+        key = self._key
+        assert key is not None
+        return key.public
 
     @property
     def private_key_info(self) -> Optional[PrivateKeyInfo]:
         self._load()
-        return self._key.private
+        key = self._key
+        assert key is not None
+        return key.private
 
     @property
     def key_pair(self) -> AsymKey:
         self._load()
-        return self._key
+        key = self._key
+        assert key is not None
+        return key
 
 
 class KeySet:

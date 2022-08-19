@@ -1,6 +1,6 @@
 import binascii
 import itertools
-from typing import Optional, Any, List
+from typing import Optional, Any, List, Iterable, Tuple, Dict
 
 from asn1crypto import x509, core, cms
 from asn1crypto.core import ObjectIdentifier
@@ -221,6 +221,7 @@ class ACTargetsPlugin(ExtensionPlugin):
 
     def provision(self, extn_id, arch: 'PKIArchitecture', params):
         from ._asn1_types import Target, Targets, SequenceOfTargets
+        targets: Iterable[Tuple[x509.GeneralName, bool]]
         if isinstance(params, list):
             targets = (
                 ACTargetsPlugin._parse_target(arch.entities, t)
@@ -490,6 +491,8 @@ class SimpleCAProfile(CertProfilePlugin):
                 "'simple-ca' can only be used on public-key certificates"
             )
         profile_params = self._normalise_params(profile_params)
+
+        bc_value: Dict[str, Any]
         bc_value = {'ca': True}
         try:
             path_len = int(profile_params['max-path-len'])

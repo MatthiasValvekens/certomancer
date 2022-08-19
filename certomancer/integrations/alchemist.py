@@ -98,6 +98,7 @@ def open_pkcs11_session(lib_location: str,
                 f'Token in slot {slot_no} is not {token_label}.'
             )
 
+    kwargs: Dict[str, Any]
     kwargs = {'rw': rw}
     if pin is not None:
         kwargs['so_pin' if as_so else 'user_pin'] = pin

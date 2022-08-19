@@ -161,10 +161,10 @@ class PycaCryptographyBackend(CryptoBackend):
         digest_algorithm = sd_algo.hash_algo
         sig_algo = sd_algo.signature_algo
         if sig_algo == 'rsassa_pkcs1v15':
-            padding = padding.PKCS1v15()
+            asym_padding = padding.PKCS1v15()
             hash_algo = getattr(hashes, digest_algorithm.upper())()
             assert isinstance(priv_key, rsa.RSAPrivateKey)
-            return priv_key.sign(tbs_bytes, padding, hash_algo)
+            return priv_key.sign(tbs_bytes, asym_padding, hash_algo)
         elif sig_algo == 'rsassa_pss':
             parameters = None
             if private_key.algorithm == 'rsassa_pss':
@@ -225,8 +225,8 @@ class PycaCryptographyBackend(CryptoBackend):
             key = key.copy()
             key['algorithm'] = {'algorithm': 'rsa'}
 
-        loaded_key: rsa.RSAPublicKey \
-            = serialization.load_der_public_key(key.dump())
+        loaded_key = serialization.load_der_public_key(key.dump())
+        assert isinstance(loaded_key, rsa.RSAPublicKey)
         md = getattr(hashes, digest_algo.upper())
         # the PSS salt calculation function is not in the .pyi file, apparently.
         # noinspection PyUnresolvedReferences

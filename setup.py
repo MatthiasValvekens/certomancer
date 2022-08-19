@@ -32,7 +32,10 @@ setup(
     description='PKI testing tool',
     long_description=long_description,
     long_description_content_type='text/markdown',
-    package_data={'certomancer.integrations': ['animator_templates/*.html']},
+    package_data={
+        'certomancer.integrations': ['animator_templates/*.html'],
+        'certomancer': ['py.typed']
+    },
     classifiers=[
         'Development Status :: 4 - Beta',
 

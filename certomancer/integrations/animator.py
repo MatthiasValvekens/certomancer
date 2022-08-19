@@ -227,7 +227,6 @@ class Animator:
         self.fixed_time = at_time
         self.architectures = architectures
         self.with_web_ui = with_web_ui
-        self.url_map = None
         self.allow_time_override = allow_time_override
 
         self.url_map = Map(
@@ -329,10 +328,10 @@ class Animator:
                    cert_label: Optional[str], use_pem):
         mime = 'application/x-pem-file' if use_pem else 'application/pkix-cert'
         pki_arch = self.architectures[ArchLabel(arch)]
-        cert_label = CertLabel(cert_label) if cert_label is not None else None
+        cert_lbl = CertLabel(cert_label) if cert_label is not None else None
 
         cert = pki_arch.service_registry.get_cert_from_repo(
-            ServiceLabel(label), cert_label
+            ServiceLabel(label), cert_lbl
         )
         if cert is None:
             raise NotFound()
@@ -419,10 +418,10 @@ class Animator:
                      arch: str):
         pki_arch = self.architectures[ArchLabel(arch)]
         services = pki_arch.service_registry
-        plugin_label = PluginLabel(plugin_label)
-        label = ServiceLabel(label)
+        plugin_lbl = PluginLabel(plugin_label)
+        svc_lbl = ServiceLabel(label)
         try:
-            plugin_info = services.get_plugin_info(plugin_label, label)
+            plugin_info = services.get_plugin_info(plugin_lbl, svc_lbl)
         except ConfigurationError:
             raise NotFound()
 
@@ -430,7 +429,7 @@ class Animator:
         req_content = request.stream.read()
         try:
             response_bytes = services.invoke_plugin(
-                plugin_label, label, req_content, at_time=self.at_time(request)
+                plugin_lbl, svc_lbl, req_content, at_time=self.at_time(request)
             )
         except PluginServiceRequestError as e:
             raise BadRequest(e.user_msg)
@@ -456,14 +455,14 @@ class Animator:
         except KeyError:
             raise BadRequest()
 
-        cert = CertLabel(cert)
+        cert_label = CertLabel(cert)
         if not (pyca_cryptography_present() and
-                pki_arch.is_subject_key_available(cert)):
+                pki_arch.is_subject_key_available(cert_label)):
             raise NotFound()
 
         pass_bytes = request.form.get('passphrase', '').encode('utf8')
-        data = pki_arch.package_pkcs12(cert, password=pass_bytes or None)
-        cd_header = f'attachment; filename="{cert}.pfx"'
+        data = pki_arch.package_pkcs12(cert_label, password=pass_bytes or None)
+        cd_header = f'attachment; filename="{cert_label}.pfx"'
         return Response(data, mimetype='application/x-pkcs12',
                         headers={'Content-Disposition': cd_header})
 
