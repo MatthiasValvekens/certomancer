@@ -126,7 +126,6 @@ class DefaultAlchemistBackend(AlchemistBackend):
                 params = key['private_key_algorithm']['parameters']
             obj_attrs.update({
                 pkcs11.Attribute.KEY_TYPE: pkcs11.KeyType.EC,
-                pkcs11.Attribute.CLASS: pkcs11.ObjectClass.PRIVATE_KEY,
                 pkcs11.Attribute.EC_PARAMS: params.dump(),
                 pkcs11.Attribute.VALUE: ec_key['private_key'].contents,
             })
@@ -137,15 +136,25 @@ class DefaultAlchemistBackend(AlchemistBackend):
             obj_attrs[pkcs11.Attribute.VALUE] = biginteger(
                 key['private_key'].parsed.native
             )
-            obj_attrs[pkcs11.Attribute.CLASS] = pkcs11.ObjectClass.PRIVATE_KEY
             obj_attrs[pkcs11.Attribute.KEY_TYPE] = pkcs11.KeyType.DSA
+        elif algo in ('ed25519', 'ed448'):
+            # we encode the params using the RFC 8032 curve name convention
+            # See 2.3.6 in the PCKS #11 3.0 current mechanisms specification
+            params = core.PrintableString(
+                'edwards25519' if algo == 'ed25519' else 'edwards448'
+            )
+            obj_attrs.update({
+                pkcs11.Attribute.KEY_TYPE: pkcs11.KeyType.EC_EDWARDS,
+                pkcs11.Attribute.EC_PARAMS: params.dump(),
+                pkcs11.Attribute.VALUE: key['private_key'].parsed.native
+            })
         else:
             raise NotImplementedError(f"Algorithm {algo!r} is not supported")
-        # TODO: EdDSA
 
         obj_attrs[pkcs11.Attribute.SIGN] = True
         obj_attrs[pkcs11.Attribute.TOKEN] = True
         obj_attrs[pkcs11.Attribute.LABEL] = label
+        obj_attrs[pkcs11.Attribute.CLASS] = pkcs11.ObjectClass.PRIVATE_KEY
         obj_attrs[pkcs11.Attribute.ID] = id_attr
         obj_attrs[pkcs11.Attribute.EXTRACTABLE] = False
         obj_attrs[pkcs11.Attribute.SENSITIVE] = True
