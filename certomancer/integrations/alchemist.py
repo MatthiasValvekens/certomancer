@@ -15,8 +15,12 @@ class AlchemistBackend:
     """
 
     def private_key_to_token(
-            self, key: keys.PrivateKeyInfo, label: str, id_attr: bytes,
-            attrs: Optional[Dict[pkcs11.Attribute, Any]] = None):
+        self,
+        key: keys.PrivateKeyInfo,
+        label: str,
+        id_attr: bytes,
+        attrs: Optional[Dict[pkcs11.Attribute, Any]] = None,
+    ):
         """
         Save a private key on the token.
 
@@ -31,9 +35,13 @@ class AlchemistBackend:
         """
         raise NotImplementedError
 
-    def cert_to_token(self, cert: x509.Certificate,
-                      label: str, id_attr: bytes,
-                      attrs: Optional[Dict[pkcs11.Attribute, Any]] = None):
+    def cert_to_token(
+        self,
+        cert: x509.Certificate,
+        label: str,
+        id_attr: bytes,
+        attrs: Optional[Dict[pkcs11.Attribute, Any]] = None,
+    ):
         """
         Save a certificate on the token.
 
@@ -49,12 +57,14 @@ class AlchemistBackend:
         raise NotImplementedError
 
 
-def open_pkcs11_session(lib_location: str,
-                        slot_no: Optional[int] = None,
-                        token_label: Optional[str] = None,
-                        pin: Optional[str] = None, as_so: bool = False,
-                        rw: bool = True) \
-        -> pkcs11.Session:
+def open_pkcs11_session(
+    lib_location: str,
+    slot_no: Optional[int] = None,
+    token_label: Optional[str] = None,
+    pin: Optional[str] = None,
+    as_so: bool = False,
+    rw: bool = True,
+) -> pkcs11.Session:
     """
     Open a PKCS#11 session
 
@@ -89,7 +99,8 @@ def open_pkcs11_session(lib_location: str,
         if token is None:
             raise pkcs11.PKCS11Error(
                 f'No token with label {token_label} found'
-                if token_label is not None else 'No token found'
+                if token_label is not None
+                else 'No token found'
             )
     else:
         token = slots[slot_no].get_token()
@@ -111,8 +122,12 @@ class DefaultAlchemistBackend(AlchemistBackend):
         self._session = session
 
     def private_key_to_token(
-            self, key: keys.PrivateKeyInfo, label: str, id_attr: bytes,
-            attrs: Optional[Dict[pkcs11.Attribute, Any]] = None):
+        self,
+        key: keys.PrivateKeyInfo,
+        label: str,
+        id_attr: bytes,
+        attrs: Optional[Dict[pkcs11.Attribute, Any]] = None,
+    ):
         algo = key.algorithm
         obj_attrs = {}
         if algo == 'rsa':
@@ -125,11 +140,13 @@ class DefaultAlchemistBackend(AlchemistBackend):
             params = ec_key['parameters']
             if params is core.VOID:
                 params = key['private_key_algorithm']['parameters']
-            obj_attrs.update({
-                pkcs11.Attribute.KEY_TYPE: pkcs11.KeyType.EC,
-                pkcs11.Attribute.EC_PARAMS: params.dump(),
-                pkcs11.Attribute.VALUE: ec_key['private_key'].contents,
-            })
+            obj_attrs.update(
+                {
+                    pkcs11.Attribute.KEY_TYPE: pkcs11.KeyType.EC,
+                    pkcs11.Attribute.EC_PARAMS: params.dump(),
+                    pkcs11.Attribute.VALUE: ec_key['private_key'].contents,
+                }
+            )
         elif algo == 'dsa':
             obj_attrs = dsa.decode_dsa_domain_parameters(
                 key['private_key_algorithm']['parameters'].dump()
@@ -144,11 +161,13 @@ class DefaultAlchemistBackend(AlchemistBackend):
             params = core.PrintableString(
                 'edwards25519' if algo == 'ed25519' else 'edwards448'
             )
-            obj_attrs.update({
-                pkcs11.Attribute.KEY_TYPE: pkcs11.KeyType.EC_EDWARDS,
-                pkcs11.Attribute.EC_PARAMS: params.dump(),
-                pkcs11.Attribute.VALUE: key['private_key'].parsed.native
-            })
+            obj_attrs.update(
+                {
+                    pkcs11.Attribute.KEY_TYPE: pkcs11.KeyType.EC_EDWARDS,
+                    pkcs11.Attribute.EC_PARAMS: params.dump(),
+                    pkcs11.Attribute.VALUE: key['private_key'].parsed.native,
+                }
+            )
         else:
             raise NotImplementedError(f"Algorithm {algo!r} is not supported")
 
@@ -164,8 +183,12 @@ class DefaultAlchemistBackend(AlchemistBackend):
         self._session.create_object(obj_attrs)
 
     def cert_to_token(
-            self, cert: x509.Certificate, label: str, id_attr: bytes,
-            attrs: Optional[Dict[pkcs11.Attribute, Any]] = None):
+        self,
+        cert: x509.Certificate,
+        label: str,
+        id_attr: bytes,
+        attrs: Optional[Dict[pkcs11.Attribute, Any]] = None,
+    ):
         obj_attrs = p11_x509.decode_x509_certificate(cert.dump())
         obj_attrs[pkcs11.Attribute.TOKEN] = True
         obj_attrs[pkcs11.Attribute.LABEL] = label
@@ -190,16 +213,18 @@ class Alchemist:
         self._backend = backend
         self.pki_arch = pki_arch
 
-    def _get_key_bundle_for(self, lbl: CertLabel) \
-            -> Tuple[str, x509.Certificate, keys.PrivateKeyInfo]:
+    def _get_key_bundle_for(
+        self, lbl: CertLabel
+    ) -> Tuple[str, x509.Certificate, keys.PrivateKeyInfo]:
         arch = self.pki_arch
         spec = arch.get_cert_spec(lbl)
         cert = arch.get_cert(lbl)
         key = self.pki_arch.key_set.get_private_key(spec.subject_key)
         return str(lbl), cert, key
 
-    def store_key_bundles(self, certs: Set[CertLabel],
-                          include_chains: bool = True):
+    def store_key_bundles(
+        self, certs: Set[CertLabel], include_chains: bool = True
+    ):
         """
         Store key-certificate from a :class:`.PKIArchitecture` pairs on
         a PKCS#11 token.
@@ -225,7 +250,8 @@ class Alchemist:
         extra_cert_lbls: Set[CertLabel]
         if include_chains:
             extra_cert_lbls = {
-                iss_lbl for lbl in certs
+                iss_lbl
+                for lbl in certs
                 for iss_lbl in self.pki_arch.get_chain(lbl)
             }
         else:
@@ -241,23 +267,18 @@ class Alchemist:
             self._get_key_bundle_for(lbl) for lbl in certs
         ]
         extra_certs: List[Tuple[str, x509.Certificate]] = [
-            (str(lbl), self.pki_arch.get_cert(lbl))
-            for lbl in extra_cert_lbls
+            (str(lbl), self.pki_arch.get_cert(lbl)) for lbl in extra_cert_lbls
         ]
 
         for cert_lbl, cert in extra_certs:
             self._backend.cert_to_token(
-                cert=cert,
-                label=cert_lbl,
-                id_attr=cert_lbl.encode('utf8')
+                cert=cert, label=cert_lbl, id_attr=cert_lbl.encode('utf8')
             )
 
         for bundle_lbl, cert, priv_key in bundles:
             bundle_id = bundle_lbl.encode('utf8')
             self._backend.cert_to_token(
-                cert=cert,
-                label=bundle_lbl,
-                id_attr=bundle_id
+                cert=cert, label=bundle_lbl, id_attr=bundle_id
             )
             # Note: this will duplicate private keys for which
             # more than one certificate has been issued.

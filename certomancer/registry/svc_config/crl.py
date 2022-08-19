@@ -149,9 +149,7 @@ class CRLRepoServiceInfo(ServiceInfo):
         return f"{self.internal_url}/archive-{for_crl_number}.crl"
 
     def format_distpoint(self):
-        return url_distribution_point(
-            self.latest_external_url, self.extra_urls
-        )
+        return url_distribution_point(self.latest_external_url, self.extra_urls)
 
     def format_idp(self):
         result = url_distribution_point(
@@ -166,5 +164,6 @@ class CRLRepoServiceInfo(ServiceInfo):
         return result
 
     def resolve_issuer_cert(self, arch: 'PKIArchitecture') -> CertLabel:
-        return self.issuer_cert or \
-               arch.get_unique_cert_for_entity(self.for_issuer)
+        return self.issuer_cert or arch.get_unique_cert_for_entity(
+            self.for_issuer
+        )

@@ -6,7 +6,9 @@ from ..common import CertLabel, EntityLabel
 from .api import ServiceInfo
 
 __all__ = [
-    'BaseCertRepoServiceInfo', 'CertRepoServiceInfo', 'AttrCertRepoServiceInfo'
+    'BaseCertRepoServiceInfo',
+    'CertRepoServiceInfo',
+    'AttrCertRepoServiceInfo',
 ]
 
 
@@ -54,6 +56,7 @@ class CertRepoServiceInfo(BaseCertRepoServiceInfo):
 
 
 # TODO Add to Illusionist
+
 
 @dataclass(frozen=True)
 class AttrCertRepoServiceInfo(BaseCertRepoServiceInfo):

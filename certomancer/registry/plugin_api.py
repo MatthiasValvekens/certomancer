@@ -39,7 +39,7 @@ __all__ = [
     'extension_plugin_registry',
     'attr_plugin_registry',
     'service_plugin_registry',
-    'cert_profile_plugin_registry'
+    'cert_profile_plugin_registry',
 ]
 
 
@@ -74,8 +74,12 @@ class ExtensionPlugin(abc.ABC):
     schema_label: str
     extension_type: Optional[Type[ObjectIdentifier]] = None
 
-    def provision(self, extn_id: Optional[ObjectIdentifier],
-                  arch: 'PKIArchitecture', params):
+    def provision(
+        self,
+        extn_id: Optional[ObjectIdentifier],
+        arch: 'PKIArchitecture',
+        params,
+    ):
         """
         Produce a value for an extension identified by ``extn_id``.
 
@@ -134,9 +138,10 @@ class ExtensionPluginRegistry:
             )
 
         extension_type = plugin.extension_type
-        if extension_type is not None and \
-                (not isinstance(extension_type, type)
-                 or not issubclass(extension_type, ObjectIdentifier)):
+        if extension_type is not None and (
+            not isinstance(extension_type, type)
+            or not issubclass(extension_type, ObjectIdentifier)
+        ):
             raise ConfigurationError(
                 f"Plugin {cls.__name__} does not declare an "
                 f"'extension_type' attribute that is a subclass of "
@@ -145,8 +150,9 @@ class ExtensionPluginRegistry:
         self._dict[PluginLabel(schema_label)] = plugin
         return orig_input
 
-    def process_value(self, extn_id: str,
-                      arch: 'PKIArchitecture', spec: SmartValueSpec):
+    def process_value(
+        self, extn_id: str, arch: 'PKIArchitecture', spec: SmartValueSpec
+    ):
         try:
             proc: ExtensionPlugin = self._dict[spec.schema]
         except KeyError as e:
@@ -161,12 +167,14 @@ class ExtensionPluginRegistry:
         else:
             extn_oid = None
         provisioned_value = proc.provision(extn_oid, arch, spec.params)
-        if isinstance(provisioned_value, core.Asn1Value) and \
-                not isinstance(provisioned_value, core.ParsableOctetString):
+        if isinstance(provisioned_value, core.Asn1Value) and not isinstance(
+            provisioned_value, core.ParsableOctetString
+        ):
             # this allows plugins to keep working with extensions for which
             # we don't have an OID
-            provisioned_value = \
-                core.ParsableOctetString(provisioned_value.dump())
+            provisioned_value = core.ParsableOctetString(
+                provisioned_value.dump()
+            )
         return provisioned_value
 
 
@@ -175,8 +183,12 @@ class AttributePlugin(abc.ABC):
     #  to handle multivalued attrs (repeated invocation or in bulk)
     schema_label: str
 
-    def provision(self, attr_id: Optional[ObjectIdentifier],
-                  arch: 'PKIArchitecture', params):
+    def provision(
+        self,
+        attr_id: Optional[ObjectIdentifier],
+        arch: 'PKIArchitecture',
+        params,
+    ):
         """
         Produce a value for an attribute identified by ``extn_id``.
 
@@ -227,9 +239,13 @@ class AttributePluginRegistry:
         self._dict[PluginLabel(schema_label)] = plugin
         return orig_input
 
-    def process_value(self, attr_id: str,
-                      arch: 'PKIArchitecture', spec: SmartValueSpec,
-                      multivalued: bool):
+    def process_value(
+        self,
+        attr_id: str,
+        arch: 'PKIArchitecture',
+        spec: SmartValueSpec,
+        multivalued: bool,
+    ):
         try:
             proc: AttributePlugin = self._dict[spec.schema]
         except KeyError as e:
@@ -362,6 +378,7 @@ class ServicePlugin(abc.ABC):
         course always implement a no-op :meth:`invoke`, and wrap the Animator
         WSGI application to intercept requests as necessary.
     """
+
     plugin_label: str
 
     content_type: str = 'application/octet-stream'
@@ -383,8 +400,13 @@ class ServicePlugin(abc.ABC):
         """
         return params  # pragma: nocover
 
-    def invoke(self, arch: 'PKIArchitecture', info: PluginServiceInfo,
-               request: bytes, at_time: Optional[datetime] = None) -> bytes:
+    def invoke(
+        self,
+        arch: 'PKIArchitecture',
+        info: PluginServiceInfo,
+        request: bytes,
+        at_time: Optional[datetime] = None,
+    ) -> bytes:
         """
         Invoke the plugin with the specified PKI architecture and service
         definition, and feed it data from a request.
@@ -436,9 +458,13 @@ class ServicePluginRegistry:
         self._dict[PluginLabel(plugin_label)] = plugin
         return orig_input
 
-    def invoke_plugin(self, arch: 'PKIArchitecture', info: PluginServiceInfo,
-                      request: bytes,
-                      at_time: Optional[datetime] = None) -> bytes:
+    def invoke_plugin(
+        self,
+        arch: 'PKIArchitecture',
+        info: PluginServiceInfo,
+        request: bytes,
+        at_time: Optional[datetime] = None,
+    ) -> bytes:
         try:
             plugin: ServicePlugin = self._dict[info.plugin_label]
         except KeyError as e:
@@ -479,9 +505,12 @@ class CertProfilePlugin(abc.ABC):
     by implementing subclasses.
     """
 
-    def extensions_for_self(self, arch: 'PKIArchitecture',
-                            profile_params: Any, spec: 'IssuedItemSpec') \
-            -> List['ExtensionSpec']:
+    def extensions_for_self(
+        self,
+        arch: 'PKIArchitecture',
+        profile_params: Any,
+        spec: 'IssuedItemSpec',
+    ) -> List['ExtensionSpec']:
         """
         Loads extensions for a certificate specification that includes the
         current profile.
@@ -498,11 +527,13 @@ class CertProfilePlugin(abc.ABC):
         """
         raise NotImplementedError
 
-    def extensions_for_issued(self, arch: 'PKIArchitecture',
-                              profile_params: Any,
-                              issuer_spec: 'CertificateSpec',
-                              issued_spec: 'IssuedItemSpec') \
-            -> List['ExtensionSpec']:
+    def extensions_for_issued(
+        self,
+        arch: 'PKIArchitecture',
+        profile_params: Any,
+        issuer_spec: 'CertificateSpec',
+        issued_spec: 'IssuedItemSpec',
+    ) -> List['ExtensionSpec']:
         """
         Loads extensions for a certificate specification for which the
         issuer's certificate uses the current profile.
@@ -536,8 +567,9 @@ class CertProfilePluginRegistry:
     def __init__(self):
         self._dict = {}
 
-    def register(self,
-                 plugin: Union[CertProfilePlugin, Type[CertProfilePlugin]]):
+    def register(
+        self, plugin: Union[CertProfilePlugin, Type[CertProfilePlugin]]
+    ):
         """
         Register a plugin object.
 
@@ -575,9 +607,9 @@ class CertProfilePluginRegistry:
     def __contains__(self, item: PluginLabel):
         return item in self._dict
 
-    def apply_profiles(self, arch: 'PKIArchitecture',
-                       item_spec: 'IssuedItemSpec') \
-            -> Dict[str, 'ExtensionSpec']:
+    def apply_profiles(
+        self, arch: 'PKIArchitecture', item_spec: 'IssuedItemSpec'
+    ) -> Dict[str, 'ExtensionSpec']:
         """
         Collect extensions generated by profiles associated with an issued
         item specification.
@@ -599,9 +631,9 @@ class CertProfilePluginRegistry:
             extensions = self[profile].extensions_for_self(
                 arch, params, item_spec
             )
-            collected_extensions.update({
-                ext_spec.id: ext_spec for ext_spec in extensions
-            })
+            collected_extensions.update(
+                {ext_spec.id: ext_spec for ext_spec in extensions}
+            )
 
         try:
             issuer_cert_lbl = item_spec.resolve_issuer_cert(arch)
@@ -615,9 +647,9 @@ class CertProfilePluginRegistry:
                 extensions = self[profile].extensions_for_issued(
                     arch, params, issuer_spec, item_spec
                 )
-                collected_extensions.update({
-                    ext_spec.id: ext_spec for ext_spec in extensions
-                })
+                collected_extensions.update(
+                    {ext_spec.id: ext_spec for ext_spec in extensions}
+                )
         return collected_extensions
 
 

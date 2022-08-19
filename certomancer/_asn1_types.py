@@ -33,7 +33,7 @@ class AAControls(core.Sequence):
         ('path_len_constraint', core.Integer, {'optional': True}),
         ('permitted_attrs', AttrSpec, {'optional': True, 'implicit': 0}),
         ('excluded_attrs', AttrSpec, {'optional': True, 'implicit': 1}),
-        ('permit_unspecified', core.Boolean, {'default': True})
+        ('permit_unspecified', core.Boolean, {'default': True}),
     ]
 
 

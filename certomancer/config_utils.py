@@ -15,10 +15,15 @@ from datetime import timedelta
 from typing import Any, Optional, Tuple
 
 __all__ = [
-    'ConfigurationError', 'ConfigurableMixin', 'check_config_keys',
-    'parse_duration', 'key_dashes_to_underscores', 'get_and_apply',
-    'LabelString', 'SearchDir',
-    'plugin_instantiate_util'
+    'ConfigurationError',
+    'ConfigurableMixin',
+    'check_config_keys',
+    'parse_duration',
+    'key_dashes_to_underscores',
+    'get_and_apply',
+    'LabelString',
+    'SearchDir',
+    'plugin_instantiate_util',
 ]
 
 _noneType = type(None)
@@ -52,6 +57,7 @@ class LabelString:
             try:
                 from typing import get_args
             except ImportError:
+
                 def get_args(tp: Any) -> Tuple[Any, ...]:
                     try:
                         return tp.__args__
@@ -89,13 +95,12 @@ class LabelString:
 
 class ConfigurationError(ValueError):
     """Signal configuration errors."""
+
     pass
 
 
 def key_dashes_to_underscores(config_dict):
-    return {
-        key.replace('-', '_'): v for key, v in config_dict.items()
-    }
+    return {key.replace('-', '_'): v for key, v in config_dict.items()}
 
 
 @dataclasses.dataclass(frozen=True)
@@ -142,8 +147,7 @@ class ConfigurableMixin:
             values.
         """
         check_config_keys(
-            cls.__name__, {f.name for f in dataclasses.fields(cls)},
-            config_dict
+            cls.__name__, {f.name for f in dataclasses.fields(cls)}, config_dict
         )
         # in Python we need underscores
         config_dict = key_dashes_to_underscores(config_dict)
@@ -291,5 +295,3 @@ def plugin_instantiate_util(plugin):
         cls = plugin.__class__
 
     return plugin, cls
-
-

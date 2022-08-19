@@ -39,8 +39,13 @@ class KeyFromFile:
         production environments, but hey, you do you.
     """
 
-    def __init__(self, name: KeyLabel, path: str, public_only: bool = False,
-                 password=None):
+    def __init__(
+        self,
+        name: KeyLabel,
+        path: str,
+        public_only: bool = False,
+        password=None,
+    ):
         self.name = name
         self.path = path
         self.public_only = public_only
@@ -205,5 +210,3 @@ class KeySets:
             raise CertomancerObjectNotFoundError(
                 f"There is no registered key set labelled '{name}'."
             ) from e
-
-

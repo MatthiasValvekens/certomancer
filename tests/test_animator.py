@@ -6,17 +6,22 @@ from zipfile import ZipFile
 
 import pytest
 import pytz
-from asn1crypto import tsp, algos, core, ocsp, cms, crl, x509
+from asn1crypto import algos, cms, core, crl, ocsp, tsp, x509
 from freezegun import freeze_time
-from oscrypto import asymmetric, symmetric, keys as oskeys
+from oscrypto import asymmetric
+from oscrypto import keys as oskeys
+from oscrypto import symmetric
 from werkzeug.test import Client
 from werkzeug.wrappers import Response
 
 from certomancer import CertomancerConfig
 from certomancer.integrations.animator import (
-    app, Animator, AnimatorArchStore, FAKE_TIME_HEADER
+    FAKE_TIME_HEADER,
+    Animator,
+    AnimatorArchStore,
+    app,
 )
-from certomancer.registry import KeyLabel, ArchLabel
+from certomancer.registry import ArchLabel, KeyLabel
 
 os.environ['CERTOMANCER_CONFIG'] = 'tests/data/with-services.yml'
 os.environ['CERTOMANCER_KEY_DIR'] = 'tests/data'
@@ -26,29 +31,33 @@ CLIENT = Client(app, Response)
 @freeze_time('2020-11-01')
 def test_timestamp():
     hashed_bytes = hashlib.sha256(b'test').digest()
-    req = tsp.TimeStampReq({
-        'version': 'v2',
-        'message_imprint': tsp.MessageImprint({
-            'hash_algorithm': algos.DigestAlgorithm({'algorithm': 'sha256'}),
-            'hashed_message': hashed_bytes
-        }),
-        'nonce': core.Integer(0x1337),
-        'cert_req': True
-    })
+    req = tsp.TimeStampReq(
+        {
+            'version': 'v2',
+            'message_imprint': tsp.MessageImprint(
+                {
+                    'hash_algorithm': algos.DigestAlgorithm(
+                        {'algorithm': 'sha256'}
+                    ),
+                    'hashed_message': hashed_bytes,
+                }
+            ),
+            'nonce': core.Integer(0x1337),
+            'cert_req': True,
+        }
+    )
     response = CLIENT.post("/testing-ca/tsa/tsa", data=req.dump())
     resp: tsp.TimeStampResp = tsp.TimeStampResp.load(response.data)
     sd = resp['time_stamp_token']['content']
     tst_info: tsp.TSTInfo = sd['encap_content_info']['content'].parsed
     assert tst_info['nonce'].native == 0x1337
-    assert tst_info['gen_time'].native \
-           == datetime.now().replace(tzinfo=pytz.utc)
+    assert tst_info['gen_time'].native == datetime.now().replace(
+        tzinfo=pytz.utc
+    )
 
 
 @pytest.mark.parametrize(
-    "time, expected", [
-        ('2020-11-05', 'good'),
-        ('2020-12-05', 'revoked')
-    ]
+    "time, expected", [('2020-11-05', 'good'), ('2020-12-05', 'revoked')]
 )
 def test_ocsp(time, expected):
     with open('tests/data/signer2-ocsp-req.der', 'rb') as req_in:
@@ -81,7 +90,6 @@ def test_demo_plugin():
     )
     client = Client(with_plugin_app, Response)
 
-
     # make the endpoint encrypt something
     endpoint = '/testing-ca/plugin/encrypt-echo/test-endpoint'
     payload = b'test test test'
@@ -95,8 +103,7 @@ def test_demo_plugin():
     encrypted_key = ktri['encrypted_key'].native
 
     decrypted_key = asymmetric.rsa_pkcs1v15_decrypt(
-        asymmetric.load_private_key(key.dump()),
-        encrypted_key
+        asymmetric.load_private_key(key.dump()), encrypted_key
     )
 
     eci = env_data['encrypted_content_info']
@@ -112,23 +119,24 @@ def test_demo_plugin():
 
 def test_crl():
     from tests.test_services import _check_crl_cardinality
+
     response = CLIENT.get(
         '/testing-ca/crls/interm/latest.crl',
-        headers={FAKE_TIME_HEADER: "2020-11-01T00:00:00+0000"}
+        headers={FAKE_TIME_HEADER: "2020-11-01T00:00:00+0000"},
     )
     _check_crl_cardinality(
         crl.CertificateList.load(response.data), expected_revoked=0
     )
     response = CLIENT.get(
         '/testing-ca/crls/interm/latest.crl',
-        headers={FAKE_TIME_HEADER: "2020-12-02T00:00:00+0000"}
+        headers={FAKE_TIME_HEADER: "2020-12-02T00:00:00+0000"},
     )
     _check_crl_cardinality(
         crl.CertificateList.load(response.data), expected_revoked=0
     )
     response = CLIENT.get(
         '/testing-ca/crls/interm/latest.crl',
-        headers={FAKE_TIME_HEADER: "2020-12-29T00:00:00+0000"}
+        headers={FAKE_TIME_HEADER: "2020-12-29T00:00:00+0000"},
     )
     some_crl3 = crl.CertificateList.load(response.data)
     _check_crl_cardinality(some_crl3, expected_revoked=1)
@@ -137,13 +145,15 @@ def test_crl():
     assert revo['revocation_date'].native == rev_time
 
     reason = next(
-        ext['extn_value'].native for ext in revo['crl_entry_extensions']
+        ext['extn_value'].native
+        for ext in revo['crl_entry_extensions']
         if ext['extn_id'].native == 'crl_reason'
     )
     assert reason == 'key_compromise'
 
     invalidity_date = next(
-        ext['extn_value'].native for ext in revo['crl_entry_extensions']
+        ext['extn_value'].native
+        for ext in revo['crl_entry_extensions']
         if ext['extn_id'].native == 'invalidity_date'
     )
     assert invalidity_date == datetime(2020, 11, 30, tzinfo=pytz.utc)
@@ -151,11 +161,13 @@ def test_crl():
 
 def test_crl_archive():
     from tests.test_services import _check_crl_cardinality
+
     response = CLIENT.get('/testing-ca/crls/interm/archive-1.crl')
     _check_crl_cardinality(
         crl.CertificateList.load(response.data), expected_revoked=0
     )
     from tests.test_services import _check_crl_cardinality
+
     response = CLIENT.get('/testing-ca/crls/interm/archive-1000.crl')
     _check_crl_cardinality(
         crl.CertificateList.load(response.data), expected_revoked=1
@@ -181,12 +193,21 @@ def test_zip():
     response = CLIENT.get('/_certomancer/cert-bundle/testing-ca')
     z = ZipFile(BytesIO(response.data))
     dumped = set(z.namelist())
-    assert dumped == set(map(lambda n: 'testing-ca/' + n, {
-        'interm/signer1-long.cert.pem', 'interm/signer1.cert.pem',
-        'interm/signer2.cert.pem', 'interm/interm-ocsp.cert.pem',
-        'root/interm.cert.pem', 'root/tsa.cert.pem',
-        'root/tsa2.cert.pem', 'root/root.cert.pem',
-    }))
+    assert dumped == set(
+        map(
+            lambda n: 'testing-ca/' + n,
+            {
+                'interm/signer1-long.cert.pem',
+                'interm/signer1.cert.pem',
+                'interm/signer2.cert.pem',
+                'interm/interm-ocsp.cert.pem',
+                'root/interm.cert.pem',
+                'root/tsa.cert.pem',
+                'root/tsa2.cert.pem',
+                'root/root.cert.pem',
+            },
+        )
+    )
 
 
 @pytest.mark.parametrize('pw', [None, b'', b'secret'])
@@ -205,6 +226,7 @@ def test_pkcs12(pw):
         assert key is not None
 
     from cryptography.hazmat.primitives.serialization import pkcs12
+
     key, cert, chain = pkcs12.load_key_and_certificates(package, password=pw)
     assert key is not None
     assert len(chain) == 2

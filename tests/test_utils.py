@@ -2,8 +2,11 @@ from datetime import timedelta
 
 import pytest
 
-from certomancer.config_utils import parse_duration, SearchDir, \
-    ConfigurationError
+from certomancer.config_utils import (
+    ConfigurationError,
+    SearchDir,
+    parse_duration,
+)
 
 
 @pytest.mark.parametrize(
@@ -17,7 +20,7 @@ from certomancer.config_utils import parse_duration, SearchDir, \
         ('P5H12M', timedelta(hours=5, minutes=12)),
         ('P3WT5H12M', timedelta(days=21, hours=5, minutes=12)),
         ('P3WT5H12M05S', timedelta(days=21, hours=5, minutes=12, seconds=5)),
-    ]
+    ],
 )
 def test_parse_duration(input_str, expected_out):
     assert parse_duration(input_str) == expected_out
@@ -35,7 +38,7 @@ def test_parse_duration(input_str, expected_out):
         ('P1M', ".*reliably represented using timedelta.*"),
         ('P05Y1M', ".*reliably represented using timedelta.*"),
         ('P5D 05H04M', None),
-    ]
+    ],
 )
 def test_parse_duration_error(input_str, err_msg):
     with pytest.raises(ValueError, match=err_msg or "Failed.*"):
@@ -45,10 +48,14 @@ def test_parse_duration_error(input_str, err_msg):
 @pytest.mark.parametrize(
     'sub_path',
     [
-        'xyz', '/abc/def/xyz', '../def/xyz', '../../abc/def/xyz',
-        '../def/xyz', '.././././../abc/def/xyz',
-        'xyz/../../def/xyz'
-    ]
+        'xyz',
+        '/abc/def/xyz',
+        '../def/xyz',
+        '../../abc/def/xyz',
+        '../def/xyz',
+        '.././././../abc/def/xyz',
+        'xyz/../../def/xyz',
+    ],
 )
 def test_search_dir(sub_path):
     sd = SearchDir('/abc/def')
@@ -58,10 +65,15 @@ def test_search_dir(sub_path):
 @pytest.mark.parametrize(
     'sub_path',
     [
-        '/etc/shadow', '/abc/defc', '/ab', '/abc/de', '../../../etc/shadow',
-        '../../../abc/de', '../../././.././../abc/de',
-        'xyz/../../../etc/shadow'
-    ]
+        '/etc/shadow',
+        '/abc/defc',
+        '/ab',
+        '/abc/de',
+        '../../../etc/shadow',
+        '../../../abc/de',
+        '../../././.././../abc/de',
+        'xyz/../../../etc/shadow',
+    ],
 )
 def test_search_dir_bad(sub_path):
     sd = SearchDir('/abc/def')

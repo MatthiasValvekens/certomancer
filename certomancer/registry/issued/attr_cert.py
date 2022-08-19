@@ -54,8 +54,9 @@ class HolderSpec(ConfigurableMixin):
     and :attr:`obj_digest_algorithm`.
     """
 
-    digested_object_type: cms.DigestedObjectType = \
-        cms.DigestedObjectType('public_key_cert')
+    digested_object_type: cms.DigestedObjectType = cms.DigestedObjectType(
+        'public_key_cert'
+    )
     """
     The type of data to digest when computing the ``objectDigestInfo``
     field (see :class:`cms.DigestedObjectType`).
@@ -72,8 +73,9 @@ class HolderSpec(ConfigurableMixin):
         try:
             dot_setting = config_dict['digested_object_type']
             if isinstance(dot_setting, (int, str)):
-                config_dict['digested_object_type'] \
-                    = cms.DigestedObjectType(dot_setting)
+                config_dict['digested_object_type'] = cms.DigestedObjectType(
+                    dot_setting
+                )
             elif not isinstance(dot_setting, cms.DigestedObjectType):
                 raise ConfigurationError(
                     f"Digested object type setting type must be 'str' "
@@ -84,13 +86,14 @@ class HolderSpec(ConfigurableMixin):
 
     def to_asn1(self, arch: 'PKIArchitecture') -> cms.Holder:
         result: Dict[str, Any] = {}
-        holder_cert_label = self.cert \
-                            or arch.get_unique_cert_for_entity(self.name)
+        holder_cert_label = self.cert or arch.get_unique_cert_for_entity(
+            self.name
+        )
         holder_cert: x509.Certificate = arch.get_cert(holder_cert_label)
         if self.include_base_cert_id:
             result['base_certificate_id'] = {
                 'issuer': [as_general_name(holder_cert.issuer)],
-                'serial': holder_cert.serial_number
+                'serial': holder_cert.serial_number,
             }
         if self.include_entity_name:
             result['entity_name'] = [as_general_name(holder_cert.subject)]
@@ -103,8 +106,10 @@ class HolderSpec(ConfigurableMixin):
                 # hashed
                 # (Warning: this is _not_ what pk_info.sha256 does in
                 #  asn1crypto!)
-                if pk_info.algorithm == 'dsa' and \
-                        not pk_info['algorithm']['parameters'].native:
+                if (
+                    pk_info.algorithm == 'dsa'
+                    and not pk_info['algorithm']['parameters'].native
+                ):
                     raise NotImplementedError(
                         "DSA parameter inheritance is not supported"
                     )
@@ -122,7 +127,7 @@ class HolderSpec(ConfigurableMixin):
             result['object_digest_info'] = {
                 'digested_object_type': self.digested_object_type,
                 'digest_algorithm': {'algorithm': self.obj_digest_algorithm},
-                'object_digest': obj_digest
+                'object_digest': obj_digest,
             }
         return cms.Holder(result)
 
@@ -164,9 +169,9 @@ class AttrSpec(ConfigurableMixin):
         else:
             values = value if self.multivalued else [value]
 
-        return cms.AttCertAttribute({
-            'type': cms.AttCertAttributeType(self.id), 'values': values
-        })
+        return cms.AttCertAttribute(
+            {'type': cms.AttCertAttributeType(self.id), 'values': values}
+        )
 
 
 @dataclass(frozen=True)
@@ -209,5 +214,3 @@ class AttributeCertificateSpec(IssuedItemSpec):
             AttrSpec.from_config(sett) for sett in attr_spec
         ]
         super().process_entries(config_dict)
-
-

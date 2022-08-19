@@ -11,19 +11,24 @@ import pyhanko_certvalidator
 import pytest
 import pytz
 import yaml
+from asn1crypto import cms, core, x509
 from oscrypto import keys as oskeys
-from asn1crypto import x509, cms, core
 from pyhanko_certvalidator import ValidationContext
 
 from certomancer import CertProfilePlugin
-from certomancer.config_utils import SearchDir, ConfigurationError
+from certomancer.config_utils import ConfigurationError, SearchDir
 from certomancer.crypto_utils import load_cert_from_pemder
-from certomancer.registry import PKIArchitecture, \
-    CertLabel, EntityLabel, ArchLabel, CertomancerConfig
-from certomancer.registry.issued.general import ExtensionSpec
-from certomancer.registry.keys import KeySet
+from certomancer.registry import (
+    ArchLabel,
+    CertLabel,
+    CertomancerConfig,
+    EntityLabel,
+    PKIArchitecture,
+)
 from certomancer.registry.entities import EntityRegistry
 from certomancer.registry.issued.attr_cert import HolderSpec
+from certomancer.registry.issued.general import ExtensionSpec
+from certomancer.registry.keys import KeySet
 from certomancer.registry.plugin_api import CertProfilePluginRegistry
 
 importlib.import_module('certomancer.default_plugins')
@@ -56,16 +61,12 @@ def dir_to_keyset_cfg(dirpath):
                 cfg['password'] = DUMMY_PASSWORD.decode('ascii')
             yield m.group(1), cfg
 
-    return {
-        'path-prefix': dirpath,
-        'keys': {k: v for k, v in _keys()}
-    }
+    return {'path-prefix': dirpath, 'keys': {k: v for k, v in _keys()}}
 
 
 def dir_to_keyset(dirpath):
     return KeySet(
-        dir_to_keyset_cfg(dirpath),
-        search_dir=SearchDir(TEST_DATA_DIR)
+        dir_to_keyset_cfg(dirpath), search_dir=SearchDir(TEST_DATA_DIR)
     )
 
 
@@ -73,7 +74,8 @@ RSA_KEYS = dir_to_keyset('keys-rsa')
 ECDSA_KEYS = dir_to_keyset('keys-ecdsa')
 
 ENTITIES = EntityRegistry(
-    yaml.safe_load('''
+    yaml.safe_load(
+        '''
 root:
     common-name: Root CA
 interm:
@@ -91,11 +93,14 @@ signer2:
 pub-only:
     organizational-unit-name: Signers
     common-name: Priv Key Unknown
-'''),
-    defaults=yaml.safe_load('''
+'''
+    ),
+    defaults=yaml.safe_load(
+        '''
 country-name: BE
 organization-name: Testing Authority
-''')
+'''
+    ),
 )
 
 
@@ -123,8 +128,11 @@ def test_self_signed(label):
     '''
 
     arch = PKIArchitecture(
-        arch_label=ArchLabel('test'), key_set=RSA_KEYS, entities=ENTITIES,
-        cert_spec_config=yaml.safe_load(cfg), service_config={},
+        arch_label=ArchLabel('test'),
+        key_set=RSA_KEYS,
+        entities=ENTITIES,
+        cert_spec_config=yaml.safe_load(cfg),
+        service_config={},
         external_url_prefix='http://test.test',
     )
     root_cert = arch.get_cert(CertLabel(label))
@@ -155,8 +163,11 @@ def test_detect_self_reference():
     '''
 
     arch = PKIArchitecture(
-        arch_label=ArchLabel('test'), key_set=RSA_KEYS, entities=ENTITIES,
-        cert_spec_config=yaml.safe_load(cfg), service_config={},
+        arch_label=ArchLabel('test'),
+        key_set=RSA_KEYS,
+        entities=ENTITIES,
+        cert_spec_config=yaml.safe_load(cfg),
+        service_config={},
         external_url_prefix='http://test.test',
     )
     with pytest.raises(ConfigurationError, match='Self-reference'):
@@ -178,8 +189,11 @@ def test_template_does_not_copy_inferred_authority_key():
     '''
 
     arch = PKIArchitecture(
-        arch_label=ArchLabel('test'), key_set=RSA_KEYS, entities=ENTITIES,
-        cert_spec_config=yaml.safe_load(cfg), service_config={},
+        arch_label=ArchLabel('test'),
+        key_set=RSA_KEYS,
+        entities=ENTITIES,
+        cert_spec_config=yaml.safe_load(cfg),
+        service_config={},
         external_url_prefix='http://test.test',
     )
     root_cert = arch.get_cert(CertLabel('root'))
@@ -275,7 +289,9 @@ def test_attr_cert_spec():
     '''
 
     arch = PKIArchitecture(
-        arch_label=ArchLabel('test'), key_set=RSA_KEYS, entities=ENTITIES,
+        arch_label=ArchLabel('test'),
+        key_set=RSA_KEYS,
+        entities=ENTITIES,
         cert_spec_config=yaml.safe_load(BASIC_AC_ISSUER_SETUP),
         ac_spec_config=yaml.safe_load(attr_cert_cfg),
         service_config={},
@@ -294,8 +310,9 @@ def test_attr_cert_spec():
     group_attr_syntax = attrs[1]['values'][0]
     assert group_attr_syntax['values'][0].native == "Big Corp Inc. Employees"
     assert group_attr_syntax['values'][1].native == b"\xde\xad\xbe\xef"
-    assert group_attr_syntax['values'][2].chosen \
-           == core.ObjectIdentifier("2.999")
+    assert group_attr_syntax['values'][2].chosen == core.ObjectIdentifier(
+        "2.999"
+    )
 
     assert attrs[2]['type'].native == 'charging_identity'
     assert attrs[2]['values'][0]['values'][0].native == "Big Corp Inc."
@@ -341,7 +358,9 @@ def test_attr_cert_targets():
     '''
 
     arch = PKIArchitecture(
-        arch_label=ArchLabel('test'), key_set=RSA_KEYS, entities=ENTITIES,
+        arch_label=ArchLabel('test'),
+        key_set=RSA_KEYS,
+        entities=ENTITIES,
         cert_spec_config=yaml.safe_load(BASIC_AC_ISSUER_SETUP),
         ac_spec_config=yaml.safe_load(attr_cert_cfg),
         service_config={},
@@ -350,8 +369,8 @@ def test_attr_cert_targets():
     test_ac = arch.get_attr_cert(CertLabel('test-ac'))
 
     targets_ext = next(
-        ext['extn_value'].parsed for ext in
-        test_ac['ac_info']['extensions']
+        ext['extn_value'].parsed
+        for ext in test_ac['ac_info']['extensions']
         if ext['extn_id'].native == 'target_information'
     )
     targets_obj = targets_ext[0]
@@ -402,8 +421,11 @@ def test_issue_intermediate():
     '''
 
     arch = PKIArchitecture(
-        arch_label=ArchLabel('test'), key_set=RSA_KEYS, entities=ENTITIES,
-        cert_spec_config=yaml.safe_load(cfg), service_config={},
+        arch_label=ArchLabel('test'),
+        key_set=RSA_KEYS,
+        entities=ENTITIES,
+        cert_spec_config=yaml.safe_load(cfg),
+        service_config={},
         external_url_prefix='http://test.test',
     )
     root_cert = arch.get_cert(CertLabel('root-ca'))
@@ -474,8 +496,11 @@ def test_template_override_issuer():
     '''
 
     arch = PKIArchitecture(
-        arch_label=ArchLabel('test'), key_set=RSA_KEYS, entities=ENTITIES,
-        cert_spec_config=yaml.safe_load(cfg), service_config={},
+        arch_label=ArchLabel('test'),
+        key_set=RSA_KEYS,
+        entities=ENTITIES,
+        cert_spec_config=yaml.safe_load(cfg),
+        service_config={},
         external_url_prefix='http://test.test',
     )
     root_cert = arch.get_cert(CertLabel('root-ca'))
@@ -526,8 +551,11 @@ def test_sign_public_only():
     '''
 
     arch = PKIArchitecture(
-        arch_label=ArchLabel('test'), key_set=RSA_KEYS, entities=ENTITIES,
-        cert_spec_config=yaml.safe_load(cfg), service_config={},
+        arch_label=ArchLabel('test'),
+        key_set=RSA_KEYS,
+        entities=ENTITIES,
+        cert_spec_config=yaml.safe_load(cfg),
+        service_config={},
         external_url_prefix='http://test.test',
     )
     pubkey = arch.get_cert(CertLabel('leaf')).public_key
@@ -536,10 +564,14 @@ def test_sign_public_only():
     assert pubkey.native == pubkey_actual.native
 
 
-@pytest.mark.parametrize('order',
-                         [('interm', 'root', 'signer1'),
-                          ('signer1', 'root', 'interm'),
-                          ('root', 'signer1', 'interm')])
+@pytest.mark.parametrize(
+    'order',
+    [
+        ('interm', 'root', 'signer1'),
+        ('signer1', 'root', 'interm'),
+        ('root', 'signer1', 'interm'),
+    ],
+)
 def test_serial_order_indep(order):
     arch = CONFIG.get_pki_arch(ArchLabel('testing-ca'))
     for lbl in order:
@@ -561,10 +593,14 @@ def test_dump_no_pfx(tmp_path):
     arch.dump_certs(str(tmp_path), include_pkcs12=False)
     dumped = set(_collect_files(str(tmp_path)))
     assert dumped == {
-        'interm/signer1-long.cert.pem', 'interm/signer1.cert.pem',
-        'interm/signer2.cert.pem', 'interm/interm-ocsp.cert.pem',
-        'root/interm.cert.pem', 'root/tsa.cert.pem',
-        'root/tsa2.cert.pem', 'root/root.cert.pem',
+        'interm/signer1-long.cert.pem',
+        'interm/signer1.cert.pem',
+        'interm/signer2.cert.pem',
+        'interm/interm-ocsp.cert.pem',
+        'root/interm.cert.pem',
+        'root/tsa.cert.pem',
+        'root/tsa2.cert.pem',
+        'root/root.cert.pem',
     }
 
 
@@ -573,14 +609,22 @@ def test_dump_with_pfx(tmp_path):
     arch.dump_certs(str(tmp_path), include_pkcs12=True)
     dumped = set(_collect_files(str(tmp_path)))
     assert dumped == {
-        'interm/signer1-long.cert.pem', 'interm/signer1-long.pfx',
-        'interm/signer1.cert.pem', 'interm/signer1.pfx',
-        'interm/signer2.cert.pem', 'interm/signer2.pfx',
-        'interm/interm-ocsp.cert.pem', 'interm/interm-ocsp.pfx',
-        'root/interm.cert.pem', 'root/interm.pfx',
-        'root/tsa.cert.pem', 'root/tsa.pfx',
-        'root/tsa2.cert.pem', 'root/tsa2.pfx',
-        'root/root.cert.pem', 'root/root.pfx',
+        'interm/signer1-long.cert.pem',
+        'interm/signer1-long.pfx',
+        'interm/signer1.cert.pem',
+        'interm/signer1.pfx',
+        'interm/signer2.cert.pem',
+        'interm/signer2.pfx',
+        'interm/interm-ocsp.cert.pem',
+        'interm/interm-ocsp.pfx',
+        'root/interm.cert.pem',
+        'root/interm.pfx',
+        'root/tsa.cert.pem',
+        'root/tsa.pfx',
+        'root/tsa2.cert.pem',
+        'root/tsa2.pfx',
+        'root/root.cert.pem',
+        'root/root.pfx',
     }
 
 
@@ -589,10 +633,14 @@ def test_dump_flat_no_pfx(tmp_path):
     arch.dump_certs(str(tmp_path), include_pkcs12=False, flat=True)
     dumped = set(_collect_files(str(tmp_path)))
     assert dumped == {
-        'signer1-long.cert.pem', 'signer1.cert.pem',
-        'signer2.cert.pem', 'interm-ocsp.cert.pem',
-        'interm.cert.pem', 'tsa.cert.pem',
-        'tsa2.cert.pem', 'root.cert.pem',
+        'signer1-long.cert.pem',
+        'signer1.cert.pem',
+        'signer2.cert.pem',
+        'interm-ocsp.cert.pem',
+        'interm.cert.pem',
+        'tsa.cert.pem',
+        'tsa2.cert.pem',
+        'root.cert.pem',
     }
 
 
@@ -603,12 +651,21 @@ def test_dump_zip():
     out.seek(0)
     z = ZipFile(out)
     dumped = set(z.namelist())
-    assert dumped == set(map(lambda n: 'testing-ca/' + n, {
-        'interm/signer1-long.cert.pem', 'interm/signer1.cert.pem',
-        'interm/signer2.cert.pem', 'interm/interm-ocsp.cert.pem',
-        'root/interm.cert.pem', 'root/tsa.cert.pem',
-        'root/tsa2.cert.pem', 'root/root.cert.pem',
-    }))
+    assert dumped == set(
+        map(
+            lambda n: 'testing-ca/' + n,
+            {
+                'interm/signer1-long.cert.pem',
+                'interm/signer1.cert.pem',
+                'interm/signer2.cert.pem',
+                'interm/interm-ocsp.cert.pem',
+                'root/interm.cert.pem',
+                'root/tsa.cert.pem',
+                'root/tsa2.cert.pem',
+                'root/root.cert.pem',
+            },
+        )
+    )
 
 
 def test_subject_alt_names():
@@ -620,8 +677,9 @@ def test_subject_alt_names():
     signer1_long = arch.get_cert(CertLabel('signer1-long'))
 
     assert signer1.subject_alt_name_value[0].chosen.native == 'test@example.com'
-    assert signer2.subject_alt_name_value[0].chosen.native \
-           == 'test2@example.com'
+    assert (
+        signer2.subject_alt_name_value[0].chosen.native == 'test2@example.com'
+    )
     assert signer1_long.subject_alt_name_value is None
 
 
@@ -663,6 +721,7 @@ def test_pkcs12(pw):
         assert key is not None
 
     from cryptography.hazmat.primitives.serialization import pkcs12
+
     key, cert, chain = pkcs12.load_key_and_certificates(package, password=pw)
     assert key is not None
     assert len(chain) == 2
@@ -695,14 +754,19 @@ def test_raw_extension():
     '''
 
     arch = PKIArchitecture(
-        arch_label=ArchLabel('test'), key_set=RSA_KEYS, entities=ENTITIES,
-        cert_spec_config=yaml.safe_load(cfg), service_config={},
+        arch_label=ArchLabel('test'),
+        key_set=RSA_KEYS,
+        entities=ENTITIES,
+        cert_spec_config=yaml.safe_load(cfg),
+        service_config={},
         external_url_prefix='http://test.test',
     )
-    ext: x509.Extension = next(filter(
-        lambda x: x['extn_id'].native == 'netscape_certificate_type',
-        arch.get_cert(CertLabel('root'))['tbs_certificate']['extensions']
-    ))
+    ext: x509.Extension = next(
+        filter(
+            lambda x: x['extn_id'].native == 'netscape_certificate_type',
+            arch.get_cert(CertLabel('root'))['tbs_certificate']['extensions'],
+        )
+    )
     assert ext['extn_value'].parsed.native == {'email'}
 
 
@@ -734,8 +798,11 @@ def test_raw_extension_error(wrong_value):
     '''
 
     arch = PKIArchitecture(
-        arch_label=ArchLabel('test'), key_set=RSA_KEYS, entities=ENTITIES,
-        cert_spec_config=yaml.safe_load(cfg), service_config={},
+        arch_label=ArchLabel('test'),
+        key_set=RSA_KEYS,
+        entities=ENTITIES,
+        cert_spec_config=yaml.safe_load(cfg),
+        service_config={},
         external_url_prefix='http://test.test',
     )
     with pytest.raises(ConfigurationError):
@@ -842,12 +909,12 @@ def test_holder_config2():
     holder_obj = HolderSpec.from_config(holder_cfg).to_asn1(arch)
     holder_cert = arch.get_cert(CertLabel('signer1-long'))
     assert (
-            holder_obj['base_certificate_id']['serial'].native
-            == holder_cert.serial_number
+        holder_obj['base_certificate_id']['serial'].native
+        == holder_cert.serial_number
     )
     assert (
-            holder_obj['base_certificate_id']['issuer'][0].chosen
-            == holder_cert.issuer
+        holder_obj['base_certificate_id']['issuer'][0].chosen
+        == holder_cert.issuer
     )
     assert holder_obj['entity_name'][0].chosen == holder_cert.subject
 
@@ -867,13 +934,13 @@ def test_holder_config_digest1():
 
     assert odi['digested_object_type'].native == 'public_key_cert'
     assert odi['digest_algorithm']['algorithm'].native == 'sha256'
-    assert odi['object_digest'].native \
-           == hashlib.sha256(holder_cert.dump()).digest()
+    assert (
+        odi['object_digest'].native
+        == hashlib.sha256(holder_cert.dump()).digest()
+    )
 
 
-@pytest.mark.parametrize('dot_str_spec', [
-    'public_key', '0'
-])
+@pytest.mark.parametrize('dot_str_spec', ['public_key', '0'])
 def test_holder_config_digest2(dot_str_spec):
     holder_cfg_str = f'''
     name: signer1
@@ -890,24 +957,32 @@ def test_holder_config_digest2(dot_str_spec):
 
     assert odi['digested_object_type'].native == 'public_key'
     assert odi['digest_algorithm']['algorithm'].native == 'sha256'
-    assert odi['object_digest'].native \
-           == hashlib.sha256(holder_cert.public_key.dump()).digest()
+    assert (
+        odi['object_digest'].native
+        == hashlib.sha256(holder_cert.public_key.dump()).digest()
+    )
 
 
 def _parse_ietf_syntax(params_str):
 
     from certomancer.default_plugins import IetfAttrSyntaxPlugin
+
     params = yaml.safe_load(params_str)['params']
     arch = PKIArchitecture(
-        arch_label=ArchLabel('test'), key_set=RSA_KEYS, entities=ENTITIES,
-        cert_spec_config={}, service_config={},
+        arch_label=ArchLabel('test'),
+        key_set=RSA_KEYS,
+        entities=ENTITIES,
+        cert_spec_config={},
+        service_config={},
         external_url_prefix='http://test.test',
     )
     return IetfAttrSyntaxPlugin().provision(None, arch, params)
 
 
-@pytest.mark.parametrize('params_str', [
-    """
+@pytest.mark.parametrize(
+    'params_str',
+    [
+        """
     params:
          - type: string
            value: "Big Corp Inc. Employees"
@@ -916,7 +991,7 @@ def _parse_ietf_syntax(params_str):
          - type: oid
            value: "2.999"
     """,
-    """
+        """
     params:
         values:
              - type: string
@@ -926,7 +1001,7 @@ def _parse_ietf_syntax(params_str):
              - type: oid
                value: "2.999"
     """,
-    """
+        """
     params:
          - "Big Corp Inc. Employees"
          - type: octets
@@ -934,7 +1009,8 @@ def _parse_ietf_syntax(params_str):
          - type: oid
            value: "2.999"
     """,
-])
+    ],
+)
 def test_ietf_attr_value(params_str):
     result = _parse_ietf_syntax(params_str)
 
@@ -966,8 +1042,11 @@ def test_ietf_attr_value_with_authority():
     assert result['values'][2].chosen == core.ObjectIdentifier("2.999")
 
 
-@pytest.mark.parametrize('params_str,err_msg', [
-    ("""
+@pytest.mark.parametrize(
+    'params_str,err_msg',
+    [
+        (
+            """
      params:
          - type: string
            value: "Big Corp Inc. Employees"
@@ -975,8 +1054,11 @@ def test_ietf_attr_value_with_authority():
            value: deadbeefz
          - type: oid
            value: "2.999"
-     """, "hex string",),
-    ("""
+     """,
+            "hex string",
+        ),
+        (
+            """
      params:
          - type: string
            value: "Big Corp Inc. Employees"
@@ -984,8 +1066,11 @@ def test_ietf_attr_value_with_authority():
            value: deadbeef
          - type: oid
            value: "2.999z"
-     """, "dotted OID string"),
-    ("""
+     """,
+            "dotted OID string",
+        ),
+        (
+            """
      params:
          - type: string
            value: "Big Corp Inc. Employees"
@@ -993,8 +1078,11 @@ def test_ietf_attr_value_with_authority():
            value: deadbeef
          - type: oid
            value: 2.999
-     """, "must be a string"),
-    ("""
+     """,
+            "must be a string",
+        ),
+        (
+            """
      params:
          - type: string
            value: "Big Corp Inc. Employees"
@@ -1002,8 +1090,11 @@ def test_ietf_attr_value_with_authority():
            value: 0
          - type: oid
            value: "2.999"
-     """, "must be a string"),
-    ("""
+     """,
+            "must be a string",
+        ),
+        (
+            """
      params:
          - type: string
            value: 0
@@ -1011,29 +1102,41 @@ def test_ietf_attr_value_with_authority():
            value: deadbeef
          - type: oid
            value: "2.999"
-     """, "must be a string"),
-    ("""
+     """,
+            "must be a string",
+        ),
+        (
+            """
      params:
          - type: string
          - type: octets
            value: deadbeef
          - type: oid
            value: "2.999"
-     """, "'value'.*required",),
-    ("""
+     """,
+            "'value'.*required",
+        ),
+        (
+            """
      params:
          - value: "Big Corp Inc. Employees"
          - type: octets
            value: deadbeef
          - type: oid
            value: "2.999"
-     """, "'type'.*required",),
-    ("""
+     """,
+            "'type'.*required",
+        ),
+        (
+            """
      params:
          - type: foobar
            value: "Big Corp Inc. Employees"
-     """, "'type'.*one of",),
-    ("""
+     """,
+            "'type'.*one of",
+        ),
+        (
+            """
      params:
         foo: bar
         values:
@@ -1043,26 +1146,41 @@ def test_ietf_attr_value_with_authority():
                value: deadbeef
              - type: oid
                value: "2.999"
-     """, "Unexpected.*foo",),
-    ("""
+     """,
+            "Unexpected.*foo",
+        ),
+        (
+            """
      params:
          - 0
          - type: octets
            value: deadbeef
          - type: oid
            value: "2.999"
-     """, "string or a dict",),
-    ("""
+     """,
+            "string or a dict",
+        ),
+        (
+            """
      params:
         values: 0
-     """, "'values'.*list",),
-    ("""
+     """,
+            "'values'.*list",
+        ),
+        (
+            """
      params: {}
-     """, "requires.*values",),
-    ("""
+     """,
+            "requires.*values",
+        ),
+        (
+            """
      params: 0
-     """, "dict or a list",),
-    ("""
+     """,
+            "dict or a list",
+        ),
+        (
+            """
      params:
         authority: bar
         values:
@@ -1072,14 +1190,21 @@ def test_ietf_attr_value_with_authority():
                value: deadbeef
              - type: oid
                value: "2.999"
-     """, "authority.*list",),
-])
+     """,
+            "authority.*list",
+        ),
+    ],
+)
 def test_ietf_attr_value_syntax_errors(err_msg, params_str):
     from certomancer.default_plugins import IetfAttrSyntaxPlugin
+
     params = yaml.safe_load(params_str)['params']
     arch = PKIArchitecture(
-        arch_label=ArchLabel('test'), key_set=RSA_KEYS, entities=ENTITIES,
-        cert_spec_config={}, service_config={},
+        arch_label=ArchLabel('test'),
+        key_set=RSA_KEYS,
+        entities=ENTITIES,
+        cert_spec_config={},
+        service_config={},
         external_url_prefix='http://test.test',
     )
     with pytest.raises(ConfigurationError, match=err_msg):
@@ -1097,10 +1222,14 @@ def test_role_syntax_with_authority():
           value: blah@example.com
     """
     from certomancer.default_plugins import RoleSyntaxPlugin
+
     params = yaml.safe_load(params_str)['params']
     arch = PKIArchitecture(
-        arch_label=ArchLabel('test'), key_set=RSA_KEYS, entities=ENTITIES,
-        cert_spec_config={}, service_config={},
+        arch_label=ArchLabel('test'),
+        key_set=RSA_KEYS,
+        entities=ENTITIES,
+        cert_spec_config={},
+        service_config={},
         external_url_prefix='http://test.test',
     )
     result = RoleSyntaxPlugin().provision(None, arch, params)
@@ -1108,71 +1237,112 @@ def test_role_syntax_with_authority():
     assert result['role_authority'].native == ['admin@example.com']
 
 
-@pytest.mark.parametrize('params_str,err_msg', [
-    ("""
+@pytest.mark.parametrize(
+    'params_str,err_msg',
+    [
+        (
+            """
      params:
         authority: 0
         name: {type: email, value: blah@example.com}
-     """, "authority.*list",),
-    ("""
+     """,
+            "authority.*list",
+        ),
+        (
+            """
      params:
         authority: []
-     """, "requires.*name",),
-    ("""
+     """,
+            "requires.*name",
+        ),
+        (
+            """
      params: foo
-     """, "should be specified as a dict",),
-])
+     """,
+            "should be specified as a dict",
+        ),
+    ],
+)
 def test_role_syntax_attr_errors(err_msg, params_str):
     from certomancer.default_plugins import RoleSyntaxPlugin
+
     params = yaml.safe_load(params_str)['params']
     arch = PKIArchitecture(
-        arch_label=ArchLabel('test'), key_set=RSA_KEYS, entities=ENTITIES,
-        cert_spec_config={}, service_config={},
+        arch_label=ArchLabel('test'),
+        key_set=RSA_KEYS,
+        entities=ENTITIES,
+        cert_spec_config={},
+        service_config={},
         external_url_prefix='http://test.test',
     )
     with pytest.raises(ConfigurationError, match=err_msg):
         RoleSyntaxPlugin().provision(None, arch, params)
 
 
-@pytest.mark.parametrize('params_str,err_msg', [
-    ("""
+@pytest.mark.parametrize(
+    'params_str,err_msg',
+    [
+        (
+            """
     params:
         service: {type: dns_name, value: admin.example.com}
         ident: {type: email, value: blah@example.com}
         auth-info: deadbeefz
-    """, "hex string"),
-    ("""
+    """,
+            "hex string",
+        ),
+        (
+            """
     params:
         service: {type: dns_name, value: admin.example.com}
         ident: {type: email, value: blah@example.com}
         auth-info: 0
-    """, "hex string"),
-    ("""
+    """,
+            "hex string",
+        ),
+        (
+            """
      params: foo
-     """, "should be specified as a dict",),
-    ("""
+     """,
+            "should be specified as a dict",
+        ),
+        (
+            """
     params:
         service: {type: dns_name, value: admin.example.com}
-    """, "'ident'.*required"),
-    ("""
+    """,
+            "'ident'.*required",
+        ),
+        (
+            """
     params:
         ident: {type: email, value: blah@example.com}
         auth-info: deadbeef
-    """, "'service'.*required"),
-    ("""
+    """,
+            "'service'.*required",
+        ),
+        (
+            """
     params:
         foo: bar
         service: {type: dns_name, value: admin.example.com}
         ident: {type: email, value: blah@example.com}
         auth-info: deadbeef
-    """, "Unexpected.*foo"),
-])
+    """,
+            "Unexpected.*foo",
+        ),
+    ],
+)
 def test_svce_auth_info_errors(err_msg, params_str):
     from certomancer.default_plugins import ServiceAuthInfoPlugin
+
     params = yaml.safe_load(params_str)['params']
     arch = PKIArchitecture(
-        arch_label=ArchLabel('test'), key_set=RSA_KEYS, entities=ENTITIES,
-        cert_spec_config={}, service_config={},
+        arch_label=ArchLabel('test'),
+        key_set=RSA_KEYS,
+        entities=ENTITIES,
+        cert_spec_config={},
+        service_config={},
         external_url_prefix='http://test.test',
     )
     with pytest.raises(ConfigurationError, match=err_msg):
@@ -1212,18 +1382,24 @@ def test_template_extension_uniqueness():
     '''
 
     arch = PKIArchitecture(
-        arch_label=ArchLabel('test'), key_set=RSA_KEYS, entities=ENTITIES,
-        cert_spec_config=yaml.safe_load(cfg), service_config={},
+        arch_label=ArchLabel('test'),
+        key_set=RSA_KEYS,
+        entities=ENTITIES,
+        cert_spec_config=yaml.safe_load(cfg),
+        service_config={},
         external_url_prefix='http://test.test',
     )
     root_cert = arch.get_cert(CertLabel('root-ca'))
     interm_cert = arch.get_cert(CertLabel('intermediate-ca'))
-    assert \
+    assert (
         root_cert.basic_constraints_value['path_len_constraint'].native is None
-    assert \
+    )
+    assert (
         interm_cert.basic_constraints_value['path_len_constraint'].native == 0
-    assert \
+    )
+    assert (
         root_cert.key_usage_value.dump() == interm_cert.key_usage_value.dump()
+    )
 
 
 def test_duplicate_exts():
@@ -1258,8 +1434,11 @@ def test_duplicate_exts():
     '''
 
     arch = PKIArchitecture(
-        arch_label=ArchLabel('test'), key_set=RSA_KEYS, entities=ENTITIES,
-        cert_spec_config=yaml.safe_load(cfg), service_config={},
+        arch_label=ArchLabel('test'),
+        key_set=RSA_KEYS,
+        entities=ENTITIES,
+        cert_spec_config=yaml.safe_load(cfg),
+        service_config={},
         external_url_prefix='http://test.test',
     )
     cert = arch.get_cert(CertLabel('root-ca'))
@@ -1324,15 +1503,19 @@ def test_apply_profiles():
           simulated-update-schedule: "P90D"
     """
     arch = PKIArchitecture(
-        arch_label=ArchLabel('test'), key_set=RSA_KEYS, entities=ENTITIES,
+        arch_label=ArchLabel('test'),
+        key_set=RSA_KEYS,
+        entities=ENTITIES,
         cert_spec_config=yaml.safe_load(cfg),
         service_config=yaml.safe_load(srv_cfg),
         external_url_prefix='http://test.test',
     )
     cert = arch.get_cert(CertLabel('leaf'))
     assert cert.ocsp_urls == ['http://test.test/test/ocsp/interm']
-    assert cert.key_usage_value.native \
-           == {"digital_signature", "non_repudiation"}
+    assert cert.key_usage_value.native == {
+        "digital_signature",
+        "non_repudiation",
+    }
 
     cert = arch.get_cert(CertLabel('interm'))
     assert cert.ocsp_urls == []
@@ -1341,8 +1524,11 @@ def test_apply_profiles():
         for dp in cert.crl_distribution_points
     ]
     assert crl_urls == ['http://test.test/test/crls/root/latest.crl']
-    assert cert.key_usage_value.native \
-           == {"digital_signature", "crl_sign", "key_cert_sign"}
+    assert cert.key_usage_value.native == {
+        "digital_signature",
+        "crl_sign",
+        "key_cert_sign",
+    }
 
 
 def test_apply_simple_ca_skip_ocsp():
@@ -1378,7 +1564,9 @@ def test_apply_simple_ca_skip_ocsp():
     """
 
     arch = PKIArchitecture(
-        arch_label=ArchLabel('test'), key_set=RSA_KEYS, entities=ENTITIES,
+        arch_label=ArchLabel('test'),
+        key_set=RSA_KEYS,
+        entities=ENTITIES,
         cert_spec_config=yaml.safe_load(cfg),
         service_config=yaml.safe_load(srv_cfg),
         external_url_prefix='http://test.test',
@@ -1391,8 +1579,9 @@ def test_apply_simple_ca_skip_ocsp():
 class SampleACProfile(CertProfilePlugin):
     profile_label = 'test-profile'
 
-    def extensions_for_self(self, arch: 'PKIArchitecture',
-                            profile_params: Any, spec):
+    def extensions_for_self(
+        self, arch: 'PKIArchitecture', profile_params: Any, spec
+    ):
         return [ExtensionSpec(id='no_rev_avail')]
 
 
@@ -1419,18 +1608,20 @@ def test_ac_profiles():
     test_registry.register(SampleACProfile)
 
     arch = PKIArchitecture(
-        arch_label=ArchLabel('test'), key_set=RSA_KEYS, entities=ENTITIES,
+        arch_label=ArchLabel('test'),
+        key_set=RSA_KEYS,
+        entities=ENTITIES,
         cert_spec_config=yaml.safe_load(BASIC_AC_ISSUER_SETUP),
         ac_spec_config=yaml.safe_load(attr_cert_cfg),
         service_config={},
         external_url_prefix='http://test.test',
-        profile_plugins=test_registry
+        profile_plugins=test_registry,
     )
     test_ac = arch.get_attr_cert(CertLabel('test-ac'))
 
     ext_value = next(
-        ext['extn_value'].parsed for ext in
-        test_ac['ac_info']['extensions']
+        ext['extn_value'].parsed
+        for ext in test_ac['ac_info']['extensions']
         if ext['extn_id'].native == 'no_rev_avail'
     )
     assert ext_value == core.Null()

@@ -7,14 +7,19 @@ from datetime import datetime
 import pytest
 import pytz
 import requests
-from asn1crypto import tsp, algos, core, cms, ocsp
+from asn1crypto import algos, cms, core, ocsp, tsp
 from freezegun import freeze_time
 from oscrypto import asymmetric, symmetric
-from pyhanko_certvalidator import ValidationContext, CertificateValidator
+from pyhanko_certvalidator import CertificateValidator, ValidationContext
 
 from certomancer.integrations import illusionist
-from certomancer.registry import CertomancerConfig, ArchLabel, ServiceLabel, \
-    CertLabel, KeyLabel
+from certomancer.registry import (
+    ArchLabel,
+    CertLabel,
+    CertomancerConfig,
+    KeyLabel,
+    ServiceLabel,
+)
 
 importlib.import_module('certomancer.default_plugins')
 
@@ -24,9 +29,7 @@ ServiceSetup = namedtuple('ServiceSetup', ('config', 'arch', 'illusionist'))
 
 def _setup(cfgfile) -> ServiceSetup:
 
-    cfg = CertomancerConfig.from_file(
-        cfgfile, 'tests/data'
-    )
+    cfg = CertomancerConfig.from_file(cfgfile, 'tests/data')
 
     arch = cfg.get_pki_arch(ArchLabel('testing-ca'))
 
@@ -64,13 +67,15 @@ def test_crl(setup):
     assert revo['revocation_date'].native == rev_time
 
     reason = next(
-        ext['extn_value'].native for ext in revo['crl_entry_extensions']
+        ext['extn_value'].native
+        for ext in revo['crl_entry_extensions']
         if ext['extn_id'].native == 'crl_reason'
     )
     assert reason == 'key_compromise'
 
     invalidity_date = next(
-        ext['extn_value'].native for ext in revo['crl_entry_extensions']
+        ext['extn_value'].native
+        for ext in revo['crl_entry_extensions']
         if ext['extn_id'].native == 'invalidity_date'
     )
     assert invalidity_date == datetime(2020, 11, 30, tzinfo=pytz.utc)
@@ -114,13 +119,12 @@ def test_aia_ca_issuers(setup):
     signer1 = setup.arch.get_cert(CertLabel('signer1'))
     ca_issuer_urls = {
         aia_entry['access_location']
-        for aia_entry
-        in signer1.authority_information_access_value.native
+        for aia_entry in signer1.authority_information_access_value.native
         if aia_entry['access_method'] == 'ca_issuers'
     }
     assert ca_issuer_urls == {
         'http://test.test/testing-ca/certs/interm/ca.crt',
-        'http://test.test/testing-ca/certs/root/issued/interm.crt'
+        'http://test.test/testing-ca/certs/root/issued/interm.crt',
     }
 
 
@@ -133,8 +137,10 @@ async def test_validate(requests_mock, setup):
     root = setup.arch.get_cert(CertLabel('root'))
     interm = setup.arch.get_cert(CertLabel('interm'))
     vc = ValidationContext(
-        trust_roots=[root], allow_fetching=True,
-        revocation_mode='hard-fail', other_certs=[interm]
+        trust_roots=[root],
+        allow_fetching=True,
+        revocation_mode='hard-fail',
+        other_certs=[interm],
     )
 
     validator = CertificateValidator(
@@ -147,19 +153,24 @@ async def test_validate(requests_mock, setup):
 
 
 @freeze_time('2020-11-01')
-@pytest.mark.parametrize('setup,include_nonce', list(itertools.product(
-    [RSA_SETUP, DSA_SETUP, ECDSA_SETUP], (True, False)
-)))
+@pytest.mark.parametrize(
+    'setup,include_nonce',
+    list(itertools.product([RSA_SETUP, DSA_SETUP, ECDSA_SETUP], (True, False))),
+)
 def test_timestamp(requests_mock, setup, include_nonce):
     setup.illusionist.register(requests_mock)
     hashed_bytes = hashlib.sha256(b'test').digest()
     req_data = {
         'version': 'v2',
-        'message_imprint': tsp.MessageImprint({
-            'hash_algorithm': algos.DigestAlgorithm({'algorithm': 'sha256'}),
-            'hashed_message': hashed_bytes
-        }),
-        'cert_req': True
+        'message_imprint': tsp.MessageImprint(
+            {
+                'hash_algorithm': algos.DigestAlgorithm(
+                    {'algorithm': 'sha256'}
+                ),
+                'hashed_message': hashed_bytes,
+            }
+        ),
+        'cert_req': True,
     }
     if include_nonce:
         req_data['nonce'] = core.Integer(0x1337)
@@ -172,15 +183,13 @@ def test_timestamp(requests_mock, setup, include_nonce):
     tst_info: tsp.TSTInfo = sd['encap_content_info']['content'].parsed
     if include_nonce:
         assert tst_info['nonce'].native == 0x1337
-    assert tst_info['gen_time'].native \
-           == datetime.now().replace(tzinfo=pytz.utc)
+    assert tst_info['gen_time'].native == datetime.now().replace(
+        tzinfo=pytz.utc
+    )
 
 
 @pytest.mark.parametrize(
-    "time, expected", [
-        ('2020-11-05', 'good'),
-        ('2020-12-05', 'revoked')
-    ]
+    "time, expected", [('2020-11-05', 'good'), ('2020-12-05', 'revoked')]
 )
 def test_ocsp(requests_mock, time, expected):
     setup = RSA_SETUP
@@ -200,10 +209,7 @@ def test_ocsp(requests_mock, time, expected):
 
 
 @pytest.mark.parametrize(
-    "time, expected", [
-        ('2020-11-05', 'good'),
-        ('2020-12-05', 'revoked')
-    ]
+    "time, expected", [('2020-11-05', 'good'), ('2020-12-05', 'revoked')]
 )
 def test_aa_ocsp(requests_mock, time, expected):
     cfg = CertomancerConfig.from_file(
@@ -231,8 +237,9 @@ def test_aa_ocsp(requests_mock, time, expected):
 
 
 @freeze_time('2020-11-01')
-@pytest.mark.parametrize('fname', ['tests/data/tsa-ocsp-req.der',
-                                   'tests/data/tsa-bad-ocsp-req.der'])
+@pytest.mark.parametrize(
+    'fname', ['tests/data/tsa-ocsp-req.der', 'tests/data/tsa-bad-ocsp-req.der']
+)
 def test_ocsp_unauthorized(requests_mock, fname):
     setup = RSA_SETUP
     setup.illusionist.register(requests_mock)
@@ -274,8 +281,7 @@ def test_demo_plugin(requests_mock):
     encrypted_key = ktri['encrypted_key'].native
 
     decrypted_key = asymmetric.rsa_pkcs1v15_decrypt(
-        asymmetric.load_private_key(key.dump()),
-        encrypted_key
+        asymmetric.load_private_key(key.dump()), encrypted_key
     )
 
     eci = env_data['encrypted_content_info']

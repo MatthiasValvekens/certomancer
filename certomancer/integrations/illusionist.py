@@ -19,8 +19,9 @@ class Illusionist:
         A certomancer PKI architecture.
     """
 
-    def __init__(self, pki_arch: PKIArchitecture,
-                 at_time: Optional[datetime] = None):
+    def __init__(
+        self, pki_arch: PKIArchitecture, at_time: Optional[datetime] = None
+    ):
         self.pki_arch = pki_arch
         self.fixed_time = at_time
 
@@ -28,41 +29,42 @@ class Illusionist:
         services = self.pki_arch.service_registry
         for ocsp_info in services.list_ocsp_responders():
             mocker.register_uri(
-                'POST', ocsp_info.url,
+                'POST',
+                ocsp_info.url,
                 content=partial(
                     self.serve_ocsp_response, label=ocsp_info.label
                 ),
-                headers={'Content-Type': 'application/ocsp-response'}
+                headers={'Content-Type': 'application/ocsp-response'},
             )
 
         for tsa_info in services.list_time_stamping_services():
             mocker.register_uri(
-                'POST', tsa_info.url,
+                'POST',
+                tsa_info.url,
                 content=partial(
-                    self.serve_timestamp_response,
-                    label=tsa_info.label
+                    self.serve_timestamp_response, label=tsa_info.label
                 ),
-                headers={'Content-Type': 'application/timestamp-reply'}
+                headers={'Content-Type': 'application/timestamp-reply'},
             )
 
         for crl_repo in services.list_crl_repos():
             mocker.register_uri(
-                'GET', crl_repo.latest_external_url,
-                content=partial(
-                    self.serve_crl,
-                    label=crl_repo.label
-                ),
-                headers={'Content-Type': 'application/pkix-crl'}
+                'GET',
+                crl_repo.latest_external_url,
+                content=partial(self.serve_crl, label=crl_repo.label),
+                headers={'Content-Type': 'application/pkix-crl'},
             )
 
         for plugin_info in services.list_plugin_services():
             mocker.register_uri(
-                'POST', plugin_info.url,
+                'POST',
+                plugin_info.url,
                 content=partial(
-                    self.serve_plugin, plugin_label=plugin_info.plugin_label,
-                    label=plugin_info.label
+                    self.serve_plugin,
+                    plugin_label=plugin_info.plugin_label,
+                    label=plugin_info.label,
                 ),
-                headers={'Content-Type': plugin_info.content_type}
+                headers={'Content-Type': plugin_info.content_type},
             )
 
     @property

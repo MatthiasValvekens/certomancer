@@ -86,14 +86,19 @@ class OCSPResponderServiceInfo(ServiceInfo):
         parse_extension_settings(config_dict, 'ocsp_extensions')
 
     def resolve_issuer_cert(self, arch: 'PKIArchitecture') -> CertLabel:
-        return self.issuer_cert or \
-               arch.get_unique_cert_for_entity(self.for_issuer)
+        return self.issuer_cert or arch.get_unique_cert_for_entity(
+            self.for_issuer
+        )
 
 
 class OCSPInterface(RevocationInfoInterface):
-
-    def __init__(self, for_issuer: EntityLabel, pki_arch: 'PKIArchitecture',
-                 issuer_cert_label: CertLabel, is_aa_responder: bool = False):
+    def __init__(
+        self,
+        for_issuer: EntityLabel,
+        pki_arch: 'PKIArchitecture',
+        issuer_cert_label: CertLabel,
+        is_aa_responder: bool = False,
+    ):
         self.for_issuer = for_issuer
         self.pki_arch = pki_arch
         self.issuer_cert_label = issuer_cert_label
@@ -102,8 +107,9 @@ class OCSPInterface(RevocationInfoInterface):
     def get_issuer_cert(self) -> x509.Certificate:
         return self.pki_arch.get_cert(self.issuer_cert_label)
 
-    def check_revocation_status(self, cid: ocsp.CertId, at_time: datetime) \
-            -> Tuple[ocsp.CertStatus, List[ocsp.SingleResponseExtension]]:
+    def check_revocation_status(
+        self, cid: ocsp.CertId, at_time: datetime
+    ) -> Tuple[ocsp.CertStatus, List[ocsp.SingleResponseExtension]]:
         cert_label = self.pki_arch.find_cert_label(
             cid, issuer_label=self.for_issuer, is_ac=self.is_aa_responder
         )

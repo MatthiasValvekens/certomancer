@@ -15,8 +15,11 @@ if TYPE_CHECKING:
 
 
 __all__ = [
-    'Validity', 'ExtensionSpec', 'RevocationStatus', 'IssuedItemSpec',
-    'parse_extension_settings'
+    'Validity',
+    'ExtensionSpec',
+    'RevocationStatus',
+    'IssuedItemSpec',
+    'parse_extension_settings',
 ]
 
 
@@ -58,17 +61,21 @@ class Validity(ConfigurableMixin):
 
     @property
     def asn1(self) -> x509.Validity:
-        return x509.Validity({
-            'not_before': _x509_dt_asn1(self.valid_from),
-            'not_after': _x509_dt_asn1(self.valid_to)
-        })
+        return x509.Validity(
+            {
+                'not_before': _x509_dt_asn1(self.valid_from),
+                'not_after': _x509_dt_asn1(self.valid_to),
+            }
+        )
 
     @property
     def att_asn1(self) -> cms.AttCertValidityPeriod:
-        return cms.AttCertValidityPeriod({
-            'not_before_time': core.GeneralizedTime(self.valid_from),
-            'not_after_time': core.GeneralizedTime(self.valid_to),
-        })
+        return cms.AttCertValidityPeriod(
+            {
+                'not_before_time': core.GeneralizedTime(self.valid_from),
+                'not_after_time': core.GeneralizedTime(self.valid_to),
+            }
+        )
 
 
 @dataclass(frozen=True)
@@ -103,9 +110,9 @@ class ExtensionSpec(ConfigurableMixin):
                 self.id, arch, self.smart_value
             )
 
-        return extension_class({
-            'extn_id': self.id, 'critical': self.critical, 'extn_value': value
-        })
+        return extension_class(
+            {'extn_id': self.id, 'critical': self.critical, 'extn_value': value}
+        )
 
 
 def parse_extension_settings(sett_dict, sett_key):
@@ -116,7 +123,8 @@ def parse_extension_settings(sett_dict, sett_key):
                 "Applicable extensions must be specified as a list."
             )
         sett_dict[sett_key] = result = [
-            sett if isinstance(sett, ExtensionSpec)
+            sett
+            if isinstance(sett, ExtensionSpec)
             else ExtensionSpec.from_config(sett)
             for sett in ext_spec
         ]
@@ -175,21 +183,23 @@ class RevocationStatus(ConfigurableMixin):
         parse_extension_settings(config_dict, 'crl_entry_extensions')
         parse_extension_settings(config_dict, 'ocsp_response_extensions')
 
-    def to_crl_entry_asn1(self, serial_number: int,
-                          extensions: List[crl.CRLEntryExtension]) \
-            -> crl.RevokedCertificate:
+    def to_crl_entry_asn1(
+        self, serial_number: int, extensions: List[crl.CRLEntryExtension]
+    ) -> crl.RevokedCertificate:
         return CRLBuilder.format_revoked_cert(
-            serial_number, reason=self.reason,
+            serial_number,
+            reason=self.reason,
             revocation_date=self.revoked_since,
-            extensions=extensions
+            extensions=extensions,
         )
 
     def to_ocsp_asn1(self) -> ocsp.CertStatus:
         return ocsp.CertStatus(
-            name='revoked', value={
+            name='revoked',
+            value={
                 'revocation_time': self.revoked_since,
-                'revocation_reason': self.reason
-            }
+                'revocation_reason': self.reason,
+            },
         )
 
 

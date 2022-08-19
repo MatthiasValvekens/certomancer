@@ -32,9 +32,14 @@ from .registry.plugin_api import (
 )
 
 __all__ = [
-    'CRLDistributionPointsPlugin', 'KeyUsagePlugin', 'AIAUrlPlugin',
-    'GeneralNamesPlugin', 'ACTargetsPlugin',
-    'IetfAttrSyntaxPlugin', 'RoleSyntaxPlugin', 'ServiceAuthInfoPlugin'
+    'CRLDistributionPointsPlugin',
+    'KeyUsagePlugin',
+    'AIAUrlPlugin',
+    'GeneralNamesPlugin',
+    'ACTargetsPlugin',
+    'IetfAttrSyntaxPlugin',
+    'RoleSyntaxPlugin',
+    'ServiceAuthInfoPlugin',
 ]
 
 
@@ -55,6 +60,7 @@ class CRLDistributionPointsPlugin(ExtensionPlugin):
             for repo_name in repo_names:
                 repo_info = arch.service_registry.get_crl_repo_info(repo_name)
                 yield repo_info.format_distpoint()
+
         return list(_distpoints())
 
 
@@ -69,9 +75,7 @@ class AIAUrlPlugin(ExtensionPlugin):
         try:
             ocsp_names = params['ocsp-responder-names']
             if not isinstance(ocsp_names, list):
-                raise ConfigurationError(
-                    "ocsp-responder-names must be a list"
-                )
+                raise ConfigurationError("ocsp-responder-names must be a list")
         except KeyError:
             ocsp_names = ()
 
@@ -84,15 +88,13 @@ class AIAUrlPlugin(ExtensionPlugin):
                     'access_method': 'ocsp',
                     'access_location': {
                         'uniform_resource_identifier': ocsp_info.url
-                    }
+                    },
                 }
 
         try:
             ca_issuer_links = params['ca-issuer-links']
             if not isinstance(ca_issuer_links, list):
-                raise ConfigurationError(
-                    "ca-issuer-links must be a list"
-                )
+                raise ConfigurationError("ca-issuer-links must be a list")
         except KeyError:
             ca_issuer_links = []
 
@@ -101,7 +103,7 @@ class AIAUrlPlugin(ExtensionPlugin):
                 check_config_keys(
                     'ca-issuer-links',
                     ('repo', 'cert-labels', 'include-repo-authority'),
-                    cfg
+                    cfg,
                 )
 
                 # grab labels of the repo & certs we want to include
@@ -125,9 +127,10 @@ class AIAUrlPlugin(ExtensionPlugin):
                     yield {
                         'access_method': 'ca_issuers',
                         'access_location': {
-                            'uniform_resource_identifier':
-                                cert_repo_info.issuer_cert_url(use_pem=False)
-                        }
+                            'uniform_resource_identifier': cert_repo_info.issuer_cert_url(
+                                use_pem=False
+                            )
+                        },
                     }
 
                 # emit URLs to certificates in repo
@@ -137,11 +140,10 @@ class AIAUrlPlugin(ExtensionPlugin):
                     yield {
                         'access_method': 'ca_issuers',
                         'access_location': {
-                            'uniform_resource_identifier':
-                                cert_repo_info.issued_cert_url(
-                                    cert_label, use_pem=False
-                                )
-                        }
+                            'uniform_resource_identifier': cert_repo_info.issued_cert_url(
+                                cert_label, use_pem=False
+                            )
+                        },
                     }
 
         return list(itertools.chain(_ocsps(), _ca_issuer_links()))
@@ -234,19 +236,18 @@ class ACTargetsPlugin(ExtensionPlugin):
 
     def provision(self, extn_id, arch: 'PKIArchitecture', params):
         from ._asn1_types import SequenceOfTargets, Target, Targets
+
         targets: Iterable[Tuple[x509.GeneralName, bool]]
         if isinstance(params, list):
             targets = (
-                ACTargetsPlugin._parse_target(arch.entities, t)
-                for t in params
+                ACTargetsPlugin._parse_target(arch.entities, t) for t in params
             )
         else:
             targets = (ACTargetsPlugin._parse_target(arch.entities, params),)
 
         target_objs = [
             Target(
-                name='target_group' if is_group else 'target_name',
-                value=name
+                name='target_group' if is_group else 'target_name', value=name
             )
             for name, is_group in targets
         ]
@@ -266,9 +267,7 @@ class RoleSyntaxPlugin(AttributePlugin):
             raise ConfigurationError(
                 "Parameters for role-syntax should be specified as a dict"
             )
-        check_config_keys(
-            'role-syntax', ('name', 'authority'), params
-        )
+        check_config_keys('role-syntax', ('name', 'authority'), params)
         try:
             name_params = params['name']
         except KeyError:
@@ -327,9 +326,7 @@ def _parse_ietf_attr_value(params):
                 )
         elif alt == 'octets':
             try:
-                value = core.OctetString(
-                    value=binascii.unhexlify(value_pre)
-                )
+                value = core.OctetString(value=binascii.unhexlify(value_pre))
             except ValueError:
                 raise ConfigurationError(
                     f"IETF attribute syntax constituent value of type 'octets' "
@@ -355,9 +352,7 @@ class IetfAttrSyntaxPlugin(AttributePlugin):
 
     def provision(self, attr_id, arch: 'PKIArchitecture', params):
         if isinstance(params, dict):
-            check_config_keys(
-                'ietf-attribute', ('values', 'authority'), params
-            )
+            check_config_keys('ietf-attribute', ('values', 'authority'), params)
             try:
                 values = params['values']
                 if not isinstance(values, list):
@@ -398,8 +393,12 @@ class IetfAttrSyntaxPlugin(AttributePlugin):
 class ServiceAuthInfoPlugin(AttributePlugin):
     schema_label = 'service-auth-info'
 
-    def provision(self, attr_id: Optional[ObjectIdentifier],
-                  arch: 'PKIArchitecture', params):
+    def provision(
+        self,
+        attr_id: Optional[ObjectIdentifier],
+        arch: 'PKIArchitecture',
+        params,
+    ):
 
         if not isinstance(params, dict):
             raise ConfigurationError(
@@ -407,8 +406,7 @@ class ServiceAuthInfoPlugin(AttributePlugin):
             )
 
         check_config_keys(
-            'service-auth-info', ('service', 'ident', 'auth-info'),
-            params
+            'service-auth-info', ('service', 'ident', 'auth-info'), params
         )
 
         try:
@@ -497,8 +495,9 @@ class SimpleCAProfile(CertProfilePlugin):
             )
         return profile_params
 
-    def extensions_for_self(self, arch: 'PKIArchitecture', profile_params: Any,
-                            spec: IssuedItemSpec) -> List[ExtensionSpec]:
+    def extensions_for_self(
+        self, arch: 'PKIArchitecture', profile_params: Any, spec: IssuedItemSpec
+    ) -> List[ExtensionSpec]:
         if not isinstance(spec, CertificateSpec):
             raise ConfigurationError(
                 "'simple-ca' can only be used on public-key certificates"
@@ -521,16 +520,17 @@ class SimpleCAProfile(CertProfilePlugin):
 
         key_usages = {'digital_signature', 'key_cert_sign', 'crl_sign'}
         key_usage_ext = ExtensionSpec(
-            id='key_usage', critical=True,
-            value=x509.KeyUsage(key_usages)
+            id='key_usage', critical=True, value=x509.KeyUsage(key_usages)
         )
         return [bc_ext, key_usage_ext]
 
-    def extensions_for_issued(self, arch: 'PKIArchitecture',
-                              profile_params: Any,
-                              issuer_spec: CertificateSpec,
-                              issued_spec: IssuedItemSpec) \
-            -> List[ExtensionSpec]:
+    def extensions_for_issued(
+        self,
+        arch: 'PKIArchitecture',
+        profile_params: Any,
+        issuer_spec: CertificateSpec,
+        issued_spec: IssuedItemSpec,
+    ) -> List[ExtensionSpec]:
 
         # if issued item has the ocsp-responder profile, don't do anything
         if OCSPResponderProfile.profile_label in issued_spec.profiles:
@@ -545,8 +545,8 @@ class SimpleCAProfile(CertProfilePlugin):
                 id='crl_distribution_points',
                 smart_value=SmartValueSpec(
                     schema=PluginLabel('crl-dist-url'),
-                    params={'crl-repo-names': [crl_repo_lbl]}
-                )
+                    params={'crl-repo-names': [crl_repo_lbl]},
+                ),
             )
             results.append(crl_distpoints_ext)
         except KeyError:
@@ -560,8 +560,8 @@ class SimpleCAProfile(CertProfilePlugin):
                 id='authority_information_access',
                 smart_value=SmartValueSpec(
                     schema=PluginLabel('aia-urls'),
-                    params={'ocsp-responder-names': [ocsp_service_lbl]}
-                )
+                    params={'ocsp-responder-names': [ocsp_service_lbl]},
+                ),
             )
             results.append(aia_ext)
         except KeyError:
@@ -575,19 +575,20 @@ class SimpleCAProfile(CertProfilePlugin):
 class OCSPResponderProfile(CertProfilePlugin):
     profile_label = 'ocsp-responder'
 
-    def extensions_for_self(self, arch: 'PKIArchitecture', profile_params: Any,
-                            spec: IssuedItemSpec) -> List[ExtensionSpec]:
+    def extensions_for_self(
+        self, arch: 'PKIArchitecture', profile_params: Any, spec: IssuedItemSpec
+    ) -> List[ExtensionSpec]:
         if not isinstance(spec, CertificateSpec):
             raise ConfigurationError(
                 "'ocsp-responder' can only be used on public-key certificates"
             )
         ku_ext = ExtensionSpec(
-            id='key_usage', critical=True,
-            value=x509.KeyUsage({'digital_signature'})
+            id='key_usage',
+            critical=True,
+            value=x509.KeyUsage({'digital_signature'}),
         )
         eku_ext = ExtensionSpec(
-            id='extended_key_usage', critical=True,
-            value=['ocsp_signing']
+            id='extended_key_usage', critical=True, value=['ocsp_signing']
         )
         no_revo = ExtensionSpec(id='ocsp_no_check')
         return [ku_ext, eku_ext, no_revo]
@@ -597,15 +598,17 @@ class OCSPResponderProfile(CertProfilePlugin):
 class CommittingSigner(CertProfilePlugin):
     profile_label = 'digsig-commitment'
 
-    def extensions_for_self(self, arch: 'PKIArchitecture', profile_params: Any,
-                            spec: IssuedItemSpec) -> List[ExtensionSpec]:
+    def extensions_for_self(
+        self, arch: 'PKIArchitecture', profile_params: Any, spec: IssuedItemSpec
+    ) -> List[ExtensionSpec]:
         if not isinstance(spec, CertificateSpec):
             raise ConfigurationError(
                 "'digsig-commitment' can "
                 "only be used on public-key certificates"
             )
         ku_ext = ExtensionSpec(
-            id='key_usage', critical=True,
-            value=x509.KeyUsage({'digital_signature', 'non_repudiation'})
+            id='key_usage',
+            critical=True,
+            value=x509.KeyUsage({'digital_signature', 'non_repudiation'}),
         )
         return [ku_ext]

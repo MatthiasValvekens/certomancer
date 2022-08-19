@@ -63,29 +63,33 @@ from .svc_config.ocsp import OCSPInterface, OCSPResponderServiceInfo
 from .svc_config.tsa import TSAServiceInfo
 
 __all__ = [
-    'PKIArchitecture', 'ServiceRegistry',
+    'PKIArchitecture',
+    'ServiceRegistry',
 ]
 
 
 @dataclass(frozen=True)
 class _IssuedItemConfigState:
     serial_by_issuer: Dict[EntityLabel, int] = field(
-        default_factory=lambda: defaultdict(lambda: DEFAULT_FIRST_SERIAL))
-    cert_labels_by_issuer: Dict[EntityLabel, List[CertLabel]] \
-        = field(default_factory=lambda: defaultdict(list))
+        default_factory=lambda: defaultdict(lambda: DEFAULT_FIRST_SERIAL)
+    )
+    cert_labels_by_issuer: Dict[EntityLabel, List[CertLabel]] = field(
+        default_factory=lambda: defaultdict(list)
+    )
 
 
 @dataclass(frozen=True)
 class _CertSpecConfigState(_IssuedItemConfigState):
 
-    cert_labels_by_subject: Dict[EntityLabel, List[CertLabel]] \
-        = field(default_factory=lambda: defaultdict(list))
-    cert_specs: Dict[CertLabel, CertificateSpec] \
-        = field(default_factory=dict)
+    cert_labels_by_subject: Dict[EntityLabel, List[CertLabel]] = field(
+        default_factory=lambda: defaultdict(list)
+    )
+    cert_specs: Dict[CertLabel, CertificateSpec] = field(default_factory=dict)
 
 
-def _config_issuer_serial(state: _IssuedItemConfigState, name,
-                          effective_cert_config):
+def _config_issuer_serial(
+    state: _IssuedItemConfigState, name, effective_cert_config
+):
 
     try:
         issuer = effective_cert_config['issuer']
@@ -138,14 +142,14 @@ def _process_template_config(cert_specs, name, cert_config):
                 f"template, but '{template}' hasn't been declared yet."
             ) from e
         effective_cert_config = dict(template_spec.templatable_config)
-        template_extensions = \
-            effective_cert_config.get('extensions', [])
+        template_extensions = effective_cert_config.get('extensions', [])
         effective_cert_config.update(cert_config)
 
         # add new extensions
         effective_cert_config['extensions'] = _combine_extension_cfgs(
-            extensions, template_extensions,
-            effective_cert_config.get('unique_extensions', True)
+            extensions,
+            template_extensions,
+            effective_cert_config.get('unique_extensions', True),
         )
     else:
         effective_cert_config = dict(cert_config)
@@ -157,8 +161,13 @@ def _process_template_config(cert_specs, name, cert_config):
     return effective_cert_config
 
 
-def _process_single_cert_spec(state: _CertSpecConfigState, name, cert_config,
-                              config_search_dir, cert_cache):
+def _process_single_cert_spec(
+    state: _CertSpecConfigState,
+    name,
+    cert_config,
+    config_search_dir,
+    cert_cache,
+):
     name = CertLabel(name)
     cert_config = key_dashes_to_underscores(cert_config)
 
@@ -195,8 +204,9 @@ def _process_single_cert_spec(state: _CertSpecConfigState, name, cert_config,
     state.cert_labels_by_subject[spec.subject].append(name)
 
 
-def _process_cert_spec_settings(cert_spec_config, config_search_dir,
-                                cert_cache):
+def _process_cert_spec_settings(
+    cert_spec_config, config_search_dir, cert_cache
+):
     state = _CertSpecConfigState()
     for name, cert_config in cert_spec_config.items():
         _process_single_cert_spec(
@@ -204,18 +214,21 @@ def _process_cert_spec_settings(cert_spec_config, config_search_dir,
         )
 
     return (
-        state.cert_specs, state.cert_labels_by_issuer,
-        state.cert_labels_by_subject
+        state.cert_specs,
+        state.cert_labels_by_issuer,
+        state.cert_labels_by_subject,
     )
 
 
 @dataclass(frozen=True)
 class _ACSpecConfigState(_IssuedItemConfigState):
 
-    cert_labels_by_holder: Dict[EntityLabel, List[CertLabel]] \
-        = field(default_factory=lambda: defaultdict(list))
-    ac_specs: Dict[CertLabel, AttributeCertificateSpec] \
-        = field(default_factory=dict)
+    cert_labels_by_holder: Dict[EntityLabel, List[CertLabel]] = field(
+        default_factory=lambda: defaultdict(list)
+    )
+    ac_specs: Dict[CertLabel, AttributeCertificateSpec] = field(
+        default_factory=dict
+    )
 
 
 def _process_ac_spec_config(ac_spec_config):
@@ -240,7 +253,9 @@ def _process_ac_spec_config(ac_spec_config):
         state.cert_labels_by_holder[spec.holder.name].append(name)
 
     return (
-        state.ac_specs, state.cert_labels_by_issuer, state.cert_labels_by_holder
+        state.ac_specs,
+        state.cert_labels_by_issuer,
+        state.cert_labels_by_holder,
     )
 
 
@@ -255,18 +270,26 @@ class PKIArchitecture:
 
     # These config keys will be merged when an architecture is templated
     MULTIVAL_CONFIG_KEYS = (
-        'entities', 'certs', 'entity-defaults',
-        'attr-certs'
+        'entities',
+        'certs',
+        'entity-defaults',
+        'attr-certs',
     )
     CONFIG_KEYS = ('keyset', 'services', *MULTIVAL_CONFIG_KEYS)
 
     @classmethod
-    def build_architecture(cls, arch_label: ArchLabel, cfg: dict,
-                           key_sets: KeySets, external_url_prefix,
-                           extension_plugins: ExtensionPluginRegistry = None,
-                           service_plugins: 'ServicePluginRegistry' = None,
-                           config_search_dir: Optional[SearchDir] = None,
-                           cert_cache=None, ac_cache=None) -> 'PKIArchitecture':
+    def build_architecture(
+        cls,
+        arch_label: ArchLabel,
+        cfg: dict,
+        key_sets: KeySets,
+        external_url_prefix,
+        extension_plugins: ExtensionPluginRegistry = None,
+        service_plugins: 'ServicePluginRegistry' = None,
+        config_search_dir: Optional[SearchDir] = None,
+        cert_cache=None,
+        ac_cache=None,
+    ) -> 'PKIArchitecture':
         check_config_keys(arch_label, PKIArchitecture.CONFIG_KEYS, cfg)
         key_set_label = cfg.get('keyset', arch_label)
         try:
@@ -294,28 +317,33 @@ class PKIArchitecture:
             ac_specs = cfg['attr-certs']
         except KeyError:
             ac_specs = None
-        entities = EntityRegistry(
-            entity_cfg, cfg.get('entity-defaults', None)
-        )
+        entities = EntityRegistry(entity_cfg, cfg.get('entity-defaults', None))
         services = cfg.get('services', {})
         return PKIArchitecture(
-            arch_label, key_set=key_set, entities=entities,
-            cert_spec_config=cert_specs, service_config=services,
+            arch_label,
+            key_set=key_set,
+            entities=entities,
+            cert_spec_config=cert_specs,
+            service_config=services,
             external_url_prefix=external_url_prefix,
             extension_plugins=extension_plugins,
             config_search_dir=config_search_dir,
             service_plugins=service_plugins,
             ac_spec_config=ac_specs,
-            cert_cache=cert_cache, ac_cache=ac_cache,
+            cert_cache=cert_cache,
+            ac_cache=ac_cache,
         )
 
     @classmethod
-    def build_architectures(cls, key_sets: KeySets,
-                            cfgs: Dict[str, Any],
-                            external_url_prefix: str,
-                            config_search_dir: Optional[SearchDir],
-                            extension_plugins: ExtensionPluginRegistry = None,
-                            service_plugins: 'ServicePluginRegistry' = None):
+    def build_architectures(
+        cls,
+        key_sets: KeySets,
+        cfgs: Dict[str, Any],
+        external_url_prefix: str,
+        config_search_dir: Optional[SearchDir],
+        extension_plugins: ExtensionPluginRegistry = None,
+        service_plugins: 'ServicePluginRegistry' = None,
+    ):
         arch_specs: Dict[ArchLabel, Dict[str, Any]] = {}
         for lbl, cfg in cfgs.items():
             arch_label = ArchLabel(lbl)
@@ -384,39 +412,50 @@ class PKIArchitecture:
             # store the config for potential later template use
             arch_specs[arch_label] = cfg
             yield cls.build_architecture(
-                arch_label=arch_label, cfg=cfg, key_sets=key_sets,
+                arch_label=arch_label,
+                cfg=cfg,
+                key_sets=key_sets,
                 external_url_prefix=external_url_prefix,
                 extension_plugins=extension_plugins,
                 config_search_dir=config_search_dir,
-                service_plugins=service_plugins
+                service_plugins=service_plugins,
             )
 
-    def __init__(self, arch_label: ArchLabel,
-                 key_set: KeySet, entities: EntityRegistry,
-                 cert_spec_config, service_config, external_url_prefix,
-                 ac_spec_config=None,
-                 extension_plugins: ExtensionPluginRegistry = None,
-                 attr_plugins: AttributePluginRegistry = None,
-                 service_plugins: ServicePluginRegistry = None,
-                 profile_plugins: CertProfilePluginRegistry = None,
-                 config_search_dir: Optional[SearchDir] = None,
-                 cert_cache=None, ac_cache=None):
+    def __init__(
+        self,
+        arch_label: ArchLabel,
+        key_set: KeySet,
+        entities: EntityRegistry,
+        cert_spec_config,
+        service_config,
+        external_url_prefix,
+        ac_spec_config=None,
+        extension_plugins: ExtensionPluginRegistry = None,
+        attr_plugins: AttributePluginRegistry = None,
+        service_plugins: ServicePluginRegistry = None,
+        profile_plugins: CertProfilePluginRegistry = None,
+        config_search_dir: Optional[SearchDir] = None,
+        cert_cache=None,
+        ac_cache=None,
+    ):
 
         self.arch_label = arch_label
         self.key_set = key_set
         self.entities = entities
 
-        self.extn_plugin_registry = \
+        self.extn_plugin_registry = (
             extension_plugins or plugin_api.extension_plugin_registry
-        self.attr_plugin_registry = \
+        )
+        self.attr_plugin_registry = (
             attr_plugins or plugin_api.attr_plugin_registry
+        )
 
-        self.profile_registry: CertProfilePluginRegistry = \
+        self.profile_registry: CertProfilePluginRegistry = (
             profile_plugins or cert_profile_plugin_registry
+        )
 
         self.service_registry: ServiceRegistry = ServiceRegistry(
-            self, external_url_prefix, service_config,
-            plugins=service_plugins
+            self, external_url_prefix, service_config, plugins=service_plugins
         )
 
         # Parse certificate specs
@@ -427,20 +466,30 @@ class PKIArchitecture:
 
         cert_cache = cert_cache if cert_cache is not None else {}
         ac_cache = ac_cache if ac_cache is not None else {}
-        self._cert_specs, cert_labels_by_issuer, cert_labels_by_subject = \
-            _process_cert_spec_settings(
-                cert_spec_config, config_search_dir, cert_cache
-            )
-        self._ac_specs, ac_labels_by_issuer, ac_labels_by_holder = \
-            _process_ac_spec_config(ac_spec_config or {})
-        self._cert_labels_by_issuer: Dict[EntityLabel, List[CertLabel]] \
-            = cert_labels_by_issuer
-        self._cert_labels_by_subject: Dict[EntityLabel, List[CertLabel]] \
-            = cert_labels_by_subject
-        self._ac_labels_by_issuer: Dict[EntityLabel, List[CertLabel]] \
-            = ac_labels_by_issuer
-        self._ac_labels_by_holder: Dict[EntityLabel, List[CertLabel]] \
-            = ac_labels_by_holder
+        (
+            self._cert_specs,
+            cert_labels_by_issuer,
+            cert_labels_by_subject,
+        ) = _process_cert_spec_settings(
+            cert_spec_config, config_search_dir, cert_cache
+        )
+        (
+            self._ac_specs,
+            ac_labels_by_issuer,
+            ac_labels_by_holder,
+        ) = _process_ac_spec_config(ac_spec_config or {})
+        self._cert_labels_by_issuer: Dict[
+            EntityLabel, List[CertLabel]
+        ] = cert_labels_by_issuer
+        self._cert_labels_by_subject: Dict[
+            EntityLabel, List[CertLabel]
+        ] = cert_labels_by_subject
+        self._ac_labels_by_issuer: Dict[
+            EntityLabel, List[CertLabel]
+        ] = ac_labels_by_issuer
+        self._ac_labels_by_holder: Dict[
+            EntityLabel, List[CertLabel]
+        ] = ac_labels_by_holder
         self._cert_cache = cert_cache
         self._ac_cache = ac_cache
 
@@ -461,9 +510,12 @@ class PKIArchitecture:
                 f"labelled '{label}'."
             ) from e
 
-    def find_cert_label(self, cid: ocsp.CertId,
-                        issuer_label: Optional[EntityLabel] = None,
-                        is_ac=False) -> CertLabel:
+    def find_cert_label(
+        self,
+        cid: ocsp.CertId,
+        issuer_label: Optional[EntityLabel] = None,
+        is_ac=False,
+    ) -> CertLabel:
         by_iss_map = (
             self._ac_labels_by_issuer if is_ac else self._cert_labels_by_issuer
         )
@@ -475,7 +527,8 @@ class PKIArchitecture:
             hash_algo = cid['hash_algorithm']['algorithm'].native
             try:
                 issuer_label = next(
-                    lbl for lbl in by_iss_map.keys()
+                    lbl
+                    for lbl in by_iss_map.keys()
                     if entities.get_name_hash(lbl, hash_algo) == name_hash
                 )
             except StopIteration as e:
@@ -494,10 +547,7 @@ class PKIArchitecture:
                 return cert.serial_number
 
         try:
-            return next(
-                lbl for lbl in specs
-                if _lbl_to_serial(lbl) == serial
-            )
+            return next(lbl for lbl in specs if _lbl_to_serial(lbl) == serial)
         except StopIteration as e:
             raise CertomancerServiceError(
                 f"No certificate issued by {issuer_label} with serial number "
@@ -518,18 +568,21 @@ class PKIArchitecture:
             # noinspection PyStatementEffect
             cert.native
 
-    def enumerate_certs_by_issuer(self) \
-            -> Iterable[Tuple[EntityLabel, Iterable[CertificateSpec]]]:
+    def enumerate_certs_by_issuer(
+        self,
+    ) -> Iterable[Tuple[EntityLabel, Iterable[CertificateSpec]]]:
         for iss_label, issd_certs in self._cert_labels_by_issuer.items():
             yield iss_label, map(self.get_cert_spec, issd_certs)
 
-    def enumerate_attr_certs_by_issuer(self) \
-            -> Iterable[Tuple[EntityLabel, Iterable[AttributeCertificateSpec]]]:
+    def enumerate_attr_certs_by_issuer(
+        self,
+    ) -> Iterable[Tuple[EntityLabel, Iterable[AttributeCertificateSpec]]]:
         for iss_label, issd_certs in self._ac_labels_by_issuer.items():
             yield iss_label, map(self.get_attr_cert_spec, issd_certs)
 
-    def enumerate_attr_certs_of_holder(self, holder_name: EntityLabel,
-                                       issuer: Optional[EntityLabel] = None):
+    def enumerate_attr_certs_of_holder(
+        self, holder_name: EntityLabel, issuer: Optional[EntityLabel] = None
+    ):
         relevant: Iterable[CertLabel]
         # slow, but eh, it'll do
         if issuer is None:
@@ -551,10 +604,13 @@ class PKIArchitecture:
             cur_cert = self.get_cert_spec(next_cert_lbl)
             yield cur_cert.label
 
-    def package_pkcs12(self, cert_label: CertLabel,
-                       key_label: KeyLabel = None,
-                       certs_to_embed: Iterable[CertLabel] = None,
-                       password: bytes = None):
+    def package_pkcs12(
+        self,
+        cert_label: CertLabel,
+        key_label: KeyLabel = None,
+        certs_to_embed: Iterable[CertLabel] = None,
+        password: bytes = None,
+    ):
         try:
             from cryptography import x509 as pyca_x509
             from cryptography.hazmat.primitives.asymmetric import (
@@ -589,13 +645,16 @@ class PKIArchitecture:
         # convert DER to pyca/cryptography internal objects
         cert = pyca_x509.load_der_x509_certificate(cert_der)
         key = load_der_private_key(key_der, password=None)
-        assert isinstance(key, (
-            rsa.RSAPrivateKey,
-            dsa.DSAPrivateKey,
-            ec.EllipticCurvePrivateKey,
-            ed25519.Ed25519PrivateKey,
-            ed448.Ed448PrivateKey,
-        ))
+        assert isinstance(
+            key,
+            (
+                rsa.RSAPrivateKey,
+                dsa.DSAPrivateKey,
+                ec.EllipticCurvePrivateKey,
+                ed25519.Ed25519PrivateKey,
+                ed448.Ed448PrivateKey,
+            ),
+        )
         chain = [pyca_x509.load_der_x509_certificate(c) for c in chain_der]
 
         encryption_alg: KeySerializationEncryption
@@ -605,8 +664,11 @@ class PKIArchitecture:
             encryption_alg = BestAvailableEncryption(password)
 
         return pkcs12.serialize_key_and_certificates(
-            name=None, key=key, cert=cert, cas=chain,
-            encryption_algorithm=encryption_alg
+            name=None,
+            key=key,
+            cert=cert,
+            cas=chain,
+            encryption_algorithm=encryption_alg,
         )
 
     def is_subject_key_available(self, cert: CertLabel):
@@ -614,8 +676,9 @@ class PKIArchitecture:
         key_pair = self.key_set.get_asym_key(key_label)
         return key_pair.private is not None
 
-    def _dump_certs(self, use_pem=True, flat=False, include_pkcs12=False,
-                    pkcs12_pass=None):
+    def _dump_certs(
+        self, use_pem=True, flat=False, include_pkcs12=False, pkcs12_pass=None
+    ):
         include_pkcs12 &= pyca_cryptography_present()
         # start writing only after we know that all certs have been built
         ext = '.cert.pem' if use_pem else '.crt'
@@ -655,13 +718,21 @@ class PKIArchitecture:
                     data = pem.armor('attribute certificate', data)
                 yield name, data
 
-    def dump_certs(self, folder_path: str, use_pem=True, flat=False,
-                   include_pkcs12=False, pkcs12_pass=None):
+    def dump_certs(
+        self,
+        folder_path: str,
+        use_pem=True,
+        flat=False,
+        include_pkcs12=False,
+        pkcs12_pass=None,
+    ):
         os.makedirs(folder_path, exist_ok=True)
         self._load_all_certs()
         itr_certs = self._dump_certs(
-            use_pem=use_pem, flat=flat, include_pkcs12=include_pkcs12,
-            pkcs12_pass=pkcs12_pass
+            use_pem=use_pem,
+            flat=flat,
+            include_pkcs12=include_pkcs12,
+            pkcs12_pass=pkcs12_pass,
         )
         itr_att_certs = self._dump_attr_certs(use_pem=use_pem, flat=flat)
         for name, data in itertools.chain(itr_certs, itr_att_certs):
@@ -672,13 +743,21 @@ class PKIArchitecture:
                 with open(path, 'wb') as f:
                     f.write(data)
 
-    def zip_certs(self, output_buffer, use_pem=True, flat=False,
-                  include_pkcs12=False, pkcs12_pass=None):
+    def zip_certs(
+        self,
+        output_buffer,
+        use_pem=True,
+        flat=False,
+        include_pkcs12=False,
+        pkcs12_pass=None,
+    ):
         zip_file = ZipFile(output_buffer, 'w')
         lbl = self.arch_label.value
         itr = self._dump_certs(
-            use_pem=use_pem, flat=flat, include_pkcs12=include_pkcs12,
-            pkcs12_pass=pkcs12_pass
+            use_pem=use_pem,
+            flat=flat,
+            include_pkcs12=include_pkcs12,
+            pkcs12_pass=pkcs12_pass,
         )
         for name, data in itr:
             if data is None:
@@ -687,23 +766,28 @@ class PKIArchitecture:
             zip_file.writestr(fname, data)
         zip_file.close()
 
-    def _collect_extensions(self, spec: IssuedItemSpec,
-                            extension_dict: Dict[str, x509.Extension]) \
-            -> List[x509.Extension]:
+    def _collect_extensions(
+        self, spec: IssuedItemSpec, extension_dict: Dict[str, x509.Extension]
+    ) -> List[x509.Extension]:
 
         if spec.unique_extensions:
             # apply profiles
-            exts_from_profile = \
-                self.profile_registry.apply_profiles(arch=self, item_spec=spec)
-            extension_dict.update({
-                k: ext_spec.to_asn1(self, x509.Extension)
-                for k, ext_spec in exts_from_profile.items()
-            })
+            exts_from_profile = self.profile_registry.apply_profiles(
+                arch=self, item_spec=spec
+            )
+            extension_dict.update(
+                {
+                    k: ext_spec.to_asn1(self, x509.Extension)
+                    for k, ext_spec in exts_from_profile.items()
+                }
+            )
             # add extensions from config
-            extension_dict.update({
-                ext_spec.id: ext_spec.to_asn1(self, x509.Extension)
-                for ext_spec in spec.extensions
-            })
+            extension_dict.update(
+                {
+                    ext_spec.id: ext_spec.to_asn1(self, x509.Extension)
+                    for ext_spec in spec.extensions
+                }
+            )
             extensions = list(extension_dict.values())
         else:
             # no profiles in non-unique mode
@@ -725,8 +809,7 @@ class PKIArchitecture:
         signature_algo = spec.signature_algo
         digest_algo = spec.digest_algo
         signature_algo_obj = choose_signed_digest(
-            digest_algo, authority_key.public_key_info,
-            signature_algo
+            digest_algo, authority_key.public_key_info, signature_algo
         )
 
         try:
@@ -740,43 +823,48 @@ class PKIArchitecture:
             aki = authority_key.public_key_info.sha1
 
         aki_value = x509.AuthorityKeyIdentifier({'key_identifier': aki})
-        aki_extension = x509.Extension({
-            'extn_id': 'authority_key_identifier',
-            'critical': False,
-            'extn_value': aki_value
-        })
-        extension_dict = {
-            'authority_key_identifier': aki_extension
-        }
+        aki_extension = x509.Extension(
+            {
+                'extn_id': 'authority_key_identifier',
+                'critical': False,
+                'extn_value': aki_value,
+            }
+        )
+        extension_dict = {'authority_key_identifier': aki_extension}
         extensions = self._collect_extensions(spec, extension_dict)
 
         attributes = [attr.to_asn1(self) for attr in spec.attributes]
-        tbs = cms.AttributeCertificateInfoV2({
-            'version': 'v2',
-            'holder': spec.holder.to_asn1(self),
-            'issuer': cms.AttCertIssuer(
-                name='v2_form',
-                value=cms.V2Form(
-                    {'issuer_name': [as_general_name(issuer_name)]}
-                )
-            ),
-            'signature': signature_algo_obj,
-            'serial_number': spec.serial,
-            'att_cert_validity_period': spec.validity.att_asn1,
-            'attributes': attributes,
-            'extensions': extensions
-        })
+        tbs = cms.AttributeCertificateInfoV2(
+            {
+                'version': 'v2',
+                'holder': spec.holder.to_asn1(self),
+                'issuer': cms.AttCertIssuer(
+                    name='v2_form',
+                    value=cms.V2Form(
+                        {'issuer_name': [as_general_name(issuer_name)]}
+                    ),
+                ),
+                'signature': signature_algo_obj,
+                'serial_number': spec.serial,
+                'att_cert_validity_period': spec.validity.att_asn1,
+                'attributes': attributes,
+                'extensions': extensions,
+            }
+        )
 
         signature = generic_sign(
             private_key=authority_key.private_key_info,
-            tbs_bytes=tbs.dump(), signature_algo=signature_algo_obj
+            tbs_bytes=tbs.dump(),
+            signature_algo=signature_algo_obj,
         )
 
-        cert = cms.AttributeCertificateV2({
-            'ac_info': tbs,
-            'signature_algorithm': signature_algo_obj,
-            'signature': signature
-        })
+        cert = cms.AttributeCertificateV2(
+            {
+                'ac_info': tbs,
+                'signature_algorithm': signature_algo_obj,
+                'signature': signature,
+            }
+        )
 
         self._cert_cache[label] = cert
         return cert
@@ -796,19 +884,20 @@ class PKIArchitecture:
         signature_algo = spec.signature_algo
         digest_algo = spec.digest_algo
         signature_algo_obj = choose_signed_digest(
-            digest_algo, authority_key.public_key_info,
-            signature_algo
+            digest_algo, authority_key.public_key_info, signature_algo
         )
 
         # SKI and AKI are required by RFC 5280 in (almost) all certificates
         # so we include them here
         # TODO check for potential duplication?
         ski = subject_key.public_key_info.sha1
-        ski_extension = x509.Extension({
-            'extn_id': 'key_identifier',
-            'critical': False,
-            'extn_value': core.OctetString(ski)
-        })
+        ski_extension = x509.Extension(
+            {
+                'extn_id': 'key_identifier',
+                'critical': False,
+                'extn_value': core.OctetString(ski),
+            }
+        )
         if spec.self_signed:
             aki = ski
         else:
@@ -834,46 +923,56 @@ class PKIArchitecture:
             aki = authority_key.public_key_info.sha1
 
         aki_value = x509.AuthorityKeyIdentifier({'key_identifier': aki})
-        aki_extension = x509.Extension({
-            'extn_id': 'authority_key_identifier',
-            'critical': False,
-            'extn_value': aki_value
-        })
-        extensions = self._collect_extensions(
-            spec, {
-                'key_identifier': ski_extension,
-                'authority_key_identifier': aki_extension
+        aki_extension = x509.Extension(
+            {
+                'extn_id': 'authority_key_identifier',
+                'critical': False,
+                'extn_value': aki_value,
             }
         )
-        tbs = x509.TbsCertificate({
-            'version': 'v3',
-            'serial_number': spec.serial,
-            'signature': signature_algo_obj,
-            'issuer': issuer_name,
-            'validity': spec.validity.asn1,
-            'subject': subject_name,
-            'subject_public_key_info': subject_key.public_key_info,
-            'extensions': extensions
-        })
+        extensions = self._collect_extensions(
+            spec,
+            {
+                'key_identifier': ski_extension,
+                'authority_key_identifier': aki_extension,
+            },
+        )
+        tbs = x509.TbsCertificate(
+            {
+                'version': 'v3',
+                'serial_number': spec.serial,
+                'signature': signature_algo_obj,
+                'issuer': issuer_name,
+                'validity': spec.validity.asn1,
+                'subject': subject_name,
+                'subject_public_key_info': subject_key.public_key_info,
+                'extensions': extensions,
+            }
+        )
         tbs_bytes = tbs.dump()
         signature = generic_sign(
             private_key=authority_key.private_key_info,
-            tbs_bytes=tbs_bytes, signature_algo=signature_algo_obj
+            tbs_bytes=tbs_bytes,
+            signature_algo=signature_algo_obj,
         )
 
-        cert = x509.Certificate({
-            'tbs_certificate': tbs,
-            'signature_algorithm': signature_algo_obj,
-            'signature_value': signature
-        })
+        cert = x509.Certificate(
+            {
+                'tbs_certificate': tbs,
+                'signature_algorithm': signature_algo_obj,
+                'signature_value': signature,
+            }
+        )
 
         self._cert_cache[label] = cert
         return cert
 
-    def check_revocation_status(self, cert_label, at_time: datetime,
-                                is_ac=False) -> Optional[RevocationStatus]:
+    def check_revocation_status(
+        self, cert_label, at_time: datetime, is_ac=False
+    ) -> Optional[RevocationStatus]:
         spec = (
-            self.get_attr_cert_spec(cert_label) if is_ac
+            self.get_attr_cert_spec(cert_label)
+            if is_ac
             else self.get_cert_spec(cert_label)
         )
         revo = spec.revocation
@@ -882,12 +981,14 @@ class PKIArchitecture:
         else:
             return None
 
-    def get_cert_labels_for_entity(self, entity_label: EntityLabel) \
-            -> List[CertLabel]:
+    def get_cert_labels_for_entity(
+        self, entity_label: EntityLabel
+    ) -> List[CertLabel]:
         return self._cert_labels_by_subject[entity_label]
 
-    def get_unique_cert_for_entity(self, entity_label: EntityLabel) \
-            -> CertLabel:
+    def get_unique_cert_for_entity(
+        self, entity_label: EntityLabel
+    ) -> CertLabel:
         labels = self.get_cert_labels_for_entity(entity_label)
         if len(labels) != 1:
             raise CertomancerServiceError(
@@ -902,8 +1003,9 @@ class PKIArchitecture:
         ]
         return revo.to_crl_entry_asn1(serial, exts)
 
-    def get_revoked_certs_at_time(self, issuer_label: EntityLabel,
-                                  at_time: datetime):
+    def get_revoked_certs_at_time(
+        self, issuer_label: EntityLabel, at_time: datetime
+    ):
         labels = self._cert_labels_by_issuer[issuer_label]
         for cert_label in labels:
             revo = self.check_revocation_status(cert_label, at_time=at_time)
@@ -911,8 +1013,9 @@ class PKIArchitecture:
             if revo is not None:
                 yield self._format_revo(cert.serial_number, revo)
 
-    def get_revoked_attr_certs_at_time(self, issuer_label: EntityLabel,
-                                       at_time: datetime):
+    def get_revoked_attr_certs_at_time(
+        self, issuer_label: EntityLabel, at_time: datetime
+    ):
         labels = self._ac_labels_by_issuer[issuer_label]
         for cert_label in labels:
             revo = self.check_revocation_status(
@@ -931,8 +1034,13 @@ class ServiceRegistry:
     architecture.
     """
 
-    def __init__(self, pki_arch: PKIArchitecture, external_url_prefix,
-                 service_config, plugins: ServicePluginRegistry = None):
+    def __init__(
+        self,
+        pki_arch: PKIArchitecture,
+        external_url_prefix,
+        service_config,
+        plugins: ServicePluginRegistry = None,
+    ):
         self.pki_arch = pki_arch
         self.plugins = plugins or plugin_api.service_plugin_registry
 
@@ -945,37 +1053,45 @@ class ServiceRegistry:
                 yield ServiceLabel(lbl), cfg
 
         check_config_keys(
-            'services', (
-                'ocsp', 'crl-repo', 'cert-repo', 'attr-cert-repo',
-                'time-stamping', 'plugin'
+            'services',
+            (
+                'ocsp',
+                'crl-repo',
+                'cert-repo',
+                'attr-cert-repo',
+                'time-stamping',
+                'plugin',
             ),
-            service_config
+            service_config,
         )
 
         self._ocsp = {
             label: OCSPResponderServiceInfo.from_config(cfg)
-            for label, cfg
-            in _gen_svc_config(service_config.get('ocsp', {}))
+            for label, cfg in _gen_svc_config(service_config.get('ocsp', {}))
         }
         self._crl_repo = {
             label: CRLRepoServiceInfo.from_config(cfg)
-            for label, cfg
-            in _gen_svc_config(service_config.get('crl-repo', {}))
+            for label, cfg in _gen_svc_config(
+                service_config.get('crl-repo', {})
+            )
         }
         self._cert_repo = {
             label: CertRepoServiceInfo.from_config(cfg)
-            for label, cfg
-            in _gen_svc_config(service_config.get('cert-repo', {}))
+            for label, cfg in _gen_svc_config(
+                service_config.get('cert-repo', {})
+            )
         }
         self._attr_cert_repo = {
             label: AttrCertRepoServiceInfo.from_config(cfg)
-            for label, cfg
-            in _gen_svc_config(service_config.get('attr-cert-repo', {}))
+            for label, cfg in _gen_svc_config(
+                service_config.get('attr-cert-repo', {})
+            )
         }
         self._tsa = {
             label: TSAServiceInfo.from_config(cfg)
-            for label, cfg
-            in _gen_svc_config(service_config.get('time-stamping', {}))
+            for label, cfg in _gen_svc_config(
+                service_config.get('time-stamping', {})
+            )
         }
 
         plugin_cfg = service_config.get('plugin', {})
@@ -988,16 +1104,18 @@ class ServiceRegistry:
             svc_configs = _gen_svc_config(cfg_for_plugin)
             for service_label, cfg in svc_configs:
                 yield service_label, PluginServiceInfo(
-                    plugin_label=plugin_label, content_type=content_type,
+                    plugin_label=plugin_label,
+                    content_type=content_type,
                     plugin_config=plugin.process_plugin_config(cfg),
                     label=service_label,
                     external_url_prefix=cfg['external-url-prefix'],
-                    arch_label=pki_arch.arch_label
+                    arch_label=pki_arch.arch_label,
                 )
 
         self._plugin_services = {
-            PluginLabel(plugin_label):
-                dict(_cfg_plugin(PluginLabel(plugin_label), cfg))
+            PluginLabel(plugin_label): dict(
+                _cfg_plugin(PluginLabel(plugin_label), cfg)
+            )
             for plugin_label, cfg in plugin_cfg.items()
         }
 
@@ -1012,8 +1130,9 @@ class ServiceRegistry:
     def list_ocsp_responders(self) -> List[OCSPResponderServiceInfo]:
         return list(self._ocsp.values())
 
-    def summon_responder(self, label: ServiceLabel, at_time=None) \
-            -> SimpleOCSPResponder:
+    def summon_responder(
+        self, label: ServiceLabel, at_time=None
+    ) -> SimpleOCSPResponder:
         info = self.get_ocsp_info(label)
         responder_key = self.pki_arch.key_set.get_private_key(info.signing_key)
         issuer_cert_label = info.resolve_issuer_cert(self.pki_arch)
@@ -1027,16 +1146,18 @@ class ServiceRegistry:
             responder_cert=responder_cert,
             responder_key=responder_key,
             signature_algo=choose_signed_digest(
-                info.digest_algo, responder_cert.public_key,
-                signature_algo=info.signature_algo
+                info.digest_algo,
+                responder_cert.public_key,
+                signature_algo=info.signature_algo,
             ),
             at_time=at_time,
             revinfo_interface=OCSPInterface(
-                for_issuer=info.for_issuer, pki_arch=self.pki_arch,
+                for_issuer=info.for_issuer,
+                pki_arch=self.pki_arch,
                 issuer_cert_label=issuer_cert_label,
-                is_aa_responder=info.is_aa_responder
+                is_aa_responder=info.is_aa_responder,
             ),
-            response_extensions=extra_extensions
+            response_extensions=extra_extensions,
         )
 
     def get_crl_repo_info(self, label: ServiceLabel) -> CRLRepoServiceInfo:
@@ -1059,8 +1180,9 @@ class ServiceRegistry:
                 f"labelled '{label}'."
             ) from e
 
-    def get_attr_cert_repo_info(self, label: ServiceLabel) \
-            -> AttrCertRepoServiceInfo:
+    def get_attr_cert_repo_info(
+        self, label: ServiceLabel
+    ) -> AttrCertRepoServiceInfo:
         try:
             return self._attr_cert_repo[label]
         except KeyError as e:
@@ -1087,8 +1209,9 @@ class ServiceRegistry:
     def list_time_stamping_services(self) -> List[TSAServiceInfo]:
         return list(self._tsa.values())
 
-    def summon_timestamper(self, label: ServiceLabel, at_time=None) \
-            -> TimeStamper:
+    def summon_timestamper(
+        self, label: ServiceLabel, at_time=None
+    ) -> TimeStamper:
         # TODO allow policy parameter to be customised
         info = self.get_tsa_info(label)
         tsa_key = self.pki_arch.key_set.get_private_key(info.signing_key)
@@ -1098,24 +1221,29 @@ class ServiceRegistry:
             tsa_key=tsa_key,
             fixed_dt=at_time,
             signature_algo=choose_signed_digest(
-                info.digest_algo, pub_key=tsa_cert.public_key,
-                signature_algo=info.signature_algo
+                info.digest_algo,
+                pub_key=tsa_cert.public_key,
+                signature_algo=info.signature_algo,
             ),
             certs_to_embed=[
                 self.pki_arch.get_cert(lbl) for lbl in info.certs_to_embed
             ],
-            md_algorithm=info.digest_algo
+            md_algorithm=info.digest_algo,
         )
 
-    def get_crl(self, repo_label: ServiceLabel,
-                at_time: Optional[datetime] = None,
-                number: Optional[int] = None):
+    def get_crl(
+        self,
+        repo_label: ServiceLabel,
+        at_time: Optional[datetime] = None,
+        number: Optional[int] = None,
+    ):
         # TODO support indirect CRLs, delta CRLs, etc.?
 
         crl_info = self.get_crl_repo_info(repo_label)
         issuer_cert_label = crl_info.issuer_cert
-        signing_key_pair = \
-            self.pki_arch.key_set.get_asym_key(crl_info.signing_key)
+        signing_key_pair = self.pki_arch.key_set.get_asym_key(
+            crl_info.signing_key
+        )
         signing_key = signing_key_pair.private
 
         # we need a cert to compute the right authority key identifier,
@@ -1151,11 +1279,12 @@ class ServiceRegistry:
             issuer_name=self.pki_arch.entities[crl_info.for_issuer],
             issuer_key=signing_key,
             signature_algo=choose_signed_digest(
-                crl_info.digest_algo, signing_key_pair.public,
-                signature_algo=crl_info.signature_algo
+                crl_info.digest_algo,
+                signing_key_pair.public,
+                signature_algo=crl_info.signature_algo,
             ),
             authority_key_identifier=iss_cert.key_identifier_value,
-            extra_crl_extensions=extra_extensions
+            extra_crl_extensions=extra_extensions,
         )
 
         revoked = []
@@ -1172,9 +1301,11 @@ class ServiceRegistry:
                 )
             )
         return builder.build_crl(
-            crl_number=number, this_update=this_update,
-            next_update=next_update, revoked_certs=revoked,
-            distpoint=crl_info.format_idp()
+            crl_number=number,
+            this_update=this_update,
+            next_update=next_update,
+            revoked_certs=revoked,
+            distpoint=crl_info.format_idp(),
         )
 
     def determine_repo_issuer_cert(self, repo_info: BaseCertRepoServiceInfo):
@@ -1188,8 +1319,12 @@ class ServiceRegistry:
             cert_label = self.pki_arch.get_unique_cert_for_entity(issuer)
         return cert_label
 
-    def _check_repo_membership(self, repo_info: BaseCertRepoServiceInfo,
-                               cert_label: CertLabel, is_attr=False):
+    def _check_repo_membership(
+        self,
+        repo_info: BaseCertRepoServiceInfo,
+        cert_label: CertLabel,
+        is_attr=False,
+    ):
         # check if the cert in question actually belongs to the repo
         # (i.e. whether it is issued by the right entity)
         cert_spec: IssuedItemSpec
@@ -1200,9 +1335,9 @@ class ServiceRegistry:
 
         return cert_spec.issuer == repo_info.for_issuer
 
-    def get_cert_from_repo(self, repo_label: ServiceLabel,
-                           cert_label: Optional[CertLabel] = None) \
-            -> Optional[x509.Certificate]:
+    def get_cert_from_repo(
+        self, repo_label: ServiceLabel, cert_label: Optional[CertLabel] = None
+    ) -> Optional[x509.Certificate]:
 
         repo_info = self.get_cert_repo_info(repo_label)
         arch = self.pki_arch
@@ -1212,25 +1347,30 @@ class ServiceRegistry:
             return None
         return arch.get_cert(cert_label)
 
-    def get_attr_cert_from_repo(self, repo_label: ServiceLabel,
-                                cert_label: CertLabel) \
-            -> Optional[cms.AttributeCertificateV2]:
+    def get_attr_cert_from_repo(
+        self, repo_label: ServiceLabel, cert_label: CertLabel
+    ) -> Optional[cms.AttributeCertificateV2]:
 
         repo_info = self.get_attr_cert_repo_info(repo_label)
         if not self._check_repo_membership(repo_info, cert_label, is_attr=True):
             return None
         return self.pki_arch.get_attr_cert(cert_label)
 
-    def invoke_plugin(self, plugin_label: PluginLabel,
-                      label: ServiceLabel, request: bytes,
-                      at_time: Optional[datetime] = None) -> bytes:
+    def invoke_plugin(
+        self,
+        plugin_label: PluginLabel,
+        label: ServiceLabel,
+        request: bytes,
+        at_time: Optional[datetime] = None,
+    ) -> bytes:
         info = self.get_plugin_info(plugin_label, label)
         return self.plugins.invoke_plugin(
             self.pki_arch, info, request, at_time=at_time
         )
 
-    def get_plugin_info(self, plugin_label: PluginLabel, label: ServiceLabel) \
-            -> PluginServiceInfo:
+    def get_plugin_info(
+        self, plugin_label: PluginLabel, label: ServiceLabel
+    ) -> PluginServiceInfo:
         self.plugins.assert_registered(plugin_label)
         try:
             svcs_for_plugin = self._plugin_services.get(plugin_label, {})
@@ -1241,8 +1381,9 @@ class ServiceRegistry:
                 f"does not exist."
             ) from e
 
-    def list_plugin_services(self, plugin_label: Optional[PluginLabel] = None) \
-            -> List[PluginServiceInfo]:
+    def list_plugin_services(
+        self, plugin_label: Optional[PluginLabel] = None
+    ) -> List[PluginServiceInfo]:
         svcs = self._plugin_services
 
         def _enumerate_svcs(*relevant_plugins):

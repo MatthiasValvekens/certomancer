@@ -15,8 +15,9 @@ class EntityRegistry:
     """
 
     def __init__(self, config, defaults=None):
-        defaults = {} if defaults is None else \
-            key_dashes_to_underscores(defaults)
+        defaults = (
+            {} if defaults is None else key_dashes_to_underscores(defaults)
+        )
 
         def _prepare_name(ent_cfg):
             new_cfg = dict(defaults)
@@ -55,4 +56,3 @@ def as_general_name(name: x509.Name) -> x509.GeneralName:
     # API in asn1crypto, and has nothing to do with the fact that we're dealing
     # with name objects here
     return x509.GeneralName(name='directory_name', value=name)
-

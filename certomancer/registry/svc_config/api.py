@@ -53,4 +53,3 @@ class ServiceInfo(ConfigurableMixin):
         This is the value that is embedded into certificates.
         """
         return f"{self.external_url_prefix}/{self.full_relative_url}"
-
