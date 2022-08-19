@@ -1,16 +1,14 @@
 import hashlib
 from dataclasses import dataclass
-from typing import Optional, List, TYPE_CHECKING, Dict, Any
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
-from asn1crypto import x509, cms, keys
+from asn1crypto import cms, keys, x509
 
-from .general import IssuedItemSpec
-from ..common import EntityLabel, CertLabel, KeyLabel
+from ...config_utils import ConfigurableMixin, ConfigurationError
+from ..common import CertLabel, EntityLabel, KeyLabel
 from ..entities import as_general_name
-from ..plugin_api import process_config_with_smart_value, SmartValueSpec
-from ...config_utils import (
-    ConfigurationError, ConfigurableMixin
-)
+from ..plugin_api import SmartValueSpec, process_config_with_smart_value
+from .general import IssuedItemSpec
 
 if TYPE_CHECKING:
     from ..pki_arch import PKIArchitecture

@@ -2,21 +2,23 @@ import abc
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional, Type, Union, Any, TYPE_CHECKING, Dict, List
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Type, Union
 
-from asn1crypto import core, cms
+from asn1crypto import cms, core
 from asn1crypto.core import ObjectIdentifier
 
-from .common import PluginLabel, CertomancerObjectNotFoundError
-from .svc_config.api import ServiceInfo
 from ..config_utils import (
-    ConfigurationError, ConfigurableMixin, plugin_instantiate_util
+    ConfigurableMixin,
+    ConfigurationError,
+    plugin_instantiate_util,
 )
 from ..services import CertomancerServiceError
+from .common import CertomancerObjectNotFoundError, PluginLabel
+from .svc_config.api import ServiceInfo
 
 if TYPE_CHECKING:
-    from .issued.general import ExtensionSpec, IssuedItemSpec
     from .issued.cert import CertificateSpec
+    from .issued.general import ExtensionSpec, IssuedItemSpec
     from .pki_arch import PKIArchitecture
 
 logger = logging.getLogger(__name__)

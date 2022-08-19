@@ -2,7 +2,7 @@
 ASN.1 types for internal Certomancer use. All of these are for encoding only.
 """
 
-from asn1crypto import core, x509, cms
+from asn1crypto import cms, core, x509
 
 
 class Target(core.Choice):

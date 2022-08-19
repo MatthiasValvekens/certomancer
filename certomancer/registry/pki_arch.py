@@ -5,45 +5,62 @@ import os.path
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Optional, List, Dict, Iterable, Tuple, Union, Any
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 from zipfile import ZipFile
 
-import yaml
-from asn1crypto import x509, core, pem, ocsp, crl, cms
 import tzlocal
-from cryptography.hazmat.primitives._serialization import KeySerializationEncryption
+import yaml
+from asn1crypto import cms, core, crl, ocsp, pem, x509
+from cryptography.hazmat.primitives._serialization import (
+    KeySerializationEncryption,
+)
 
+from ..config_utils import (
+    ConfigurationError,
+    SearchDir,
+    check_config_keys,
+    key_dashes_to_underscores,
+)
+from ..crypto_utils import load_cert_from_pemder, pyca_cryptography_present
+from ..services import (
+    CertomancerServiceError,
+    CRLBuilder,
+    SimpleOCSPResponder,
+    TimeStamper,
+    choose_signed_digest,
+    generic_sign,
+)
 from . import plugin_api
-from .common import ArchLabel, ServiceLabel, CertLabel, KeyLabel, EntityLabel, \
-    PluginLabel, CertomancerObjectNotFoundError
+from .common import (
+    ArchLabel,
+    CertLabel,
+    CertomancerObjectNotFoundError,
+    EntityLabel,
+    KeyLabel,
+    PluginLabel,
+    ServiceLabel,
+)
 from .entities import EntityRegistry, as_general_name
 from .issued.attr_cert import AttributeCertificateSpec
 from .issued.cert import CertificateSpec
-from .issued.general import RevocationStatus, IssuedItemSpec
+from .issued.general import IssuedItemSpec, RevocationStatus
 from .keys import KeySet, KeySets
-from .plugin_api import ExtensionPluginRegistry, AttributePluginRegistry, \
-    ServicePluginRegistry, PluginServiceInfo, CertProfilePluginRegistry, \
-    cert_profile_plugin_registry
+from .plugin_api import (
+    AttributePluginRegistry,
+    CertProfilePluginRegistry,
+    ExtensionPluginRegistry,
+    PluginServiceInfo,
+    ServicePluginRegistry,
+    cert_profile_plugin_registry,
+)
 from .svc_config.cert_repo import (
-    CertRepoServiceInfo, AttrCertRepoServiceInfo,
-    BaseCertRepoServiceInfo
+    AttrCertRepoServiceInfo,
+    BaseCertRepoServiceInfo,
+    CertRepoServiceInfo,
 )
 from .svc_config.crl import CRLRepoServiceInfo, CRLType
-from .svc_config.ocsp import OCSPResponderServiceInfo, OCSPInterface
+from .svc_config.ocsp import OCSPInterface, OCSPResponderServiceInfo
 from .svc_config.tsa import TSAServiceInfo
-from ..config_utils import (
-    ConfigurationError, check_config_keys,
-    key_dashes_to_underscores,
-    SearchDir
-)
-from ..crypto_utils import (
-    pyca_cryptography_present,
-    load_cert_from_pemder
-)
-from ..services import (
-    CertomancerServiceError, generic_sign, CRLBuilder,
-    choose_signed_digest, SimpleOCSPResponder, TimeStamper
-)
 
 __all__ = [
     'PKIArchitecture', 'ServiceRegistry',
@@ -539,14 +556,20 @@ class PKIArchitecture:
                        certs_to_embed: Iterable[CertLabel] = None,
                        password: bytes = None):
         try:
-            from cryptography.hazmat.primitives.serialization import (
-                pkcs12, load_der_private_key, NoEncryption,
-                BestAvailableEncryption
-            )
-            from cryptography.hazmat.primitives.asymmetric import (
-                rsa, dsa, ec, ed25519, ed448
-            )
             from cryptography import x509 as pyca_x509
+            from cryptography.hazmat.primitives.asymmetric import (
+                dsa,
+                ec,
+                ed448,
+                ed25519,
+                rsa,
+            )
+            from cryptography.hazmat.primitives.serialization import (
+                BestAvailableEncryption,
+                NoEncryption,
+                load_der_private_key,
+                pkcs12,
+            )
         except ImportError as e:  # pragma: nocover
             raise CertomancerServiceError(
                 "pyca/cryptography is required for PKCS#12 serialisation."

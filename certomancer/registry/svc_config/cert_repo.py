@@ -1,9 +1,9 @@
 from dataclasses import dataclass
 from typing import Optional
 
-from .api import ServiceInfo
-from ..common import CertLabel, EntityLabel
 from ...config_utils import ConfigurationError
+from ..common import CertLabel, EntityLabel
+from .api import ServiceInfo
 
 __all__ = [
     'BaseCertRepoServiceInfo', 'CertRepoServiceInfo', 'AttrCertRepoServiceInfo'

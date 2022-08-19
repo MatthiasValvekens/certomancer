@@ -2,17 +2,14 @@ import importlib
 import logging
 import os
 import os.path
-import os.path
 from typing import Optional
 
 import yaml
 
+from ..config_utils import ConfigurationError, SearchDir
 from .common import ArchLabel
 from .keys import KeySets
 from .pki_arch import PKIArchitecture
-from ..config_utils import (
-    ConfigurationError, SearchDir
-)
 
 __all__ = ['CertomancerConfig']
 

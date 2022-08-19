@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 from typing import ClassVar
 
-from ..common import ArchLabel, ServiceLabel
 from ...config_utils import ConfigurableMixin
+from ..common import ArchLabel, ServiceLabel
 
 __all__ = ['ServiceInfo']
 

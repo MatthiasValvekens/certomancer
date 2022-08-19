@@ -2,13 +2,12 @@ import abc
 import hashlib
 import os
 import struct
-
-from asn1crypto.crl import TBSCertListExtension
 from datetime import datetime, timedelta
-from typing import Optional, List, Tuple
+from typing import List, Optional, Tuple
 
-from asn1crypto import keys, x509, tsp, algos, cms, core, crl, ocsp
 import tzlocal
+from asn1crypto import algos, cms, core, crl, keys, ocsp, tsp, x509
+from asn1crypto.crl import TBSCertListExtension
 
 from certomancer.crypto_utils import generic_sign, optimal_pss_params
 

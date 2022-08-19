@@ -1,9 +1,9 @@
-from typing import Optional, List, Set, Tuple, Dict, Any
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 import pkcs11
-from pkcs11.util import rsa, dsa, biginteger, x509 as p11_x509
-
-from asn1crypto import keys, x509, core
+from asn1crypto import core, keys, x509
+from pkcs11.util import biginteger, dsa, rsa
+from pkcs11.util import x509 as p11_x509
 
 from certomancer import PKIArchitecture
 from certomancer.registry import CertLabel

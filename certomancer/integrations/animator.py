@@ -3,26 +3,36 @@ import os
 from dataclasses import dataclass
 from datetime import datetime
 from io import BytesIO
-from typing import Optional, Dict, List, Callable
+from typing import Callable, Dict, List, Optional
 
 import tzlocal
-from asn1crypto import ocsp, tsp, pem
-from werkzeug.wrappers import Request, Response
+from asn1crypto import ocsp, pem, tsp
 from dateutil.parser import parse as parse_dt
-from werkzeug.routing import Map, Rule, BaseConverter, Submount
-from werkzeug.exceptions import HTTPException, NotFound, InternalServerError, \
-    BadRequest
+from werkzeug.exceptions import (
+    BadRequest,
+    HTTPException,
+    InternalServerError,
+    NotFound,
+)
+from werkzeug.routing import BaseConverter, Map, Rule, Submount
+from werkzeug.wrappers import Request, Response
 
 from certomancer.config_utils import ConfigurationError
 from certomancer.crypto_utils import pyca_cryptography_present
 from certomancer.registry import (
-    PKIArchitecture, ServiceLabel, CertLabel,
-    CertomancerObjectNotFoundError, CertomancerConfig, ArchLabel, EntityLabel,
+    ArchLabel,
     AttributeCertificateSpec,
-    CertificateSpec, PluginLabel, PluginServiceRequestError
+    CertificateSpec,
+    CertLabel,
+    CertomancerConfig,
+    CertomancerObjectNotFoundError,
+    EntityLabel,
+    PKIArchitecture,
+    PluginLabel,
+    PluginServiceRequestError,
+    ServiceLabel,
 )
 from certomancer.services import CertomancerServiceError
-
 
 logger = logging.getLogger(__name__)
 

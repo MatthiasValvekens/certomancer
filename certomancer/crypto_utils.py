@@ -1,8 +1,8 @@
 import hashlib
 import logging
-from typing import Tuple, Optional
+from typing import Optional, Tuple
 
-from asn1crypto import keys, algos, pem, x509
+from asn1crypto import algos, keys, pem, x509
 from asn1crypto.keys import PublicKeyInfo
 
 logger = logging.getLogger(__name__)
@@ -30,7 +30,8 @@ class OscryptoBackend(CryptoBackend):
 
     def load_private_key(self, key_bytes: bytes, password: Optional[bytes]) \
             -> Tuple[keys.PrivateKeyInfo, keys.PublicKeyInfo]:
-        from oscrypto import asymmetric, keys as oskeys
+        from oscrypto import asymmetric
+        from oscrypto import keys as oskeys
         private = oskeys.parse_private(
             key_bytes, password=password
         )
@@ -141,9 +142,14 @@ class PycaCryptographyBackend(CryptoBackend):
 
     def generic_sign(self, private_key: keys.PrivateKeyInfo, tbs_bytes: bytes,
                      sd_algo: algos.SignedDigestAlgorithm) -> bytes:
-        from cryptography.hazmat.primitives import serialization, hashes
+        from cryptography.hazmat.primitives import hashes, serialization
         from cryptography.hazmat.primitives.asymmetric import (
-            padding, rsa, dsa, ec, ed25519, ed448
+            dsa,
+            ec,
+            ed448,
+            ed25519,
+            padding,
+            rsa,
         )
 
         if private_key.algorithm == 'rsassa_pss':
@@ -216,8 +222,8 @@ class PycaCryptographyBackend(CryptoBackend):
 
     def optimal_pss_params(self, key: keys.PublicKeyInfo,
                            digest_algo: str) -> algos.RSASSAPSSParams:
-        from cryptography.hazmat.primitives.asymmetric import rsa, padding
-        from cryptography.hazmat.primitives import serialization, hashes
+        from cryptography.hazmat.primitives import hashes, serialization
+        from cryptography.hazmat.primitives.asymmetric import padding, rsa
         digest_algo = digest_algo.lower()
 
         if key.algorithm == 'rsassa_pss':
@@ -257,6 +263,7 @@ def pyca_cryptography_present() -> bool:
 
 def _oscrypto_hacky_load_pss_exclusive_key(private: keys.PrivateKeyInfo):
     from oscrypto import asymmetric
+
     # HACK to load PSS-exclusive RSA keys in oscrypto
     #  Don't ever do this in production code!
     algo_copy = private['private_key_algorithm'].native

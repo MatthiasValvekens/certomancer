@@ -1,12 +1,12 @@
 from datetime import datetime
+from functools import partial
 from typing import Optional
 
 import requests_mock
-from asn1crypto import ocsp, tsp
 import tzlocal
+from asn1crypto import ocsp, tsp
 
 from certomancer.registry import PKIArchitecture
-from functools import partial
 
 
 class Illusionist:

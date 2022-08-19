@@ -1,21 +1,19 @@
+import logging
 import sys
 from contextlib import contextmanager
 from datetime import datetime
 
-from asn1crypto import pem, ocsp, algos
-from dateutil.parser import parse as parse_dt
-
 import click
 import tzlocal
-import logging
+from asn1crypto import algos, ocsp, pem
+from dateutil.parser import parse as parse_dt
 
+from ._asn1_types import register_extensions
 from .config_utils import ConfigurationError
 from .crypto_utils import pyca_cryptography_present
-from .registry import CertomancerConfig, CertLabel, ServiceLabel
+from .registry import CertLabel, CertomancerConfig, ServiceLabel
 from .services import CertomancerServiceError
 from .version import __version__
-from ._asn1_types import register_extensions
-
 
 DEFAULT_CONFIG_FILE = 'certomancer.yml'
 logger = logging.getLogger(__name__)
@@ -332,9 +330,10 @@ def seance(ctx, architecture, cert_label, responder, output,
 @exception_manager()
 def animate(ctx, port, no_web_ui, no_time_override, wsgi_prefix):
     try:
-        from .integrations.animator import Animator, AnimatorArchStore
-        from werkzeug.middleware.dispatcher import DispatcherMiddleware
         from werkzeug.exceptions import NotFound
+        from werkzeug.middleware.dispatcher import DispatcherMiddleware
+
+        from .integrations.animator import Animator, AnimatorArchStore
     except ImportError as e:
         raise click.ClickException(
             "'animate' requires additional dependencies. "

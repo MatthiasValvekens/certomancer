@@ -2,10 +2,8 @@ import hashlib
 
 from asn1crypto import x509
 
-from .common import EntityLabel, CertomancerObjectNotFoundError
-from ..config_utils import (
-    key_dashes_to_underscores
-)
+from ..config_utils import key_dashes_to_underscores
+from .common import CertomancerObjectNotFoundError, EntityLabel
 
 
 class EntityRegistry:

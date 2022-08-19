@@ -1,7 +1,6 @@
 from certomancer.config_utils import LabelString
 from certomancer.services import CertomancerServiceError
 
-
 __all__ = [
     'CertomancerObjectNotFoundError',
     'KeyLabel', 'CertLabel', 'EntityLabel', 'ServiceLabel',

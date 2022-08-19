@@ -1,13 +1,13 @@
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional, List, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING, List, Optional, Tuple
 
-from asn1crypto import x509, ocsp
+from asn1crypto import ocsp, x509
 
-from ..common import CertLabel, KeyLabel, EntityLabel
+from ...services import RevocationInfoInterface
+from ..common import CertLabel, EntityLabel, KeyLabel
 from ..issued.general import ExtensionSpec, parse_extension_settings
 from .api import ServiceInfo
-from ...services import RevocationInfoInterface
 
 if TYPE_CHECKING:
     from ..pki_arch import PKIArchitecture

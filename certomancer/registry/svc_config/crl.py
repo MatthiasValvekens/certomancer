@@ -1,13 +1,13 @@
 import enum
 from dataclasses import dataclass, field
 from datetime import timedelta
-from typing import Optional, List, TYPE_CHECKING
+from typing import TYPE_CHECKING, List, Optional
 
-from ..common import CertLabel, KeyLabel, EntityLabel
-from ..issued.general import ExtensionSpec, parse_extension_settings
-from .api import ServiceInfo
 from ...config_utils import parse_duration
 from ...services import url_distribution_point
+from ..common import CertLabel, EntityLabel, KeyLabel
+from ..issued.general import ExtensionSpec, parse_extension_settings
+from .api import ServiceInfo
 
 if TYPE_CHECKING:
     from ..pki_arch import PKIArchitecture

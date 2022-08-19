@@ -1,17 +1,17 @@
 import copy
 from dataclasses import dataclass
 from typing import Optional
+
 from asn1crypto.keys import PrivateKeyInfo, PublicKeyInfo
 
 from ..config_utils import (
-    ConfigurationError, check_config_keys,
-    get_and_apply,
+    ConfigurationError,
     SearchDir,
+    check_config_keys,
+    get_and_apply,
 )
-from ..crypto_utils import (
-    load_public_key, load_private_key,
-)
-from .common import KeyLabel, CertomancerObjectNotFoundError
+from ..crypto_utils import load_private_key, load_public_key
+from .common import CertomancerObjectNotFoundError, KeyLabel
 
 
 @dataclass(frozen=True)

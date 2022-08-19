@@ -8,12 +8,11 @@ user-provided configuration (e.g. from a Yaml file).
 """
 
 import dataclasses
-import re
 import os.path
+import re
 from collections.abc import Callable
-
 from datetime import timedelta
-from typing import Optional, Any, Tuple
+from typing import Any, Optional, Tuple
 
 __all__ = [
     'ConfigurationError', 'ConfigurableMixin', 'check_config_keys',

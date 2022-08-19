@@ -1,17 +1,14 @@
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional, List, TYPE_CHECKING, Dict, Any
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
-from asn1crypto import x509, core, ocsp, crl, cms
+from asn1crypto import cms, core, crl, ocsp, x509
 from dateutil.parser import parse as parse_dt
 
-from ..common import CertLabel, EntityLabel, KeyLabel, PluginLabel
-from ..plugin_api import process_config_with_smart_value, SmartValueSpec
-from ...config_utils import (
-    ConfigurationError, ConfigurableMixin
-)
+from ...config_utils import ConfigurableMixin, ConfigurationError
 from ...services import CRLBuilder
-
+from ..common import CertLabel, EntityLabel, KeyLabel, PluginLabel
+from ..plugin_api import SmartValueSpec, process_config_with_smart_value
 
 if TYPE_CHECKING:
     from ..pki_arch import PKIArchitecture

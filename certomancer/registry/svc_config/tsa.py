@@ -1,10 +1,8 @@
 from dataclasses import dataclass, field
-from typing import Optional, List
-
+from typing import List, Optional
 
 from ..common import CertLabel, KeyLabel
 from .api import ServiceInfo
-
 
 __all__ = ['TSAServiceInfo']
 

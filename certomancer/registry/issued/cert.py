@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 from typing import Optional
 
+from ..common import CertLabel, EntityLabel, KeyLabel
 from .general import IssuedItemSpec
-from ..common import EntityLabel, CertLabel, KeyLabel
 
 EXCLUDED_FROM_TEMPLATE = frozenset(
     {'subject', 'subject_key', 'serial', 'certificate_file'}

@@ -1,21 +1,34 @@
 import binascii
 import itertools
-from typing import Optional, Any, List, Iterable, Tuple, Dict
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-from asn1crypto import x509, core, cms
+from asn1crypto import cms, core, x509
 from asn1crypto.core import ObjectIdentifier
-
 from dateutil.parser import parse as parse_dt
-from .config_utils import ConfigurationError, check_config_keys, \
-    key_dashes_to_underscores
-from .registry import PKIArchitecture, ServiceLabel, CertLabel, EntityLabel, \
-    CertificateSpec, PluginLabel
+
+from .config_utils import (
+    ConfigurationError,
+    check_config_keys,
+    key_dashes_to_underscores,
+)
+from .registry import (
+    CertificateSpec,
+    CertLabel,
+    EntityLabel,
+    PKIArchitecture,
+    PluginLabel,
+    ServiceLabel,
+)
 from .registry.entities import EntityRegistry
 from .registry.issued.general import ExtensionSpec, IssuedItemSpec
 from .registry.plugin_api import (
-    AttributePlugin, ExtensionPlugin,
-    extension_plugin_registry, attr_plugin_registry, CertProfilePlugin,
-    SmartValueSpec, cert_profile_plugin_registry,
+    AttributePlugin,
+    CertProfilePlugin,
+    ExtensionPlugin,
+    SmartValueSpec,
+    attr_plugin_registry,
+    cert_profile_plugin_registry,
+    extension_plugin_registry,
 )
 
 __all__ = [
@@ -220,7 +233,7 @@ class ACTargetsPlugin(ExtensionPlugin):
         return name, is_group
 
     def provision(self, extn_id, arch: 'PKIArchitecture', params):
-        from ._asn1_types import Target, Targets, SequenceOfTargets
+        from ._asn1_types import SequenceOfTargets, Target, Targets
         targets: Iterable[Tuple[x509.GeneralName, bool]]
         if isinstance(params, list):
             targets = (
