@@ -16,13 +16,14 @@ that'll make testing your code less cumbersome. It can be used to
 In particular, the CLI allows you to use Certomancer as a certificate generation tool without
 actually deploying any of its 'live' components.
 
-The `certomancer` script currently has five subcommands:
+The `certomancer` script currently has six subcommands:
 
  * `animate`: run the Certomancer Animator behind a development server
  * `summon`: create and output a single certificate for a Certomancer PKI architecture
  * `mass-summon`: create and output all certificates for a Certomancer PKI architecture
  * `necronomicon`: create and output a CRL
  * `seance`: generate OCSP responses
+ * `alch`: write keys and certificates to a PKCS#11 token
 
 ## Core config flags
 
@@ -153,3 +154,30 @@ If not specified, data will be written to standard output.
 | ---- | -------- | --- |
 |`--ignore-tty` | none | Never try to prevent binary data from being written to stdout, even if stdout appears to be a tty. |
 |`--at-time` | ISO 8601 datetime | Generate the OCSP response at the point in time specified (default: now) |
+
+
+# Writing data to PKCS#11 tokens
+
+The `certomancer alch` command allows you to write data (including keys and certificates) to a PKCS#11 token.
+Its general structure is
+
+```
+certomancer alch --cert CERT_LBL_1 --cert CERT_LBL_2 [OPTIONS...] PKI_ARCH
+```
+
+Generally, you'd pass one or more `--cert` arguments to write certificates (with their corresponding private keys)
+to the token. On the token, the `CKA_LABEL` attribute for both certificate and key will be set to the value of the
+certificate label in the Certomancer configuration. The `CKA_ID` attribute will be set similarly.
+
+
+| Flag              | Argument | Use                                                                              |
+|-------------------|----------|----------------------------------------------------------------------------------|
+| `--module`        | string   | path to the PKCS#11 module library                                               |
+| `--token-label`   | string   | name of the PKCS#11 token to use                                                 |
+| `--slot-no`       | number   | slot number of the PKCS#11 token to use                                          |
+| `--pin`           | pin      | PIN to access the token (if applicable)                                          |
+| `--cert`          | string   | Add the certificate with the given label, and its private key (multiple allowed) |
+| `--include-chain` | none     | Include certificates relevant to the chain of trust                              |
+
+**WARNING:** The `alch` command is currently _not_ idempotent. Running it multiple times with the same input data is
+inadvisable.

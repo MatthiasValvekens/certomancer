@@ -8,6 +8,13 @@ from pkcs11.util import x509 as p11_x509
 from certomancer import PKIArchitecture
 from certomancer.registry import CertLabel
 
+__all__ = [
+    'Alchemist',
+    'AlchemistBackend',
+    'DefaultAlchemistBackend',
+    'open_pkcs11_session',
+]
+
 
 class AlchemistBackend:
     """
