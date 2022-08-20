@@ -5,9 +5,11 @@
 </p>
 
 ![status](https://github.com/MatthiasValvekens/certomancer/workflows/pytest/badge.svg)
+[![PyPI version](https://img.shields.io/pypi/v/certomancer)](https://pypi.org/project/certomancer/)
+![Python versions](https://shields.io/pypi/pyversions/certomancer)
 [![Language grade: Python](https://img.shields.io/lgtm/grade/python/g/MatthiasValvekens/certomancer.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/MatthiasValvekens/certomancer/context:python)
 [![Total alerts](https://img.shields.io/lgtm/alerts/g/MatthiasValvekens/certomancer.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/MatthiasValvekens/certomancer/alerts/)
-[![PyPI version](https://img.shields.io/pypi/v/certomancer)](https://pypi.org/project/certomancer/)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
 Quickly construct, mock & deploy PKI test configurations using simple declarative configuration.
 Includes CRL, OCSP and time stamping service provisioning.
@@ -77,6 +79,8 @@ If you want to learn more, or watch the recording, have a look at [the talk page
    of some other WSGI application.
  * With [pyca/cryptography](https://github.com/pyca/cryptography) installed, Certomancer can also
    output PKCS#12 files if your tests require those.
+ * With [python-pkcs11](https://github.com/danni/python-pkcs11) installed, Certomancer can write
+   keys and certificates to PKCS#11 tokens as well.
 
 ## Non-features
 

@@ -73,21 +73,21 @@ In addition, keep in mind the following when writing test cases:
 
 ## Code style
 
-Code style is currently not formally standardised; fixing that is on the TODO
-list. As such, code style issues will be handled on a case-by-case basis for
-the time being (sorry about that).
+Code style is `black` with an 80-character limit for each line of code,
+and string quote normalisation turned off.
+PRs that don't fit the code style will be rejected by the linter, so please
+format your code before submitting.
 
-Nevertheless, here are some pointers.
+Here are some additional pointers:
 
  * Avoid overly long function definitions.
  * Avoid letting builtin exceptions (`KeyError`, `ValueError`, ...) bubble up
-   through public API entry points.
+   through public API entry points. These can be hard to catch and handle properly.
  * Docstrings must be written in ReStructured Text.
  * All new public API entry points should be documented. Documentation may be
    omitted from internal API functions if their purpose is sufficiently clear.
- * As a general rule, keep your lines under 80 characters. This makes it easier
-   to view multiple files side-by-side on a single monitor. Exceeding the limit
-   is permissible in documentation files.
+ * Exceeding the 80-character limit is permissible in documentation files when
+   a workaround would be overly burdensome.
 
 
 ## Copyright issues
