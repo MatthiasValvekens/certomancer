@@ -1,5 +1,5 @@
 import hashlib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from asn1crypto import cms, keys, x509
@@ -54,8 +54,8 @@ class HolderSpec(ConfigurableMixin):
     and :attr:`obj_digest_algorithm`.
     """
 
-    digested_object_type: cms.DigestedObjectType = cms.DigestedObjectType(
-        'public_key_cert'
+    digested_object_type: cms.DigestedObjectType = field(
+        default_factory=lambda: cms.DigestedObjectType('public_key_cert')
     )
     """
     The type of data to digest when computing the ``objectDigestInfo``
