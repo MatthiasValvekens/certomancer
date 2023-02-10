@@ -11,6 +11,7 @@ from asn1crypto import algos, cms, core, ocsp, tsp
 from freezegun import freeze_time
 from oscrypto import asymmetric, symmetric
 from pyhanko_certvalidator import CertificateValidator, ValidationContext
+from pyhanko_certvalidator.policy_decl import DisallowWeakAlgorithmsPolicy
 
 from certomancer.integrations import illusionist
 from certomancer.registry import (
@@ -141,6 +142,9 @@ async def test_validate(requests_mock, setup):
         allow_fetching=True,
         revocation_mode='hard-fail',
         other_certs=[interm],
+        algorithm_usage_policy=DisallowWeakAlgorithmsPolicy(
+            dsa_key_size_threshold=2048
+        ),
     )
 
     validator = CertificateValidator(
