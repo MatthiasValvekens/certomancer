@@ -80,7 +80,6 @@ def test_no_plugins_loaded():
 
 
 def test_demo_plugin():
-
     with_plugin_cfg = CertomancerConfig.from_file(
         'tests/data/with-plugin.yml', 'tests/data'
     )

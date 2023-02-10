@@ -810,7 +810,6 @@ def test_raw_extension_error(wrong_value):
 
 
 def test_arch_templates():
-
     cfg = CertomancerConfig.from_file(
         'tests/data/with-arch-templates.yml', 'tests/data'
     )
@@ -845,7 +844,6 @@ def test_keyset_templates():
 
 
 def test_keyset_templates_in_arch():
-
     cfg = CertomancerConfig.from_file(
         'tests/data/with-arch-templates.yml', 'tests/data'
     )
@@ -964,7 +962,6 @@ def test_holder_config_digest2(dot_str_spec):
 
 
 def _parse_ietf_syntax(params_str):
-
     from certomancer.default_plugins import IetfAttrSyntaxPlugin
 
     params = yaml.safe_load(params_str)['params']

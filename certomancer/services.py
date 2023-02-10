@@ -205,7 +205,6 @@ class CRLBuilder:
         revocation_date: datetime,
         extensions: List[crl.CRLEntryExtension] = None,
     ) -> crl.RevokedCertificate:
-
         extensions = list(extensions or ())
         if reason is not None:
             extensions.append(
@@ -373,7 +372,6 @@ class SimpleOCSPResponder:
     def format_single_ocsp_response(
         self, cid: ocsp.CertId, issuer_cert: x509.Certificate
     ) -> ocsp.SingleResponse:
-
         if not issuer_match(cid, issuer_cert):
             raise CertomancerServiceError("Responder is not authorised")
 

@@ -73,7 +73,6 @@ class CertificateSpec(IssuedItemSpec):
 
     @classmethod
     def extract_templatable_config(cls, config_dict):
-
         # Do this first for consistency, so we don't put processed values
         # into the template
         for k, v in config_dict.items():

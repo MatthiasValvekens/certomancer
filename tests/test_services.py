@@ -29,7 +29,6 @@ ServiceSetup = namedtuple('ServiceSetup', ('config', 'arch', 'illusionist'))
 
 
 def _setup(cfgfile) -> ServiceSetup:
-
     cfg = CertomancerConfig.from_file(cfgfile, 'tests/data')
 
     arch = cfg.get_pki_arch(ArchLabel('testing-ca'))
@@ -83,7 +82,6 @@ def test_crl(setup):
 
 
 def test_aa_crl():
-
     cfg = CertomancerConfig.from_file(
         'tests/data/with-services.yml', 'tests/data'
     )
@@ -262,7 +260,6 @@ def test_ocsp_unauthorized(requests_mock, fname):
 
 
 def test_demo_plugin(requests_mock):
-
     with_plugin_cfg = CertomancerConfig.from_file(
         'tests/data/with-plugin.yml', 'tests/data'
     )

@@ -168,7 +168,6 @@ NAME_TYPE_ALIASES = {
 
 
 def process_general_name(entities: EntityRegistry, params):
-
     check_config_keys('general name', ('type', 'value'), params)
     try:
         name_type = params['type'].replace('-', '_')
@@ -216,7 +215,6 @@ class ACTargetsPlugin(ExtensionPlugin):
 
     @staticmethod
     def _parse_target(entities, params):
-
         if isinstance(params, str):
             name = x509.GeneralName(
                 name='directory_name', value=entities[EntityLabel(params)]
@@ -399,7 +397,6 @@ class ServiceAuthInfoPlugin(AttributePlugin):
         arch: 'PKIArchitecture',
         params,
     ):
-
         if not isinstance(params, dict):
             raise ConfigurationError(
                 "Parameters for service-auth-info should be specified as a dict"
@@ -454,7 +451,6 @@ class IsoTimePlugin(ExtensionPlugin):
 
 @extension_plugin_registry.register
 class RawDERBytes(ExtensionPlugin):
-
     schema_label = 'der-bytes'
     extension_type = None
 
@@ -531,7 +527,6 @@ class SimpleCAProfile(CertProfilePlugin):
         issuer_spec: CertificateSpec,
         issued_spec: IssuedItemSpec,
     ) -> List[ExtensionSpec]:
-
         # if issued item has the ocsp-responder profile, don't do anything
         if OCSPResponderProfile.profile_label in issued_spec.profiles:
             return []

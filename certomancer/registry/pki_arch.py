@@ -80,7 +80,6 @@ class _IssuedItemConfigState:
 
 @dataclass(frozen=True)
 class _CertSpecConfigState(_IssuedItemConfigState):
-
     cert_labels_by_subject: Dict[EntityLabel, List[CertLabel]] = field(
         default_factory=lambda: defaultdict(list)
     )
@@ -90,7 +89,6 @@ class _CertSpecConfigState(_IssuedItemConfigState):
 def _config_issuer_serial(
     state: _IssuedItemConfigState, name, effective_cert_config
 ):
-
     try:
         issuer = effective_cert_config['issuer']
     except KeyError as e:
@@ -222,7 +220,6 @@ def _process_cert_spec_settings(
 
 @dataclass(frozen=True)
 class _ACSpecConfigState(_IssuedItemConfigState):
-
     cert_labels_by_holder: Dict[EntityLabel, List[CertLabel]] = field(
         default_factory=lambda: defaultdict(list)
     )
@@ -438,7 +435,6 @@ class PKIArchitecture:
         cert_cache=None,
         ac_cache=None,
     ):
-
         self.arch_label = arch_label
         self.key_set = key_set
         self.entities = entities
@@ -769,7 +765,6 @@ class PKIArchitecture:
     def _collect_extensions(
         self, spec: IssuedItemSpec, extension_dict: Dict[str, x509.Extension]
     ) -> List[x509.Extension]:
-
         if spec.unique_extensions:
             # apply profiles
             exts_from_profile = self.profile_registry.apply_profiles(
@@ -1338,7 +1333,6 @@ class ServiceRegistry:
     def get_cert_from_repo(
         self, repo_label: ServiceLabel, cert_label: Optional[CertLabel] = None
     ) -> Optional[x509.Certificate]:
-
         repo_info = self.get_cert_repo_info(repo_label)
         arch = self.pki_arch
         if cert_label is None:
@@ -1350,7 +1344,6 @@ class ServiceRegistry:
     def get_attr_cert_from_repo(
         self, repo_label: ServiceLabel, cert_label: CertLabel
     ) -> Optional[cms.AttributeCertificateV2]:
-
         repo_info = self.get_attr_cert_repo_info(repo_label)
         if not self._check_repo_membership(repo_info, cert_label, is_attr=True):
             return None

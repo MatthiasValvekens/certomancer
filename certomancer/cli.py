@@ -530,7 +530,6 @@ def animate(ctx, port, no_web_ui, no_time_override, wsgi_prefix):
 )
 @exception_manager()
 def alch(ctx, pki_arch, token_label, slot_no, pin, module, include_chain, cert):
-
     from certomancer.integrations import alchemist
 
     cfg: CertomancerConfig = next(ctx.obj['config'])
