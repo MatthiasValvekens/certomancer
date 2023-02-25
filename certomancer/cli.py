@@ -2,6 +2,7 @@ import logging
 import sys
 from contextlib import contextmanager
 from datetime import datetime
+from typing import Any, Iterable, Optional, Union
 
 import click
 import tzlocal
@@ -11,7 +12,14 @@ from dateutil.parser import parse as parse_dt
 from ._asn1_types import register_extensions
 from .config_utils import ConfigurationError
 from .crypto_utils import pyca_cryptography_present
-from .registry import CertLabel, CertomancerConfig, ServiceLabel
+from .registry import (
+    ArchLabel,
+    AttributeCertificateSpec,
+    CertificateSpec,
+    CertLabel,
+    CertomancerConfig,
+    ServiceLabel,
+)
 from .services import CertomancerServiceError
 from .version import __version__
 
@@ -170,10 +178,17 @@ def cli(
 )
 @exception_manager()
 def mass_summon(
-    ctx, architecture, output, no_pem, archive, flat, no_pfx, pfx_pass
+    ctx,
+    architecture: str,
+    output: str,
+    no_pem: bool,
+    archive: bool,
+    flat: bool,
+    no_pfx: bool,
+    pfx_pass: str,
 ):
     cfg: CertomancerConfig = next(ctx.obj['config'])
-    pki_arch = cfg.get_pki_arch(architecture)
+    pki_arch = cfg.get_pki_arch(ArchLabel(architecture))
     if not no_pfx and not pyca_cryptography_present():
         no_pfx = True
         logger.warning(
@@ -181,13 +196,15 @@ def mass_summon(
         )
 
     if pfx_pass is not None:
-        pfx_pass = pfx_pass.encode('utf8')
+        pfx_pass_bytes = pfx_pass.encode('utf8')
+    else:
+        pfx_pass_bytes = None
 
     kwargs = {
         'use_pem': not no_pem,
         'flat': flat,
         'include_pkcs12': not no_pfx,
-        'pkcs12_pass': pfx_pass,
+        'pkcs12_pass': pfx_pass_bytes,
     }
     if archive:
         with open(output, 'wb') as outf:
@@ -230,17 +247,17 @@ def mass_summon(
 @exception_manager()
 def summon(
     ctx,
-    architecture,
-    attr,
-    cert_label,
-    output,
-    no_pem,
-    as_pfx,
-    ignore_tty,
-    pfx_pass,
+    architecture: str,
+    attr: bool,
+    cert_label: str,
+    output: str,
+    no_pem: bool,
+    as_pfx: bool,
+    ignore_tty: bool,
+    pfx_pass: str,
 ):
     cfg: CertomancerConfig = next(ctx.obj['config'])
-    pki_arch = cfg.get_pki_arch(architecture)
+    pki_arch = cfg.get_pki_arch(ArchLabel(architecture))
     if as_pfx and not pyca_cryptography_present():
         as_pfx = False
         logger.warning(
@@ -266,8 +283,12 @@ def summon(
                 "Attribute certificates are not supported in PKCS#12 output"
             )
         if pfx_pass is not None:
-            pfx_pass = pfx_pass.encode('utf8')
-        data = pki_arch.package_pkcs12(cert_label, password=pfx_pass)
+            pfx_pass_bytes = pfx_pass.encode('utf8')
+        else:
+            pfx_pass_bytes = None
+        data = pki_arch.package_pkcs12(
+            CertLabel(cert_label), password=pfx_pass_bytes
+        )
     else:
         if attr:
             data = pki_arch.get_attr_cert(CertLabel(cert_label)).dump()
@@ -315,16 +336,22 @@ def summon(
 )
 @exception_manager()
 def necronomicon(
-    ctx, architecture, crl_repo, output, no_pem, at_time, ignore_tty
+    ctx,
+    architecture: str,
+    crl_repo: str,
+    output: str,
+    no_pem: bool,
+    at_time: Optional[str],
+    ignore_tty: bool,
 ):
     cfg: CertomancerConfig = next(ctx.obj['config'])
-    pki_arch = cfg.get_pki_arch(architecture)
+    pki_arch = cfg.get_pki_arch(ArchLabel(architecture))
     if at_time is None:
-        at_time = datetime.now(tz=tzlocal.get_localzone())
+        at_time_dt = datetime.now(tz=tzlocal.get_localzone())
     else:
-        at_time = parse_dt(at_time)
+        at_time_dt = parse_dt(at_time)
     crl = pki_arch.service_registry.get_crl(
-        repo_label=ServiceLabel(crl_repo), at_time=at_time
+        repo_label=ServiceLabel(crl_repo), at_time=at_time_dt
     )
 
     if output is None and no_pem and not ignore_tty and sys.stdout.isatty():
@@ -368,19 +395,26 @@ def necronomicon(
 )
 @exception_manager()
 def seance(
-    ctx, architecture, cert_label, responder, output, ignore_tty, at_time
+    ctx,
+    architecture: str,
+    cert_label: str,
+    responder: str,
+    output: str,
+    ignore_tty: bool,
+    at_time: Optional[str],
 ):
     cfg: CertomancerConfig = next(ctx.obj['config'])
-    pki_arch = cfg.get_pki_arch(architecture)
+    pki_arch = cfg.get_pki_arch(ArchLabel(architecture))
     if at_time is None:
-        at_time = datetime.now(tz=tzlocal.get_localzone())
+        at_time_dt = datetime.now(tz=tzlocal.get_localzone())
     else:
-        at_time = parse_dt(at_time)
+        at_time_dt = parse_dt(at_time)
 
     # Format CertId value based on certificate spec (or attr cert spec)
     # We differentiate between attr certs and regular PKCs based on the
     # responder's service info settings.
     svc_info = pki_arch.service_registry.get_ocsp_info(ServiceLabel(responder))
+    cert_spec: Union[CertificateSpec, AttributeCertificateSpec]
     if svc_info.is_aa_responder:
         cert_spec = pki_arch.get_attr_cert_spec(CertLabel(cert_label))
     else:
@@ -400,7 +434,7 @@ def seance(
 
     # Initialise the requested OCSP responder
     ocsp_responder = pki_arch.service_registry.summon_responder(
-        label=ServiceLabel(responder), at_time=at_time
+        label=ServiceLabel(responder), at_time=at_time_dt
     )
     sing_resp = ocsp_responder.format_single_ocsp_response(
         cid=cert_id, issuer_cert=issuer_cert
@@ -456,7 +490,13 @@ def seance(
 )
 @click.pass_context
 @exception_manager()
-def animate(ctx, port, no_web_ui, no_time_override, wsgi_prefix):
+def animate(
+    ctx,
+    port: int,
+    no_web_ui: bool,
+    no_time_override: bool,
+    wsgi_prefix: Optional[str],
+):
     try:
         from werkzeug.exceptions import NotFound
         from werkzeug.middleware.dispatcher import DispatcherMiddleware
@@ -471,7 +511,7 @@ def animate(ctx, port, no_web_ui, no_time_override, wsgi_prefix):
     cfg: CertomancerConfig = next(ctx.obj['config'])
     from werkzeug.serving import run_simple
 
-    app = Animator(
+    app: Any = Animator(
         AnimatorArchStore(cfg.pki_archs),
         with_web_ui=not no_web_ui,
         allow_time_override=not no_time_override,
@@ -529,11 +569,20 @@ def animate(ctx, port, no_web_ui, no_time_override, wsgi_prefix):
     metavar='SLOT',
 )
 @exception_manager()
-def alch(ctx, pki_arch, token_label, slot_no, pin, module, include_chain, cert):
+def alch(
+    ctx,
+    pki_arch: str,
+    token_label: Optional[str],
+    slot_no: Optional[int],
+    pin: Optional[str],
+    module: str,
+    include_chain: bool,
+    cert: Iterable[str],
+):
     from certomancer.integrations import alchemist
 
     cfg: CertomancerConfig = next(ctx.obj['config'])
-    arch = cfg.get_pki_arch(pki_arch)
+    arch = cfg.get_pki_arch(ArchLabel(pki_arch))
 
     session = alchemist.open_pkcs11_session(
         lib_location=module, slot_no=slot_no, token_label=token_label, pin=pin
@@ -541,7 +590,7 @@ def alch(ctx, pki_arch, token_label, slot_no, pin, module, include_chain, cert):
     try:
         backend = alchemist.DefaultAlchemistBackend(session)
         alchemist.Alchemist(backend, arch).store_key_bundles(
-            certs=set(cert), include_chains=include_chain
+            certs={CertLabel(l) for l in cert}, include_chains=include_chain
         )
     finally:
         session.close()

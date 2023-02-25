@@ -48,9 +48,9 @@ class TimeStamper:
         self,
         tsa_cert: x509.Certificate,
         tsa_key: keys.PrivateKeyInfo,
-        signature_algo: algos.SignedDigestAlgorithm = None,
+        signature_algo: Optional[algos.SignedDigestAlgorithm] = None,
         certs_to_embed=None,
-        fixed_dt: datetime = None,
+        fixed_dt: Optional[datetime] = None,
         policy=tsp.ObjectIdentifier('1.3.6.1.4.1.4146.2.3'),
         md_algorithm='sha256',
     ):
@@ -160,7 +160,7 @@ class CRLBuilder:
         issuer_key: keys.PrivateKeyInfo,
         signature_algo: algos.SignedDigestAlgorithm,
         authority_key_identifier: core.OctetString,
-        extra_crl_extensions: List[TBSCertListExtension] = None,
+        extra_crl_extensions: Optional[List[TBSCertListExtension]] = None,
     ):
         self.issuer_name = issuer_name
         self.issuer_key = issuer_key
@@ -203,7 +203,7 @@ class CRLBuilder:
         serial: int,
         reason: Optional[crl.CRLReason],
         revocation_date: datetime,
-        extensions: List[crl.CRLEntryExtension] = None,
+        extensions: Optional[List[crl.CRLEntryExtension]] = None,
     ) -> crl.RevokedCertificate:
         extensions = list(extensions or ())
         if reason is not None:
@@ -355,7 +355,7 @@ class SimpleOCSPResponder:
         at_time: datetime,
         revinfo_interface: RevocationInfoInterface,
         validity: timedelta = timedelta(minutes=10),
-        response_extensions: List[ocsp.ResponseDataExtension] = None,
+        response_extensions: Optional[List[ocsp.ResponseDataExtension]] = None,
     ):
         self.responder_cert = responder_cert
         self.responder_key = responder_key

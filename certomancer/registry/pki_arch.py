@@ -127,7 +127,11 @@ def _combine_extension_cfgs(explicit_exts, template_exts, unique_req: bool):
     return extensions
 
 
-def _process_template_config(cert_specs, name, cert_config):
+def _process_template_config(
+    cert_specs: Dict[CertLabel, CertificateSpec],
+    name: str,
+    cert_config: Dict[str, Any],
+):
     template = cert_config.pop('template', None)
     if template is not None:
         # we want to merge extensions from the template
@@ -281,8 +285,8 @@ class PKIArchitecture:
         cfg: dict,
         key_sets: KeySets,
         external_url_prefix,
-        extension_plugins: ExtensionPluginRegistry = None,
-        service_plugins: 'ServicePluginRegistry' = None,
+        extension_plugins: Optional[ExtensionPluginRegistry] = None,
+        service_plugins: Optional['ServicePluginRegistry'] = None,
         config_search_dir: Optional[SearchDir] = None,
         cert_cache=None,
         ac_cache=None,
@@ -338,8 +342,8 @@ class PKIArchitecture:
         cfgs: Dict[str, Any],
         external_url_prefix: str,
         config_search_dir: Optional[SearchDir],
-        extension_plugins: ExtensionPluginRegistry = None,
-        service_plugins: 'ServicePluginRegistry' = None,
+        extension_plugins: Optional[ExtensionPluginRegistry] = None,
+        service_plugins: Optional['ServicePluginRegistry'] = None,
     ):
         arch_specs: Dict[ArchLabel, Dict[str, Any]] = {}
         for lbl, cfg in cfgs.items():
@@ -427,10 +431,10 @@ class PKIArchitecture:
         service_config,
         external_url_prefix,
         ac_spec_config=None,
-        extension_plugins: ExtensionPluginRegistry = None,
-        attr_plugins: AttributePluginRegistry = None,
-        service_plugins: ServicePluginRegistry = None,
-        profile_plugins: CertProfilePluginRegistry = None,
+        extension_plugins: Optional[ExtensionPluginRegistry] = None,
+        attr_plugins: Optional[AttributePluginRegistry] = None,
+        service_plugins: Optional[ServicePluginRegistry] = None,
+        profile_plugins: Optional[CertProfilePluginRegistry] = None,
         config_search_dir: Optional[SearchDir] = None,
         cert_cache=None,
         ac_cache=None,
@@ -550,7 +554,7 @@ class PKIArchitecture:
                 f"{serial}."
             ) from e
 
-    def _load_all_certs(self):
+    def _load_all_certs(self: 'PKIArchitecture'):
         # We group the certs per issuer in folders
         spec: CertificateSpec
         for label, spec in self._cert_specs.items():
@@ -603,9 +607,9 @@ class PKIArchitecture:
     def package_pkcs12(
         self,
         cert_label: CertLabel,
-        key_label: KeyLabel = None,
-        certs_to_embed: Iterable[CertLabel] = None,
-        password: bytes = None,
+        key_label: Optional[KeyLabel] = None,
+        certs_to_embed: Optional[Iterable[CertLabel]] = None,
+        password: Optional[bytes] = None,
     ):
         try:
             from cryptography import x509 as pyca_x509
@@ -1034,7 +1038,7 @@ class ServiceRegistry:
         pki_arch: PKIArchitecture,
         external_url_prefix,
         service_config,
-        plugins: ServicePluginRegistry = None,
+        plugins: Optional[ServicePluginRegistry] = None,
     ):
         self.pki_arch = pki_arch
         self.plugins = plugins or plugin_api.service_plugin_registry

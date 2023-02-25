@@ -6,7 +6,7 @@ import requests_mock
 import tzlocal
 from asn1crypto import ocsp, tsp
 
-from certomancer.registry import PKIArchitecture
+from certomancer.registry import PKIArchitecture, PluginLabel, ServiceLabel
 
 
 class Illusionist:
@@ -71,7 +71,7 @@ class Illusionist:
     def at_time(self):
         return self.fixed_time or datetime.now(tz=tzlocal.get_localzone())
 
-    def serve_ocsp_response(self, request, _context, *, label):
+    def serve_ocsp_response(self, request, _context, *, label: ServiceLabel):
         ocsp_resp = self.pki_arch.service_registry.summon_responder(
             label, self.at_time
         )
@@ -79,7 +79,9 @@ class Illusionist:
         response = ocsp_resp.build_ocsp_response(req)
         return response.dump()
 
-    def serve_timestamp_response(self, request, _context, *, label):
+    def serve_timestamp_response(
+        self, request, _context, *, label: ServiceLabel
+    ):
         tsa = self.pki_arch.service_registry.summon_timestamper(
             label, self.at_time
         )
@@ -87,11 +89,13 @@ class Illusionist:
         response = tsa.request_tsa_response(req)
         return response.dump()
 
-    def serve_crl(self, _request, _context, *, label):
+    def serve_crl(self, _request, _context, *, label: ServiceLabel):
         crl = self.pki_arch.service_registry.get_crl(label, self.at_time)
         return crl.dump()
 
-    def serve_plugin(self, request, _context, *, label, plugin_label):
+    def serve_plugin(
+        self, request, _context, *, label, plugin_label: PluginLabel
+    ):
         return self.pki_arch.service_registry.invoke_plugin(
             plugin_label, label, request.body, at_time=self.at_time
         )
