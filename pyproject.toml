@@ -1,0 +1,97 @@
+[build-system]
+requires = [
+    "setuptools>=67.4",
+    "wheel", "pytest-runner",
+]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "certomancer"
+dynamic = ["version"]
+authors = [{name = "Matthias Valvekens", email = "dev@mvalvekens.be"}]
+license = {text = "MIT"}
+description = "PKI testing tool"
+keywords = ["pki", "testing"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Security :: Cryptography",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies = [
+    "asn1crypto>=1.5.0",
+    "click>=7.1.2",
+    "oscrypto>=1.2.1",
+    "pyyaml>=5.4.1",
+    "python-dateutil>=2.8.1",
+    "tzlocal>=2.1",
+]
+
+[project.readme]
+file = "README.md"
+content-type = "text/markdown"
+
+[project.urls]
+Homepage = "https://github.com/MatthiasValvekens/certomancer"
+
+[project.optional-dependencies]
+requests-mocker = ["requests-mock>=1.8.0"]
+web-api = ["Werkzeug>=2.2.3", "Jinja2>=2.11.3"]
+pkcs12 = ["cryptography>=3.4.7"]
+pkcs11 = ["python-pkcs11~=0.7.0"]
+testing = [
+    "pytest>=6.1.1",
+    "pytz>=2020.1",
+    "freezegun>=1.1.0",
+    "pyhanko-certvalidator==0.20.0",
+    "requests>=2.0.0",
+    "pytest-aiohttp~=1.0.4",
+]
+mypy = [
+    "types-requests",
+    "types-python-dateutil",
+    "types-PyYAML",
+    "types-tzlocal",
+]
+
+[project.scripts]
+certomancer = "certomancer.__main__:launch"
+
+[tool.setuptools]
+include-package-data = false
+
+[tool.setuptools.dynamic]
+version = {attr = "certomancer.version.__version__"}
+
+[tool.setuptools.packages.find]
+include = ["certomancer*"]
+exclude = ["tests*"]
+
+[tool.setuptools.package-data]
+"certomancer.integrations" = ["animator_templates/*.html"]
+certomancer = ["py.typed"]
+
+[tool.mypy]
+files = 'certomancer'
+
+[[tool.mypy.overrides]]
+module = [
+    "asn1crypto.*",
+    "pkcs11.*",
+    "oscrypto.*",
+]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+log_format = "%(asctime)s %(levelname)s %(message)s"
+log_date_format = "%Y-%m-%d %H:%M:%S"
+log_cli = true
+log_cli_level = "INFO"
+testpaths = "tests"
+asyncio_mode = "strict"
