@@ -7,8 +7,6 @@
 ![status](https://github.com/MatthiasValvekens/certomancer/workflows/pytest/badge.svg)
 [![PyPI version](https://img.shields.io/pypi/v/certomancer)](https://pypi.org/project/certomancer/)
 ![Python versions](https://shields.io/pypi/pyversions/certomancer)
-[![Language grade: Python](https://img.shields.io/lgtm/grade/python/g/MatthiasValvekens/certomancer.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/MatthiasValvekens/certomancer/context:python)
-[![Total alerts](https://img.shields.io/lgtm/alerts/g/MatthiasValvekens/certomancer.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/MatthiasValvekens/certomancer/alerts/)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
 Quickly construct, mock & deploy PKI test configurations using simple declarative configuration.
