@@ -49,15 +49,16 @@ testing = [
     "pytest>=6.1.1",
     "pytz>=2020.1",
     "freezegun>=1.1.0",
-    "pyhanko-certvalidator==0.20.0",
+    "pyhanko-certvalidator==0.22.0",
     "requests>=2.0.0",
-    "pytest-aiohttp~=1.0.4",
+    "certomancer[web-api,pkcs11,pkcs12,requests-mocker]"
 ]
 mypy = [
     "types-requests",
     "types-python-dateutil",
     "types-PyYAML",
     "types-tzlocal",
+    "certomancer[testing]"
 ]
 
 [project.scripts]

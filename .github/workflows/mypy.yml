@@ -14,4 +14,4 @@ jobs:
     - uses: jpetrucciani/mypy-check@0.991
       with:
         path: certomancer
-        requirements: "-e .[mypy,testing,web-api,pkcs11,pkcs12,requests-mocker] --config-settings editable_mode=strict"
+        requirements: "-e .[mypy] --config-settings editable_mode=strict"
