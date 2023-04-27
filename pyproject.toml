@@ -51,6 +51,7 @@ testing = [
     "freezegun>=1.1.0",
     "pyhanko-certvalidator==0.22.0",
     "requests>=2.0.0",
+    "pytest-cov~=4.0.0",
     "certomancer[web-api,pkcs11,pkcs12,requests-mocker]"
 ]
 mypy = [
