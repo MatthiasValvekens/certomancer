@@ -94,8 +94,11 @@ jobs:
         if: needs.extract-params.outputs.publish-env == 'release' && startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v1
         with:
-          files: dist/*
+          files: |
+            dist/*.whl
+            dist/*.tar.gz
+            dist/*.sigstore
           body_path: release.md
           fail_on_unmatched_files: true
           prerelease: true
-          name: Certomancer ${{ needs.extract-params.outputs.version }} beta
+          name: Certomancer ${{ needs.extract-params.outputs.release-version }} beta
