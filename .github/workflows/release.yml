@@ -77,10 +77,11 @@ jobs:
         with:
           name: release-body
           path: release-body
-      - name: Upload to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          repository-url: ${{ vars.REPOSITORY_URL }}
+      # Disabled for 0.10.0 so we can run repeated tests
+      #- name: Upload to PyPI
+      #  uses: pypa/gh-action-pypi-publish@release/v1
+      #  with:
+      #    repository-url: ${{ vars.REPOSITORY_URL }}
       - name: Sign with sigstore
         uses: sigstore/gh-action-sigstore-python@v1.2.3
         with:
