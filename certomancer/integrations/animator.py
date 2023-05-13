@@ -605,6 +605,7 @@ class LazyAnimator:
         config_dir = env.get('CERTOMANCER_EXTRA_CONFIG_DIR', None)
         with_web_ui = not _check_env_flag(env, 'CERTOMANCER_NO_WEB_UI')
         extl_config = not _check_env_flag(env, 'CERTOMANCER_NO_EXTRA_CONFIG')
+        external_url_prefix_override = env.get('CERTOMANCER_URL_PREFIX', None)
         allow_time_override = not _check_env_flag(
             env, 'CERTOMANCER_NO_TIME_OVERRIDE'
         )
@@ -614,6 +615,7 @@ class LazyAnimator:
             key_search_dir=key_dir,
             config_search_dir=config_dir,
             allow_external_config=extl_config,
+            external_url_prefix=external_url_prefix_override or None,
         )
         self.animator = Animator(
             AnimatorArchStore(cfg.pki_archs),
