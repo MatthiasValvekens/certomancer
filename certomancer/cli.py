@@ -623,3 +623,5 @@ def _maybe_enable_alchemist():
 
 
 _maybe_enable_alchemist()
+
+cli_root: click.Group = cli
