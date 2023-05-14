@@ -2,7 +2,7 @@ import hashlib
 import importlib
 import itertools
 from collections import namedtuple
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 import pytest
 import pytz
@@ -213,6 +213,27 @@ def test_ocsp(requests_mock, time, expected):
 @pytest.mark.parametrize(
     "time, expected", [('2020-11-05', 'good'), ('2020-12-05', 'revoked')]
 )
+def test_ocsp_without_nextupdate(requests_mock, time, expected):
+    setup = RSA_SETUP
+    setup.illusionist.register(requests_mock)
+    with open('tests/data/signer2-ocsp-req.der', 'rb') as req_in:
+        req_data = req_in.read()
+    with freeze_time(time):
+        response = requests.post(
+            "http://test.test/testing-ca/ocsp/interm2", data=req_data
+        )
+        resp: ocsp.OCSPResponse = ocsp.OCSPResponse.load(response.content)
+        assert resp['response_status'].native == 'successful'
+
+        rdata = resp['response_bytes']['response'].parsed['tbs_response_data']
+        status = rdata['responses'][0]['cert_status'].name
+        assert rdata['responses'][0]['next_update'].native is None
+        assert status == expected
+
+
+@pytest.mark.parametrize(
+    "time, expected", [('2020-11-05', 'good'), ('2020-12-05', 'revoked')]
+)
 def test_aa_ocsp(requests_mock, time, expected):
     cfg = CertomancerConfig.from_file(
         'tests/data/with-services.yml', 'tests/data'
@@ -236,6 +257,9 @@ def test_aa_ocsp(requests_mock, time, expected):
         rdata = resp['response_bytes']['response'].parsed['tbs_response_data']
         status = rdata['responses'][0]['cert_status'].name
         assert status == expected
+        this_update = rdata['responses'][0]['this_update'].native
+        next_update = rdata['responses'][0]['next_update'].native
+        assert next_update == this_update + timedelta(minutes=2)
 
 
 @freeze_time('2020-11-01')

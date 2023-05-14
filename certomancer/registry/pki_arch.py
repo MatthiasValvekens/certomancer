@@ -1156,6 +1156,7 @@ class ServiceRegistry:
                 issuer_cert_label=issuer_cert_label,
                 is_aa_responder=info.is_aa_responder,
             ),
+            validity=info.validity_period,
             response_extensions=extra_extensions,
         )
 

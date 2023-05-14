@@ -354,7 +354,7 @@ class SimpleOCSPResponder:
         signature_algo: algos.SignedDigestAlgorithm,
         at_time: datetime,
         revinfo_interface: RevocationInfoInterface,
-        validity: timedelta = timedelta(minutes=10),
+        validity: Optional[timedelta] = timedelta(minutes=10),
         response_extensions: Optional[List[ocsp.ResponseDataExtension]] = None,
     ):
         self.responder_cert = responder_cert
@@ -380,16 +380,15 @@ class SimpleOCSPResponder:
             cid, self.at_time
         )
 
-        single_resp = ocsp.SingleResponse(
-            {
-                'cert_id': cid,
-                'cert_status': cert_status,
-                'this_update': self.at_time,
-                'next_update': self.at_time + self.validity,
-                'single_extensions': exts or None,
-            }
-        )
-        return single_resp
+        response_data = {
+            'cert_id': cid,
+            'cert_status': cert_status,
+            'this_update': self.at_time,
+            'single_extensions': exts or None,
+        }
+        if self.validity is not None:
+            response_data['next_update'] = self.at_time + self.validity
+        return ocsp.SingleResponse(response_data)
 
     def build_ocsp_response(self, req: ocsp.OCSPRequest) -> ocsp.OCSPResponse:
         nonce_asn1 = req.nonce_value

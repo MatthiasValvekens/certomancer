@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, List, Optional, Tuple
 
 from asn1crypto import ocsp, x509
@@ -76,10 +76,25 @@ class OCSPResponderServiceInfo(ServiceInfo):
     or regular certificates.
     """
 
+    validity_period: Optional[timedelta] = timedelta(minutes=10)
+    """
+    Validity period for the OCSP response (i.e. time until ``nextUpdate``).
+    Defaults to ten minutes. ``None`` implies no ``nextUpdate``.
+    """
+
     @classmethod
     def process_entries(cls, config_dict):
         try:
             config_dict.setdefault('signing_key', config_dict['responder_cert'])
+        except KeyError:
+            pass
+
+        try:
+            period_kwargs = config_dict['validity_period']
+            if not period_kwargs:
+                config_dict['validity_period'] = None
+            else:
+                config_dict['validity_period'] = timedelta(**period_kwargs)
         except KeyError:
             pass
 

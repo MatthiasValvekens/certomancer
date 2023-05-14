@@ -163,6 +163,11 @@ services:
       for-issuer: interm
       responder-cert: interm-ocsp
       signing-key: interm-ocsp
+    interm2:
+      for-issuer: interm
+      responder-cert: interm-ocsp
+      signing-key: interm-ocsp
+      validity-period: {}
   crl-repo:
     root:
       for-issuer: root

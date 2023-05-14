@@ -95,3 +95,4 @@ pki-architectures:
           responder-cert: role-aa
           signing-key: aa
           is-aa-responder: true
+          validity-period: {minutes: 2}
