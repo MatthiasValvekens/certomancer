@@ -277,7 +277,7 @@ def pyca_cryptography_present() -> bool:
         import cryptography
 
         return True
-    except ImportError:  # pragma: nocover
+    except ImportError:
         return False
 
 
@@ -293,6 +293,7 @@ def _oscrypto_hacky_load_pss_exclusive_key(private: keys.PrivateKeyInfo):
     loaded_key = asymmetric.load_private_key(private_copy)
     public = loaded_key.public_key.asn1
     public['algorithm'] = algo_copy
+    public._algorithm = None
     return loaded_key, public
 
 

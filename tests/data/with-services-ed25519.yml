@@ -1,8 +1,7 @@
 external-url-prefix: "http://test.test"
 keysets:
   testing-ca:
-    path-prefix: keys-rsa
-    default-password: secret
+    path-prefix: keys-ed25519
     keys:
       root:
         path: root.key.pem
@@ -18,19 +17,6 @@ keysets:
         path: signer.key.pem
       signer2:
         path: signer2.key.pem
-  other-keyset:
-    template: testing-ca
-    path-prefix: keys-ecdsa
-    default-password: secret
 
 pki-architectures:
   testing-ca: full-service-config.yml
-  testing-ca-2:
-    template: testing-ca
-    entity-defaults:
-      organizational-unit-name: Test OU
-  testing-ca-3:
-    keyset: other-keyset
-    template: testing-ca-2
-    entity-defaults:
-      country-name: FR

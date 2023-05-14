@@ -11,9 +11,6 @@ from zipfile import ZipFile
 import tzlocal
 import yaml
 from asn1crypto import cms, core, crl, ocsp, pem, x509
-from cryptography.hazmat.primitives._serialization import (
-    KeySerializationEncryption,
-)
 
 from ..config_utils import (
     ConfigurationError,
@@ -174,7 +171,7 @@ def _process_single_cert_spec(
     cert_config = key_dashes_to_underscores(cert_config)
 
     effective_cert_config = _process_template_config(
-        state.cert_specs, name, cert_config
+        state.cert_specs, name.value, cert_config
     )
 
     effective_cert_config['label'] = name.value
@@ -656,6 +653,10 @@ class PKIArchitecture:
             ),
         )
         chain = [pyca_x509.load_der_x509_certificate(c) for c in chain_der]
+
+        from cryptography.hazmat.primitives._serialization import (
+            KeySerializationEncryption,
+        )
 
         encryption_alg: KeySerializationEncryption
         if not password:

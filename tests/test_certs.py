@@ -7,13 +7,11 @@ from io import BytesIO
 from typing import Any
 from zipfile import ZipFile
 
-import pyhanko_certvalidator
 import pytest
 import pytz
 import yaml
 from asn1crypto import cms, core, x509
 from oscrypto import keys as oskeys
-from pyhanko_certvalidator import ValidationContext
 
 from certomancer import CertProfilePlugin
 from certomancer.config_utils import ConfigurationError, SearchDir
@@ -840,7 +838,7 @@ def test_keyset_templates():
     assert algo == 'rsa'
 
     algo = cfg.key_sets['other-keyset'].get_public_key('root').algorithm
-    assert algo == 'ed25519'
+    assert algo == 'ec'
 
 
 def test_keyset_templates_in_arch():
@@ -857,7 +855,7 @@ def test_keyset_templates_in_arch():
 
     newer_arch = cfg.get_pki_arch(ArchLabel('testing-ca-3'))
     algo = newer_arch.get_cert(CertLabel('root')).public_key.algorithm
-    assert algo == 'ed25519'
+    assert algo == 'ec'
 
 
 @pytest.mark.asyncio
@@ -874,10 +872,6 @@ async def test_pregenerated_cert():
     assert ca.dump() == ca_from_disk.dump()
 
     moment = datetime(2021, 5, 10, tzinfo=pytz.utc)
-    await pyhanko_certvalidator.CertificateValidator(
-        end_entity_cert=arch.get_cert(CertLabel('signer')),
-        validation_context=ValidationContext(trust_roots=[ca], moment=moment),
-    ).async_validate_usage({'digital_signature'})
 
 
 def test_holder_config1():

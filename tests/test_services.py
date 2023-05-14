@@ -1,8 +1,7 @@
 import hashlib
 import importlib
-import itertools
 from collections import namedtuple
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 import pytest
 import pytz
@@ -10,9 +9,8 @@ import requests
 from asn1crypto import algos, cms, core, ocsp, tsp
 from freezegun import freeze_time
 from oscrypto import asymmetric, symmetric
-from pyhanko_certvalidator import CertificateValidator, ValidationContext
-from pyhanko_certvalidator.policy_decl import DisallowWeakAlgorithmsPolicy
 
+from certomancer import crypto_utils
 from certomancer.integrations import illusionist
 from certomancer.registry import (
     ArchLabel,
@@ -37,15 +35,27 @@ def _setup(cfgfile) -> ServiceSetup:
 
 
 RSA_SETUP = _setup('tests/data/with-services.yml')
-DSA_SETUP = _setup('tests/data/with-services-dsa.yml')
-ECDSA_SETUP = _setup('tests/data/with-services-ecdsa.yml')
+
+
+@pytest.fixture(
+    scope='module', params=['rsa', 'dsa', 'ecdsa', 'ed25519', 'ed448']
+)
+def setup(request, crypto_backend):
+    if isinstance(crypto_backend, crypto_utils.OscryptoBackend):
+        if request.param not in ('rsa', 'ecdsa'):
+            pytest.skip(
+                f'oscrypto backend does not support "{request.param}" setup'
+            )
+    if request.param == 'rsa':
+        return RSA_SETUP
+    else:
+        return _setup(f'tests/data/with-services-{request.param}.yml')
 
 
 def _check_crl_cardinality(crl, expected_revoked):
     assert len(crl['tbs_cert_list']['revoked_certificates']) == expected_revoked
 
 
-@pytest.mark.parametrize('setup', [RSA_SETUP, DSA_SETUP, ECDSA_SETUP])
 def test_crl(setup):
     some_crl = setup.arch.service_registry.get_crl(
         ServiceLabel('interm'),
@@ -113,7 +123,6 @@ def test_aa_crl():
     assert bool(idp['only_contains_attribute_certs'])
 
 
-@pytest.mark.parametrize('setup', [RSA_SETUP, DSA_SETUP, ECDSA_SETUP])
 def test_aia_ca_issuers(setup):
     signer1 = setup.arch.get_cert(CertLabel('signer1'))
     ca_issuer_urls = {
@@ -129,8 +138,11 @@ def test_aia_ca_issuers(setup):
 
 @freeze_time('2020-11-01')
 @pytest.mark.asyncio
-@pytest.mark.parametrize('setup', [RSA_SETUP, DSA_SETUP, ECDSA_SETUP])
+@pytest.mark.needcrypto
 async def test_validate(requests_mock, setup):
+    from pyhanko_certvalidator import CertificateValidator, ValidationContext
+    from pyhanko_certvalidator.policy_decl import DisallowWeakAlgorithmsPolicy
+
     setup.illusionist.register(requests_mock)
     signer_cert = setup.arch.get_cert(CertLabel('signer1'))
     root = setup.arch.get_cert(CertLabel('root'))
@@ -155,10 +167,7 @@ async def test_validate(requests_mock, setup):
 
 
 @freeze_time('2020-11-01')
-@pytest.mark.parametrize(
-    'setup,include_nonce',
-    list(itertools.product([RSA_SETUP, DSA_SETUP, ECDSA_SETUP], (True, False))),
-)
+@pytest.mark.parametrize('include_nonce', [True, False])
 def test_timestamp(requests_mock, setup, include_nonce):
     setup.illusionist.register(requests_mock)
     hashed_bytes = hashlib.sha256(b'test').digest()
