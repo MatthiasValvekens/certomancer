@@ -210,6 +210,7 @@ def test_zip():
 
 
 @pytest.mark.parametrize('pw', [None, b'', b'secret'])
+@pytest.mark.needcrypto
 def test_pkcs12(pw):
     data = {'cert': 'signer1'}
     if pw is not None:

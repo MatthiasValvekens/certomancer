@@ -28,6 +28,7 @@ from certomancer.registry.issued.attr_cert import HolderSpec
 from certomancer.registry.issued.general import ExtensionSpec
 from certomancer.registry.keys import KeySet
 from certomancer.registry.plugin_api import CertProfilePluginRegistry
+from tests.conftest import collect_files
 
 importlib.import_module('certomancer.default_plugins')
 
@@ -580,16 +581,10 @@ def test_serial_order_indep(order):
     assert arch.get_cert(CertLabel('signer1')).serial_number == 4097
 
 
-def _collect_files(path):
-    for cur, dirs, files in os.walk(path):
-        for file in files:
-            yield os.path.relpath(os.path.join(cur, file), path)
-
-
 def test_dump_no_pfx(tmp_path):
     arch = CONFIG.get_pki_arch(ArchLabel('testing-ca'))
     arch.dump_certs(str(tmp_path), include_pkcs12=False)
-    dumped = set(_collect_files(str(tmp_path)))
+    dumped = set(collect_files(str(tmp_path)))
     assert dumped == {
         'interm/signer1-long.cert.pem',
         'interm/signer1.cert.pem',
@@ -602,10 +597,11 @@ def test_dump_no_pfx(tmp_path):
     }
 
 
+@pytest.mark.needcrypto
 def test_dump_with_pfx(tmp_path):
     arch = CONFIG.get_pki_arch(ArchLabel('testing-ca'))
     arch.dump_certs(str(tmp_path), include_pkcs12=True)
-    dumped = set(_collect_files(str(tmp_path)))
+    dumped = set(collect_files(str(tmp_path)))
     assert dumped == {
         'interm/signer1-long.cert.pem',
         'interm/signer1-long.pfx',
@@ -629,7 +625,7 @@ def test_dump_with_pfx(tmp_path):
 def test_dump_flat_no_pfx(tmp_path):
     arch = CONFIG.get_pki_arch(ArchLabel('testing-ca'))
     arch.dump_certs(str(tmp_path), include_pkcs12=False, flat=True)
-    dumped = set(_collect_files(str(tmp_path)))
+    dumped = set(collect_files(str(tmp_path)))
     assert dumped == {
         'signer1-long.cert.pem',
         'signer1.cert.pem',
@@ -707,6 +703,7 @@ def test_pss_exclusive():
 
 
 @pytest.mark.parametrize('pw', [None, b'', b'secret'])
+@pytest.mark.needcrypto
 def test_pkcs12(pw):
     arch = CONFIG.get_pki_arch(ArchLabel('testing-ca'))
     package = arch.package_pkcs12(CertLabel('signer1'), password=pw)
