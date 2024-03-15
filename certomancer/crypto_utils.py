@@ -1,9 +1,9 @@
-import hashlib
 import logging
 from typing import Optional, Tuple
 
 from asn1crypto import algos, keys, pem, x509
 from asn1crypto.keys import PublicKeyInfo
+from cryptography.hazmat.primitives import serialization
 
 logger = logging.getLogger(__name__)
 
@@ -31,83 +31,23 @@ class CryptoBackend:
         raise NotImplementedError
 
 
-class OscryptoBackend(CryptoBackend):
-    def load_private_key(
-        self, key_bytes: bytes, password: Optional[bytes]
-    ) -> Tuple[keys.PrivateKeyInfo, keys.PublicKeyInfo]:
-        from oscrypto import asymmetric
-        from oscrypto import keys as oskeys
+def _load_private_key_from_pemder_data(
+    key_bytes: bytes, passphrase: Optional[bytes]
+) -> keys.PrivateKeyInfo:
+    load_fun = (
+        serialization.load_pem_private_key
+        if pem.detect(key_bytes)
+        else serialization.load_der_private_key
+    )
 
-        private = oskeys.parse_private(key_bytes, password=password)
-        if private.algorithm == 'rsassa_pss':
-            loaded, public = _oscrypto_hacky_load_pss_exclusive_key(private)
-        else:
-            loaded = asymmetric.load_private_key(private)
-            public = loaded.public_key.asn1
-        return private, public
-
-    def load_public_key(self, key_bytes: bytes) -> keys.PublicKeyInfo:
-        from oscrypto import keys as oskeys
-
-        return oskeys.parse_public(key_bytes)
-
-    def generic_sign(
-        self,
-        private_key: keys.PrivateKeyInfo,
-        tbs_bytes: bytes,
-        sd_algo: algos.SignedDigestAlgorithm,
-    ) -> bytes:
-        from oscrypto import asymmetric
-
-        pk_algo = private_key.algorithm
-        loaded_key = None
-        if pk_algo == 'rsa':
-            if sd_algo.signature_algo == 'rsassa_pss':
-                sign_fun = asymmetric.rsa_pss_sign
-            else:
-                sign_fun = asymmetric.rsa_pkcs1v15_sign
-        elif pk_algo == 'rsassa_pss':
-            loaded_key = _oscrypto_hacky_load_pss_exclusive_key(private_key)[0]
-            sign_fun = asymmetric.rsa_pss_sign
-        elif pk_algo == 'ec':
-            sign_fun = asymmetric.ecdsa_sign
-        elif pk_algo == 'dsa':
-            sign_fun = asymmetric.dsa_sign
-        else:
-            raise NotImplementedError(
-                f"The signing mechanism '{pk_algo}' is not supported."
-            )
-        if loaded_key is None:
-            loaded_key = asymmetric.load_private_key(private_key)
-        return sign_fun(loaded_key, tbs_bytes, sd_algo.hash_algo)
-
-    def optimal_pss_params(self, key: PublicKeyInfo, digest_algo: str):
-        key_algo = key.algorithm
-        if key_algo == 'rsassa_pss':
-            logger.warning(
-                "You seem to be using an RSA key that has been marked as "
-                "RSASSA-PSS exclusive. If it has non-null parameters, these "
-                "WILL be disregarded by the signer, since oscrypto doesn't "
-                "currently support RSASSA-PSS with arbitrary parameters."
-            )
-        # replicate default oscrypto PSS settings
-        salt_len = len(getattr(hashlib, digest_algo)().digest())
-        return algos.RSASSAPSSParams(
-            {
-                'hash_algorithm': algos.DigestAlgorithm(
-                    {'algorithm': digest_algo}
-                ),
-                'mask_gen_algorithm': algos.MaskGenAlgorithm(
-                    {
-                        'algorithm': 'mgf1',
-                        'parameters': algos.DigestAlgorithm(
-                            {'algorithm': digest_algo}
-                        ),
-                    }
-                ),
-                'salt_length': salt_len,
-            }
+    private_key = load_fun(key_bytes, password=passphrase)
+    return keys.PrivateKeyInfo.load(
+        private_key.private_bytes(
+            serialization.Encoding.DER,
+            serialization.PrivateFormat.PKCS8,
+            serialization.NoEncryption(),
         )
+    )
 
 
 class PycaCryptographyBackend(CryptoBackend):
@@ -115,13 +55,8 @@ class PycaCryptographyBackend(CryptoBackend):
         self, key_bytes: bytes, password: Optional[bytes]
     ) -> Tuple[keys.PrivateKeyInfo, keys.PublicKeyInfo]:
         from cryptography.hazmat.primitives import serialization
-        from oscrypto import keys as oskeys
 
-        # use oscrypto parser here to parse the key to a PrivateKeyInfo object
-        # (It handles unarmoring/decryption/... without worrying about the
-        # key type, while load_der/pem_private_key would fail to process
-        # PSS-exclusive keys)
-        priv_key_info = oskeys.parse_private(key_bytes, password)
+        priv_key_info = _load_private_key_from_pemder_data(key_bytes, password)
         assert isinstance(priv_key_info, keys.PrivateKeyInfo)
         if priv_key_info.algorithm == 'rsassa_pss':
             # these keys can't be loaded directly in pyca/cryptography,
@@ -281,31 +216,7 @@ def pyca_cryptography_present() -> bool:
         return False
 
 
-def _oscrypto_hacky_load_pss_exclusive_key(private: keys.PrivateKeyInfo):
-    from oscrypto import asymmetric
-
-    # HACK to load PSS-exclusive RSA keys in oscrypto
-    #  Don't ever do this in production code!
-    algo_copy = private['private_key_algorithm'].native
-    private_copy = keys.PrivateKeyInfo.load(private.dump())
-    # set the algorithm to "generic RSA"
-    private_copy['private_key_algorithm'] = {'algorithm': 'rsa'}
-    loaded_key = asymmetric.load_private_key(private_copy)
-    public = loaded_key.public_key.asn1
-    public['algorithm'] = algo_copy
-    public._algorithm = None
-    return loaded_key, public
-
-
-def _select_default_crypto_backend() -> CryptoBackend:
-    # pyca/cryptography required for EdDSA certs
-    if pyca_cryptography_present():
-        return PycaCryptographyBackend()
-    else:
-        return OscryptoBackend()
-
-
-CRYPTO_BACKEND: CryptoBackend = _select_default_crypto_backend()
+CRYPTO_BACKEND: CryptoBackend = PycaCryptographyBackend()
 
 
 def generic_sign(

@@ -7,10 +7,12 @@ from zipfile import ZipFile
 import pytest
 import pytz
 from asn1crypto import algos, cms, core, crl, ocsp, tsp, x509
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import padding
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.primitives.padding import PKCS7
 from freezegun import freeze_time
-from oscrypto import asymmetric
-from oscrypto import keys as oskeys
-from oscrypto import symmetric
 from werkzeug.test import Client
 from werkzeug.wrappers import Response
 
@@ -97,23 +99,26 @@ def test_demo_plugin():
     # decrypt it
     env_data = cms.ContentInfo.load(response.data)['content']
     arch = with_plugin_cfg.get_pki_arch(ArchLabel('testing-ca'))
-    key = arch.key_set.get_private_key(KeyLabel('signer1'))
+    key_info = arch.key_set.get_private_key(KeyLabel('signer1'))
     ktri = env_data['recipient_infos'][0].chosen
     encrypted_key = ktri['encrypted_key'].native
 
-    decrypted_key = asymmetric.rsa_pkcs1v15_decrypt(
-        asymmetric.load_private_key(key.dump()), encrypted_key
+    key: RSAPrivateKey = serialization.load_der_private_key(
+        key_info.dump(), password=None
     )
-
+    decrypted_key = key.decrypt(encrypted_key, padding.PKCS1v15())
     eci = env_data['encrypted_content_info']
     cea = eci['content_encryption_algorithm']
     assert cea['algorithm'].native == 'aes256_cbc'
     iv = cea['parameters'].native
     encrypted_content_bytes = eci['encrypted_content'].native
-    decrypted_payload = symmetric.aes_cbc_pkcs7_decrypt(
-        decrypted_key, encrypted_content_bytes, iv
-    )
-    assert decrypted_payload == payload
+
+    cipher = Cipher(algorithms.AES(decrypted_key), modes.CBC(iv))
+    dec = cipher.decryptor()
+    decrypted_payload = dec.update(encrypted_content_bytes) + dec.finalize()
+    unpadder = PKCS7(128).unpadder()
+    result = unpadder.update(decrypted_payload) + unpadder.finalize()
+    assert result == payload
 
 
 def test_crl():
@@ -217,14 +222,6 @@ def test_pkcs12(pw):
         data['passphrase'] = pw.decode('ascii')
     response = CLIENT.post('/_certomancer/pfx-download/testing-ca', data=data)
     package = response.data
-    if pw:
-        # there's something about passwordless PKCS#12 files that doesn't quite
-        # jive between oscrypto and pyca/cryptography
-        key, cert, chain = oskeys.parse_pkcs12(package, password=pw)
-        assert 'Alice' in cert.subject.human_friendly
-        assert len(chain) == 2
-        assert key is not None
-
     from cryptography.hazmat.primitives.serialization import pkcs12
 
     key, cert, chain = pkcs12.load_key_and_certificates(package, password=pw)

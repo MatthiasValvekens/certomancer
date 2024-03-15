@@ -19,7 +19,7 @@ Requires Python 3.7 or later.
 Certomancer is [available on PyPI](https://pypi.org/project/certomancer/). See `example.yml` for an example config file.
 
 ```bash
-$ pip install 'certomancer[web-api,pkcs12]' 
+$ pip install 'certomancer[web-api]'
 $ certomancer --config example.yml animate
 ```
 

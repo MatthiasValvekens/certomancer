@@ -27,10 +27,10 @@ classifiers = [
 dependencies = [
     "asn1crypto>=1.5.0",
     "click>=7.1.2",
-    "oscrypto>=1.2.1",
     "pyyaml>=5.4.1",
     "python-dateutil>=2.8.1",
     "tzlocal>=2.1",
+    "cryptography>=3.4.7"
 ]
 
 [project.readme]
@@ -43,7 +43,6 @@ Homepage = "https://github.com/MatthiasValvekens/certomancer"
 [project.optional-dependencies]
 requests-mocker = ["requests-mock>=1.8.0"]
 web-api = ["Werkzeug>=2.2.3", "Jinja2>=2.11.3"]
-pkcs12 = ["cryptography>=3.4.7"]
 pkcs11 = ["python-pkcs11~=0.7.0"]
 testing-minimal = [
     "pytest>=6.1.1",
@@ -56,7 +55,7 @@ testing-minimal = [
 ]
 testing = [
     "pyhanko-certvalidator==0.23.0",
-    "certomancer[testing-minimal,pkcs11,pkcs12]"
+    "certomancer[testing-minimal,pkcs11]"
 ]
 mypy = [
     "types-requests",
@@ -90,7 +89,6 @@ files = 'certomancer'
 module = [
     "asn1crypto.*",
     "pkcs11.*",
-    "oscrypto.*",
 ]
 ignore_missing_imports = true
 
@@ -102,6 +100,5 @@ log_cli_level = "INFO"
 testpaths = "tests"
 asyncio_mode = "strict"
 markers = [
-    "needcrypto: requires pyca/cryptography package",
     "config_context: require a specific configuration file"
 ]

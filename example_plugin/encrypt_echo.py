@@ -11,7 +11,11 @@ from datetime import datetime
 from typing import Optional
 
 from asn1crypto import cms, algos
-from oscrypto import asymmetric, symmetric
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import padding
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.primitives.padding import PKCS7
 
 from certomancer import registry
 from certomancer.registry import plugin_api
@@ -45,8 +49,9 @@ class EncryptEcho(plugin_api.ServicePlugin):
         envelope_key = secrets.token_bytes(32)
 
         # encrypt the envelope key with the recipient's public key
-        key = asymmetric.load_public_key(cert.public_key.dump())
-        encrypted_data = asymmetric.rsa_pkcs1v15_encrypt(key, envelope_key)
+
+        key: RSAPublicKey = serialization.load_der_public_key(cert.public_key.dump())
+        encrypted_data = key.encrypt(envelope_key, padding.PKCS1v15())
 
         rid = cms.RecipientIdentifier({
             'issuer_and_serial_number': cms.IssuerAndSerialNumber({
@@ -66,9 +71,12 @@ class EncryptEcho(plugin_api.ServicePlugin):
         })
 
         # encrypt the request body
-        iv, encrypted_envelope_content = symmetric.aes_cbc_pkcs7_encrypt(
-            envelope_key, request, iv=None
-        )
+        iv = secrets.token_bytes(16)
+        cipher = Cipher(algorithms.AES(envelope_key), modes.CBC(iv))
+        padder = PKCS7(128).padder()
+        padded = padder.update(request) + padder.finalize()
+        enc = cipher.encryptor()
+        encrypted_envelope_content = enc.update(padded) + enc.finalize()
 
         algo = cms.EncryptionAlgorithm({
             'algorithm': algos.EncryptionAlgorithmId('aes256_cbc'),

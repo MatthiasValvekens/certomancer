@@ -18,7 +18,6 @@ from werkzeug.routing import BaseConverter, Map, Rule, Submount
 from werkzeug.wrappers import Request, Response
 
 from certomancer.config_utils import ConfigurationError
-from certomancer.crypto_utils import pyca_cryptography_present
 from certomancer.registry import (
     ArchLabel,
     AttributeCertificateSpec,
@@ -35,8 +34,6 @@ from certomancer.registry import (
 from certomancer.services import CertomancerServiceError
 
 logger = logging.getLogger(__name__)
-
-pfx_possible = pyca_cryptography_present()
 
 
 def _now():
@@ -70,7 +67,7 @@ class AnimatorCertInfo:
     @staticmethod
     def gather_cert_info(pki_arch: PKIArchitecture):
         def _for_cert(spec: CertificateSpec):
-            pfx = pfx_possible and pki_arch.is_subject_key_available(spec.label)
+            pfx = pki_arch.is_subject_key_available(spec.label)
             return AnimatorCertInfo(
                 spec=spec,
                 pfx_available=pfx,
@@ -111,7 +108,7 @@ class ArchServicesDescription:
     cert_repo: list
     attr_cert_repo: list
     certs_by_issuer: Dict[EntityLabel, List[AnimatorCertInfo]]
-    attr_certs_by_issuer: Dict[EntityLabel, List[AnimatorCertInfo]]
+    attr_certs_by_issuer: Dict[EntityLabel, List[AnimatorAttrCertInfo]]
 
     @classmethod
     def compile(cls, pki_arch: PKIArchitecture):
@@ -252,7 +249,6 @@ def gen_index(architectures):
         pki_archs=[
             ArchServicesDescription.compile(arch) for arch in architectures
         ],
-        pfx_possible=pfx_possible,
         web_ui_prefix=WEB_UI_URL_PREFIX,
     )
 
@@ -543,10 +539,7 @@ class Animator:
             raise BadRequest()
 
         cert_label = CertLabel(cert)
-        if not (
-            pyca_cryptography_present()
-            and pki_arch.is_subject_key_available(cert_label)
-        ):
+        if not pki_arch.is_subject_key_available(cert_label):
             raise NotFound()
 
         pass_bytes = request.form.get('passphrase', '').encode('utf8')

@@ -41,55 +41,51 @@
         {% endfor %}
     </section>
     <section>
-        {% if pfx_possible %}
-            <h3>Download PKCS&nbsp;#12 (.pfx) bundles</h3>
-            <p>
-                Choose a certificate label that you want to download
-                together with its issuance chain and private key.
-                You can optionally set a passphrase.
-            </p>
-            <form method="post" action="{{ web_ui_prefix }}/pfx-download/{{ arch_services.arch }}">
-                <table>
-                    <thead>
-                    <tr>
-                        <th>
-                            <label for="certs">Certificate</label>
-                        </th>
-                        <th>
-                            <label for="passphrase">Passphrase</label>
-                        </th>
-                    </tr>
-                    </thead>
-                    <tbody>
-                    <tr>
-                        <td>
-                            <select name="cert" id="certs">
-                                {% for iss in arch_services.certs_by_issuer %}
-                                    <optgroup label="{{ iss }}">
-                                        {% for cert_info in arch_services.certs_by_issuer[iss] %}
-                                            <option value="{{ cert_info.spec.label }}">{{ cert_info.spec.label }}</option>
-                                        {% endfor %}
-                                    </optgroup>
-                                {% endfor %}
-                            </select>
-                        </td>
-                        <td>
-                            <input type="text" name="passphrase" id="passphrase" width="20ch">
-                        </td>
-                    </tr>
-                    </tbody>
-                    <tfoot>
-                    <tr>
-                        <td colspan="2">
-                            <input type="submit" value="Download">
-                        </td>
-                    </tr>
-                    </tfoot>
-                </table>
-            </form>
-        {% else %}
-            <p><i>[PKCS&nbsp;#12 support is unavailable.]</i></p>
-        {% endif %}
+        <h3>Download PKCS&nbsp;#12 (.pfx) bundles</h3>
+        <p>
+            Choose a certificate label that you want to download
+            together with its issuance chain and private key.
+            You can optionally set a passphrase.
+        </p>
+        <form method="post" action="{{ web_ui_prefix }}/pfx-download/{{ arch_services.arch }}">
+            <table>
+                <thead>
+                <tr>
+                    <th>
+                        <label for="certs">Certificate</label>
+                    </th>
+                    <th>
+                        <label for="passphrase">Passphrase</label>
+                    </th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr>
+                    <td>
+                        <select name="cert" id="certs">
+                            {% for iss in arch_services.certs_by_issuer %}
+                                <optgroup label="{{ iss }}">
+                                    {% for cert_info in arch_services.certs_by_issuer[iss] %}
+                                        <option value="{{ cert_info.spec.label }}">{{ cert_info.spec.label }}</option>
+                                    {% endfor %}
+                                </optgroup>
+                            {% endfor %}
+                        </select>
+                    </td>
+                    <td>
+                        <input type="text" name="passphrase" id="passphrase" width="20ch">
+                    </td>
+                </tr>
+                </tbody>
+                <tfoot>
+                <tr>
+                    <td colspan="2">
+                        <input type="submit" value="Download">
+                    </td>
+                </tr>
+                </tfoot>
+            </table>
+        </form>
     </section>
     <section>
         <h3>Time stamping endpoints (RFC 3161 protocol)</h3>

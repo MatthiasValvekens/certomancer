@@ -11,11 +11,10 @@ import pytest
 import pytz
 import yaml
 from asn1crypto import cms, core, x509
-from oscrypto import keys as oskeys
 
 from certomancer import CertProfilePlugin
 from certomancer.config_utils import ConfigurationError, SearchDir
-from certomancer.crypto_utils import load_cert_from_pemder
+from certomancer.crypto_utils import CRYPTO_BACKEND, load_cert_from_pemder
 from certomancer.registry import (
     ArchLabel,
     CertLabel,
@@ -56,7 +55,7 @@ def dir_to_keyset_cfg(dirpath):
             # in the file name
             if 'pub' in fname:
                 cfg['public-only'] = True
-            else:
+            elif not 'aa.key.pem' in fname:
                 cfg['password'] = DUMMY_PASSWORD.decode('ascii')
             yield m.group(1), cfg
 
@@ -559,7 +558,7 @@ def test_sign_public_only():
     )
     pubkey = arch.get_cert(CertLabel('leaf')).public_key
     with open('tests/data/keys-rsa/split-key-pub.key.pem', 'rb') as inf:
-        pubkey_actual = oskeys.parse_public(inf.read())
+        pubkey_actual = CRYPTO_BACKEND.load_public_key(inf.read())
     assert pubkey.native == pubkey_actual.native
 
 
@@ -707,13 +706,6 @@ def test_pss_exclusive():
 def test_pkcs12(pw):
     arch = CONFIG.get_pki_arch(ArchLabel('testing-ca'))
     package = arch.package_pkcs12(CertLabel('signer1'), password=pw)
-    if pw:
-        # there's something about passwordless PKCS#12 files that doesn't quite
-        # jive between oscrypto and pyca/cryptography
-        key, cert, chain = oskeys.parse_pkcs12(package, password=pw)
-        assert cert.dump() == arch.get_cert(CertLabel('signer1')).dump()
-        assert len(chain) == 2
-        assert key is not None
 
     from cryptography.hazmat.primitives.serialization import pkcs12
 

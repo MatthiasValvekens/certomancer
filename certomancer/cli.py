@@ -11,7 +11,6 @@ from dateutil.parser import parse as parse_dt
 
 from ._asn1_types import register_extensions
 from .config_utils import ConfigurationError
-from .crypto_utils import pyca_cryptography_present
 from .registry import (
     ArchLabel,
     AttributeCertificateSpec,
@@ -189,12 +188,6 @@ def mass_summon(
 ):
     cfg: CertomancerConfig = next(ctx.obj['config'])
     pki_arch = cfg.get_pki_arch(ArchLabel(architecture))
-    if not no_pfx and not pyca_cryptography_present():
-        no_pfx = True
-        logger.warning(
-            "pyca/cryptography not installed, no PFX files will be created"
-        )
-
     if pfx_pass is not None:
         pfx_pass_bytes = pfx_pass.encode('utf8')
     else:
@@ -258,12 +251,6 @@ def summon(
 ):
     cfg: CertomancerConfig = next(ctx.obj['config'])
     pki_arch = cfg.get_pki_arch(ArchLabel(architecture))
-    if as_pfx and not pyca_cryptography_present():
-        as_pfx = False
-        logger.warning(
-            "pyca/cryptography not installed, no PFX files will be created"
-        )
-
     output_is_binary = as_pfx or no_pem
 
     if (

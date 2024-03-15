@@ -18,7 +18,7 @@ from ..config_utils import (
     check_config_keys,
     key_dashes_to_underscores,
 )
-from ..crypto_utils import load_cert_from_pemder, pyca_cryptography_present
+from ..crypto_utils import load_cert_from_pemder
 from ..services import (
     CertomancerServiceError,
     CRLBuilder,
@@ -680,7 +680,6 @@ class PKIArchitecture:
     def _dump_certs(
         self, use_pem=True, flat=False, include_pkcs12=False, pkcs12_pass=None
     ):
-        include_pkcs12 &= pyca_cryptography_present()
         # start writing only after we know that all certs have been built
         ext = '.cert.pem' if use_pem else '.crt'
         for iss_label, iss_certs in self._cert_labels_by_issuer.items():
