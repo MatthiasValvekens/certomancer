@@ -475,18 +475,18 @@ class PKIArchitecture:
             ac_labels_by_issuer,
             ac_labels_by_holder,
         ) = _process_ac_spec_config(ac_spec_config or {})
-        self._cert_labels_by_issuer: Dict[
-            EntityLabel, List[CertLabel]
-        ] = cert_labels_by_issuer
-        self._cert_labels_by_subject: Dict[
-            EntityLabel, List[CertLabel]
-        ] = cert_labels_by_subject
-        self._ac_labels_by_issuer: Dict[
-            EntityLabel, List[CertLabel]
-        ] = ac_labels_by_issuer
-        self._ac_labels_by_holder: Dict[
-            EntityLabel, List[CertLabel]
-        ] = ac_labels_by_holder
+        self._cert_labels_by_issuer: Dict[EntityLabel, List[CertLabel]] = (
+            cert_labels_by_issuer
+        )
+        self._cert_labels_by_subject: Dict[EntityLabel, List[CertLabel]] = (
+            cert_labels_by_subject
+        )
+        self._ac_labels_by_issuer: Dict[EntityLabel, List[CertLabel]] = (
+            ac_labels_by_issuer
+        )
+        self._ac_labels_by_holder: Dict[EntityLabel, List[CertLabel]] = (
+            ac_labels_by_holder
+        )
         self._cert_cache = cert_cache
         self._ac_cache = ac_cache
 

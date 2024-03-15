@@ -123,9 +123,11 @@ def parse_extension_settings(sett_dict, sett_key):
                 "Applicable extensions must be specified as a list."
             )
         sett_dict[sett_key] = result = [
-            sett
-            if isinstance(sett, ExtensionSpec)
-            else ExtensionSpec.from_config(sett)
+            (
+                sett
+                if isinstance(sett, ExtensionSpec)
+                else ExtensionSpec.from_config(sett)
+            )
             for sett in ext_spec
         ]
         return result

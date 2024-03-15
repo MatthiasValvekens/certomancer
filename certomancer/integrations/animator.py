@@ -450,9 +450,11 @@ class Animator:
         data = cert.dump()
         if use_pem:
             data = pem.armor(
-                'attribute certificate'
-                if cert_label is not None
-                else 'certificate',
+                (
+                    'attribute certificate'
+                    if cert_label is not None
+                    else 'certificate'
+                ),
                 data,
             )
         return Response(data, mimetype=mime)
