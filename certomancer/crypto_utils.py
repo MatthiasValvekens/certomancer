@@ -58,14 +58,7 @@ class PycaCryptographyBackend(CryptoBackend):
 
         priv_key_info = _load_private_key_from_pemder_data(key_bytes, password)
         assert isinstance(priv_key_info, keys.PrivateKeyInfo)
-        if priv_key_info.algorithm == 'rsassa_pss':
-            # these keys can't be loaded directly in pyca/cryptography,
-            # so we have to give it a nudge
-            priv_key_copy = priv_key_info.copy()
-            priv_key_copy['private_key_algorithm'] = {'algorithm': 'rsa'}
-            key_bytes = priv_key_copy.dump()
-        else:
-            key_bytes = priv_key_info.dump()
+        key_bytes = priv_key_info.dump()
 
         priv_key = serialization.load_der_private_key(key_bytes, password=None)
         pub_key_bytes = priv_key.public_key().public_bytes(
@@ -73,13 +66,6 @@ class PycaCryptographyBackend(CryptoBackend):
             format=serialization.PublicFormat.SubjectPublicKeyInfo,
         )
         pub_key_info = keys.PublicKeyInfo.load(pub_key_bytes)
-        if priv_key_info.algorithm == 'rsassa_pss':
-            # if the private key was a PSS-exclusive one, copy the parameters
-            # back from the original (since we stripped them going in)
-            # We use .native to get around asn1crypto's type checking
-            pub_key_info['algorithm'] = priv_key_info[
-                'private_key_algorithm'
-            ].native
         return priv_key_info, pub_key_info
 
     def load_public_key(self, key_bytes: bytes) -> keys.PublicKeyInfo:
@@ -103,14 +89,7 @@ class PycaCryptographyBackend(CryptoBackend):
             rsa,
         )
 
-        if private_key.algorithm == 'rsassa_pss':
-            # as usual, we need to pretend it's a normal RSA key
-            # for pyca_cryptography to be able to load it
-            private_key_copy = private_key.copy()
-            private_key_copy['private_key_algorithm'] = {'algorithm': 'rsa'}
-            priv_key_bytes = private_key_copy.dump()
-        else:
-            priv_key_bytes = private_key.dump()
+        priv_key_bytes = private_key.dump()
 
         priv_key = serialization.load_der_private_key(
             priv_key_bytes, password=None
@@ -124,11 +103,6 @@ class PycaCryptographyBackend(CryptoBackend):
             return priv_key.sign(tbs_bytes, asym_padding, hash_algo)
         elif sig_algo == 'rsassa_pss':
             parameters = None
-            if private_key.algorithm == 'rsassa_pss':
-                key_params = private_key['private_key_algorithm']['parameters']
-                # if the key is parameterised, we must use those params
-                if key_params.native is not None:
-                    parameters = key_params
             if parameters is None:
                 parameters = sd_algo['parameters']
 
@@ -175,11 +149,6 @@ class PycaCryptographyBackend(CryptoBackend):
         from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
         digest_algo = digest_algo.lower()
-
-        if key.algorithm == 'rsassa_pss':
-            # again, pretend that we're working with a normal RSA key
-            key = key.copy()
-            key['algorithm'] = {'algorithm': 'rsa'}
 
         loaded_key = serialization.load_der_public_key(key.dump())
         assert isinstance(loaded_key, rsa.RSAPublicKey)

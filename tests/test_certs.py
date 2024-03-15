@@ -690,17 +690,6 @@ def test_pss():
         assert arch.get_cert(CertLabel(c)).public_key.algorithm == 'rsa'
 
 
-def test_pss_exclusive():
-    cfg = CertomancerConfig.from_file(
-        'tests/data/with-external-config.yml', 'tests/data'
-    )
-    arch = cfg.get_pki_arch(ArchLabel('testing-ca-pss-exclusive'))
-    certs = ['root', 'interm', 'signer1', 'signer2']
-    for c in certs:
-        assert arch.get_cert(CertLabel(c)).signature_algo == 'rsassa_pss'
-        assert arch.get_cert(CertLabel(c)).public_key.algorithm == 'rsassa_pss'
-
-
 @pytest.mark.parametrize('pw', [None, b'', b'secret'])
 @pytest.mark.needcrypto
 def test_pkcs12(pw):

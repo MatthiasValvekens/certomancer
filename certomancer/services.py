@@ -290,9 +290,6 @@ def choose_signed_digest(
 ):
     key_algo = pub_key.algorithm
     if signature_algo is None:
-        # special OID for keys that should only be used with PSS
-        if key_algo == 'rsassa_pss':
-            signature_algo = 'rsassa_pss'
         if key_algo == 'rsa':
             signature_algo = digest_algo + '_rsa'
         elif key_algo == 'dsa':
@@ -309,10 +306,6 @@ def choose_signed_digest(
     )
     if signature_algo == 'rsassa_pss':
         parameters = None
-        if pub_key.algorithm == 'rsassa_pss':
-            key_params = pub_key['algorithm']['parameters']
-            if key_params.native is not None:
-                parameters = key_params
         if parameters is None:
             parameters = optimal_pss_params(pub_key, digest_algo)
         signature_algo_obj['parameters'] = parameters
