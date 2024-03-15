@@ -26,7 +26,7 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = [
-    "asn1crypto>=1.5.0",
+    "asn1crypto==1.5.*",
     "click>=7.1.2",
     "pyyaml>=5.4.1",
     "python-dateutil>=2.8.1",
