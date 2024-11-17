@@ -94,7 +94,7 @@ jobs:
           files: |
             dist/*.whl
             dist/*.tar.gz
-            dist/*.sigstore
+            dist/*.sigstore.json
           body_path: release-body/release.md
           fail_on_unmatched_files: true
           prerelease: true
