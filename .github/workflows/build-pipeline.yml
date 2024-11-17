@@ -27,7 +27,7 @@ jobs:
       - name: build
         run: python -m build
       - name: Upload dist artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: certomancer-dist
           path: dist/
@@ -44,7 +44,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Download dist artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: certomancer-dist
           path: dist/
@@ -63,7 +63,7 @@ jobs:
       - name: Test with pytest
         run: python -m pytest --cov=./ --cov-report=xml:python-${{ matrix.python-version }}-coverage.xml
       - name: Stash coverage report
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: coverage
           path: "*-coverage.xml"
@@ -72,7 +72,7 @@ jobs:
     needs: build
     strategy:
       matrix:
-        python-version: ["3.7", "3.8", "3.9", "3.10", "3.11"]
+        python-version: ["3.7", "3.8", "3.9", "3.10", "3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v3
       - name: Set up Python ${{ matrix.python-version }}
@@ -80,7 +80,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Download dist artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: certomancer-dist
           path: dist/
@@ -99,7 +99,7 @@ jobs:
           python -m pytest -m "not needcrypto" --cov=./ \
               --cov-report=xml:python-minimal-${{ matrix.python-version }}-coverage.xml
       - name: Stash coverage report
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: coverage
           path: "*-coverage.xml"
@@ -110,7 +110,7 @@ jobs:
       # checkout necessary to ensure the uploaded report contains the correct paths
       - uses: actions/checkout@v3
       - name: Retrieve coverage reports
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: coverage
           path: ./reports/
@@ -122,6 +122,6 @@ jobs:
           env_vars: OS,PYTHON
           name: codecov-umbrella
       - name: Clean up coverage reports
-        uses: GeekyEggo/delete-artifact@v2
+        uses: GeekyEggo/delete-artifact@v5
         with:
-          name: coverage
+          name: coverage-*
