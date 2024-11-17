@@ -1,4 +1,4 @@
-name: CI pipeline
+name: CI pipeline*
 
 on:
   push:
@@ -65,7 +65,7 @@ jobs:
       - name: Stash coverage report
         uses: actions/upload-artifact@v4
         with:
-          name: coverage
+          name: coverage-${{ strategy.job-index }}
           path: "*-coverage.xml"
   pytest-minimal-dependencies:
     runs-on: ubuntu-22.04
@@ -101,7 +101,7 @@ jobs:
       - name: Stash coverage report
         uses: actions/upload-artifact@v4
         with:
-          name: coverage
+          name: coverage-minimal-${{ strategy.job-index }}
           path: "*-coverage.xml"
   codecov-upload:
     runs-on: ubuntu-22.04
@@ -112,7 +112,7 @@ jobs:
       - name: Retrieve coverage reports
         uses: actions/download-artifact@v4
         with:
-          name: coverage
+          pattern: coverage-*
           path: ./reports/
       - name: Upload all coverage reports to Codecov
         uses: codecov/codecov-action@v3
