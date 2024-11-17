@@ -55,7 +55,7 @@ testing-minimal = [
     "certomancer[requests-mocker,web-api]"
 ]
 testing = [
-    "pyhanko-certvalidator==0.23.0",
+    "pyhanko-certvalidator==0.26.5",
     "certomancer[testing-minimal,pkcs11]"
 ]
 mypy = [

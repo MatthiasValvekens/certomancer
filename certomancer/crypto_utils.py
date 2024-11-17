@@ -94,11 +94,10 @@ class PycaCryptographyBackend(CryptoBackend):
         priv_key = serialization.load_der_private_key(
             priv_key_bytes, password=None
         )
-        digest_algorithm = sd_algo.hash_algo
         sig_algo = sd_algo.signature_algo
         if sig_algo == 'rsassa_pkcs1v15':
             asym_padding = padding.PKCS1v15()
-            hash_algo = getattr(hashes, digest_algorithm.upper())()
+            hash_algo = getattr(hashes, sd_algo.hash_algo.upper())()
             assert isinstance(priv_key, rsa.RSAPrivateKey)
             return priv_key.sign(tbs_bytes, asym_padding, hash_algo)
         elif sig_algo == 'rsassa_pss':
@@ -118,15 +117,15 @@ class PycaCryptographyBackend(CryptoBackend):
             pss_padding = padding.PSS(
                 mgf=padding.MGF1(algorithm=mgf_md), salt_length=salt_len
             )
-            hash_algo = getattr(hashes, digest_algorithm.upper())()
+            hash_algo = getattr(hashes, sd_algo.hash_algo.upper())()
             assert isinstance(priv_key, rsa.RSAPrivateKey)
             return priv_key.sign(tbs_bytes, pss_padding, hash_algo)
         elif sig_algo == 'dsa':
             assert isinstance(priv_key, dsa.DSAPrivateKey)
-            hash_algo = getattr(hashes, digest_algorithm.upper())()
+            hash_algo = getattr(hashes, sd_algo.hash_algo.upper())()
             return priv_key.sign(tbs_bytes, hash_algo)
         elif sig_algo == 'ecdsa':
-            hash_algo = getattr(hashes, digest_algorithm.upper())()
+            hash_algo = getattr(hashes, sd_algo.hash_algo.upper())()
             assert isinstance(priv_key, ec.EllipticCurvePrivateKey)
             return priv_key.sign(
                 tbs_bytes, signature_algorithm=ec.ECDSA(hash_algo)
