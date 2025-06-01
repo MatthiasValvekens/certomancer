@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 import pytest
 import pytz
 import requests
-from asn1crypto import algos, cms, core, ocsp, tsp, x509, crl
+from asn1crypto import algos, cms, core, crl, ocsp, tsp, x509
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
@@ -20,9 +20,9 @@ from certomancer.registry import (
     ArchLabel,
     CertLabel,
     CertomancerConfig,
+    EntityLabel,
     KeyLabel,
     ServiceLabel,
-    EntityLabel,
 )
 
 register_extensions()

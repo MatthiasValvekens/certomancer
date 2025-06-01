@@ -1,18 +1,18 @@
 import enum
 from dataclasses import dataclass, field
 from datetime import timedelta
-from typing import TYPE_CHECKING, List, Optional, Dict, Any
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from asn1crypto import x509
 
-from ..entities import EntityRegistry
 from ...config_utils import (
-    parse_duration,
     ConfigurableMixin,
     key_dashes_to_underscores,
+    parse_duration,
 )
 from ...services import urls_as_names
 from ..common import CertLabel, EntityLabel, KeyLabel
+from ..entities import EntityRegistry
 from ..issued.general import ExtensionSpec, parse_extension_settings
 from .api import ServiceInfo
 
