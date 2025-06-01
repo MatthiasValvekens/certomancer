@@ -26,6 +26,8 @@ keysets:
         password: secret
       aa:
         path: aa.key.pem
+      aa-crl-issuer:
+        path: aa.key.pem
 
 pki-architectures:
   testing-ca: full-service-config.yml
@@ -34,7 +36,21 @@ pki-architectures:
     entities:
       aa:
         common-name: Attribute Authority
+      aa-crl-issuer:
+        common-name: Attribute Authority CRL issuer
     certs:
+      aa-crl-issuer:
+        subject: aa-crl-issuer
+        issuer: root
+        validity:
+          valid-from: "2000-01-01T00:00:00+0000"
+          valid-to: "2100-01-01T00:00:00+0000"
+        extensions:
+          - id: key_usage
+            critical: true
+            smart-value:
+              schema: key-usage
+              params: [crl_sign]
       role-aa:
         subject: aa
         issuer: root
@@ -46,7 +62,7 @@ pki-architectures:
             critical: true
             smart-value:
               schema: key-usage
-              params: [digital_signature, crl_sign]
+              params: [digital_signature]
           - id: aa_controls
             critical: true
             value:
@@ -82,13 +98,59 @@ pki-architectures:
               schema: aia-urls
               params:
                 ocsp-responder-names: [role-aa]
+      test-ac2:
+        holder:
+          name: signer2
+          cert: signer2
+        issuer: aa
+        attributes:
+          - id: role
+            smart-value:
+              schema: role-syntax
+              params:
+                name: {type: email, value: bigboss@example.com}
+        revocation:
+          revoked-since: "2020-12-01T00:00:00+0000"
+          reason: aa_compromise
+        validity:
+          valid-from: "2010-01-01T00:00:00+0000"
+          valid-to: "2030-01-01T00:00:00+0000"
+        extensions:
+          - id: crl_distribution_points
+            smart-value:
+              schema: crl-dist-url
+              params:
+                crl-repo-names: [role-aa-key-compromise, role-aa-aa-compromise]
     services:
       crl-repo:
         role-aa:
           for-issuer: aa
-          signing-key: aa
+          crl-issuer: aa-crl-issuer
+          signing-key: aa-crl-issuer
           simulated-update-schedule: "P30D"
           crl-type: ac-only
+        role-aa-key-compromise:
+          for-issuer: aa
+          crl-issuer: aa-crl-issuer
+          signing-key: aa-crl-issuer
+          simulated-update-schedule: "P30D"
+          crl-type: ac-only
+          covered-reasons:
+            - key_compromise
+          distribution-point-name:
+            relative-name:
+              common_name: Key compromise DP
+        role-aa-aa-compromise:
+          for-issuer: aa
+          crl-issuer: aa-crl-issuer
+          signing-key: aa-crl-issuer
+          simulated-update-schedule: "P30D"
+          crl-type: ac-only
+          covered-reasons:
+            - aa_compromise
+          distribution-point-name:
+            relative-name:
+              common_name: AA compromise DP
       ocsp:
         role-aa:
           for-issuer: aa

@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 import pytest
 import pytz
 import requests
-from asn1crypto import algos, cms, core, ocsp, tsp
+from asn1crypto import algos, cms, core, ocsp, tsp, x509, crl
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
@@ -14,6 +14,7 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives.padding import PKCS7
 from freezegun import freeze_time
 
+from certomancer._asn1_types import register_extensions
 from certomancer.integrations import illusionist
 from certomancer.registry import (
     ArchLabel,
@@ -21,8 +22,10 @@ from certomancer.registry import (
     CertomancerConfig,
     KeyLabel,
     ServiceLabel,
+    EntityLabel,
 )
 
+register_extensions()
 importlib.import_module('certomancer.default_plugins')
 
 
@@ -111,14 +114,101 @@ def test_aa_crl():
         ServiceLabel('role-aa'),
         at_time=datetime.fromisoformat('2020-12-29 00:00:00+00:00'),
     )
-    _check_crl_cardinality(some_crl3, expected_revoked=1)
+    _check_crl_cardinality(some_crl3, expected_revoked=2)
 
+    reloaded_crl = crl.CertificateList.load(some_crl3.dump())
     idp = next(
         ext['extn_value'].native
-        for ext in some_crl3['tbs_cert_list']['crl_extensions']
+        for ext in reloaded_crl['tbs_cert_list']['crl_extensions']
         if ext['extn_id'].native == 'issuing_distribution_point'
     )
+    assert bool(idp['indirect_crl'])
     assert bool(idp['only_contains_attribute_certs'])
+    cert = cms.AttributeCertificateV2.load(
+        arch.get_attr_cert(CertLabel('test-ac')).dump()
+    )
+    dps = next(
+        ext['extn_value'].parsed
+        for ext in cert['ac_info']['extensions']
+        if ext['extn_id'].native == 'crl_distribution_points'
+    )
+    assert (
+        dps[0]['crl_issuer'][0].chosen
+        == arch.entities[EntityLabel('aa-crl-issuer')]
+    )
+
+
+def test_aa_crl_relative_name():
+    cfg = CertomancerConfig.from_file(
+        'tests/data/with-services.yml', 'tests/data'
+    )
+
+    arch = cfg.get_pki_arch(ArchLabel('testing-ca-with-aa'))
+
+    setup = ServiceSetup(cfg, arch, illusionist.Illusionist(pki_arch=arch))
+    some_crl = setup.arch.service_registry.get_crl(
+        ServiceLabel('role-aa-aa-compromise'),
+        at_time=datetime.fromisoformat('2020-12-29 00:00:00+00:00'),
+    )
+
+    reloaded_crl = crl.CertificateList.load(some_crl.dump())
+    idp = next(
+        ext['extn_value'].parsed
+        for ext in reloaded_crl['tbs_cert_list']['crl_extensions']
+        if ext['extn_id'].native == 'issuing_distribution_point'
+    )
+    expected_relative_name = x509.RelativeDistinguishedName(
+        [
+            x509.NameTypeAndValue(
+                {
+                    'type': 'common_name',
+                    'value': x509.DirectoryString(
+                        name='printable_string', value='AA compromise DP'
+                    ),
+                }
+            )
+        ]
+    )
+    assert idp['distribution_point'].chosen == expected_relative_name
+    cert = cms.AttributeCertificateV2.load(
+        arch.get_attr_cert(CertLabel('test-ac2')).dump()
+    )
+    dps = next(
+        ext['extn_value'].parsed
+        for ext in cert['ac_info']['extensions']
+        if ext['extn_id'].native == 'crl_distribution_points'
+    )
+    assert dps[1]['distribution_point'].chosen == expected_relative_name
+
+
+def test_crl_limit_reasons():
+    cfg = CertomancerConfig.from_file(
+        'tests/data/with-services.yml', 'tests/data'
+    )
+
+    arch = cfg.get_pki_arch(ArchLabel('testing-ca-with-aa'))
+
+    setup = ServiceSetup(cfg, arch, illusionist.Illusionist(pki_arch=arch))
+    aa_compromise_crl = setup.arch.service_registry.get_crl(
+        ServiceLabel('role-aa-aa-compromise'),
+        at_time=datetime.fromisoformat('2020-12-29 00:00:00+00:00'),
+    )
+    _check_crl_cardinality(aa_compromise_crl, expected_revoked=1)
+    revo = aa_compromise_crl['tbs_cert_list']['revoked_certificates'][0]
+    assert (
+        revo['user_certificate'].native
+        == arch.get_attr_cert_spec(CertLabel('test-ac2')).serial
+    )
+    key_compromise_crl = setup.arch.service_registry.get_crl(
+        ServiceLabel('role-aa-key-compromise'),
+        at_time=datetime.fromisoformat('2020-12-29 00:00:00+00:00'),
+    )
+    _check_crl_cardinality(key_compromise_crl, expected_revoked=1)
+    revo = key_compromise_crl['tbs_cert_list']['revoked_certificates'][0]
+    assert (
+        revo['user_certificate'].native
+        == arch.get_attr_cert_spec(CertLabel('test-ac')).serial
+    )
 
 
 def test_aia_ca_issuers(setup):
