@@ -944,7 +944,6 @@ settings are available.
 | `for-issuer` |Entity label| Entity label indicating the issuing CA for which the CRLs are generated.|
 | `signing-key` |Key label| Key label to indicate the key that will be used to sign the CRLs. Defaults to the value of `for-issuer`, if a key with the same label exists. |
 | `issuer-cert` |Cert label| Issuer's certificate. If the issuer only has one certificate, you don't need to bother with this setting. |
-| `extra-urls` |list of strings| Additional URLs to register with this CRL distribution point. These don't mean anything within Certomancer.|
 | `simulated-update-schedule` | duration string | The (simulated) time between CRL updates. This should be specified as an ISO 8601-style duration string, e.g. `P30D` for a 30-day period. Month/year indicators are not allowed. This value affects the way CRL numbers are generated, and also how the `thisUpdate` / `nextUpdate` fields are populated. |
 | `crl-extensions` | list of dictionaries| Extra CRL extensions to use. These also follow the same format as certificate extensions.|
 

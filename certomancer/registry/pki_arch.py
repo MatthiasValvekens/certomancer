@@ -5,12 +5,13 @@ import os.path
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 from zipfile import ZipFile
 
 import tzlocal
 import yaml
 from asn1crypto import cms, core, crl, ocsp, pem, x509
+from asn1crypto.x509 import ReasonFlags
 
 from ..config_utils import (
     ConfigurationError,
@@ -995,36 +996,83 @@ class PKIArchitecture:
             )
         return labels[0]
 
-    def _format_revo(self, serial: int, revo: RevocationStatus):
+    def _format_revo(
+        self,
+        serial: int,
+        revo: RevocationStatus,
+        explicit_cert_issuer: Optional[EntityLabel],
+    ):
         exts = [
             ext.to_asn1(self, crl.CRLEntryExtension)
             for ext in revo.crl_entry_extensions
         ]
+        if explicit_cert_issuer is not None:
+            issuer_name = [
+                x509.GeneralName(
+                    name='directory_name',
+                    value=self.entities[explicit_cert_issuer],
+                )
+            ]
+            exts.append(
+                crl.CRLEntryExtension(
+                    {
+                        'extn_id': 'certificate_issuer',
+                        'critical': True,
+                        'extn_value': issuer_name,
+                    }
+                )
+            )
         return revo.to_crl_entry_asn1(serial, exts)
 
     def get_revoked_certs_at_time(
-        self, issuer_label: EntityLabel, at_time: datetime
+        self, at_time: datetime, crl_info: CRLRepoServiceInfo
     ):
-        labels = self._cert_labels_by_issuer[issuer_label]
+        if crl_info.covered_reasons is not None:
+            reason_strings = set(crl_info.covered_reasons.native)
+        else:
+            reason_strings = None
+        labels = self._cert_labels_by_issuer[crl_info.for_issuer]
         for cert_label in labels:
             revo = self.check_revocation_status(cert_label, at_time=at_time)
             cert = self.get_cert(cert_label)
             if revo is not None:
-                yield self._format_revo(cert.serial_number, revo)
+                if reason_strings is None or (
+                    revo.reason is not None
+                    and revo.reason.native in reason_strings
+                ):
+                    yield self._format_revo(
+                        cert.serial_number,
+                        revo,
+                        explicit_cert_issuer=(
+                            crl_info.for_issuer if crl_info.indirect else None
+                        ),
+                    )
 
     def get_revoked_attr_certs_at_time(
-        self, issuer_label: EntityLabel, at_time: datetime
+        self, at_time: datetime, crl_info: CRLRepoServiceInfo
     ):
-        labels = self._ac_labels_by_issuer[issuer_label]
+        if crl_info.covered_reasons is not None:
+            reason_strings = set(crl_info.covered_reasons.native)
+        else:
+            reason_strings = None
+        labels = self._ac_labels_by_issuer[crl_info.for_issuer]
         for cert_label in labels:
             revo = self.check_revocation_status(
                 cert_label, at_time=at_time, is_ac=True
             )
             cert = self.get_attr_cert(cert_label)
             if revo is not None:
-                yield self._format_revo(
-                    cert['ac_info']['serial_number'].native, revo
-                )
+                if reason_strings is None or (
+                    revo.reason is not None
+                    and revo.reason.native in reason_strings
+                ):
+                    yield self._format_revo(
+                        cert['ac_info']['serial_number'].native,
+                        revo,
+                        explicit_cert_issuer=(
+                            crl_info.for_issuer if crl_info.indirect else None
+                        ),
+                    )
 
 
 class ServiceRegistry:
@@ -1237,8 +1285,7 @@ class ServiceRegistry:
         at_time: Optional[datetime] = None,
         number: Optional[int] = None,
     ):
-        # TODO support indirect CRLs, delta CRLs, etc.?
-
+        # TODO support delta CRLs
         crl_info = self.get_crl_repo_info(repo_label)
         issuer_cert_label = crl_info.issuer_cert
         signing_key_pair = self.pki_arch.key_set.get_asym_key(
@@ -1276,7 +1323,9 @@ class ServiceRegistry:
             for ext in crl_info.crl_extensions
         ]
         builder = CRLBuilder(
-            issuer_name=self.pki_arch.entities[crl_info.for_issuer],
+            issuer_name=self.pki_arch.entities[
+                crl_info.crl_issuer or crl_info.for_issuer
+            ],
             issuer_key=signing_key,
             signature_algo=choose_signed_digest(
                 crl_info.digest_algo,
@@ -1291,13 +1340,15 @@ class ServiceRegistry:
         if crl_info.crl_type != CRLType.AC_ONLY:
             revoked.extend(
                 self.pki_arch.get_revoked_certs_at_time(
-                    issuer_label=crl_info.for_issuer, at_time=this_update
+                    at_time=this_update,
+                    crl_info=crl_info,
                 )
             )
         if crl_info.crl_type not in (CRLType.CA_ONLY, CRLType.USER_ONLY):
             revoked.extend(
                 self.pki_arch.get_revoked_attr_certs_at_time(
-                    issuer_label=crl_info.for_issuer, at_time=this_update
+                    at_time=this_update,
+                    crl_info=crl_info,
                 )
             )
         return builder.build_crl(
@@ -1305,7 +1356,7 @@ class ServiceRegistry:
             this_update=this_update,
             next_update=next_update,
             revoked_certs=revoked,
-            distpoint=crl_info.format_idp(),
+            distpoint=crl_info.format_idp(self.pki_arch.entities),
         )
 
     def determine_repo_issuer_cert(self, repo_info: BaseCertRepoServiceInfo):

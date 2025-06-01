@@ -59,7 +59,7 @@ class CRLDistributionPointsPlugin(ExtensionPlugin):
         def _distpoints():
             for repo_name in repo_names:
                 repo_info = arch.service_registry.get_crl_repo_info(repo_name)
-                yield repo_info.format_distpoint()
+                yield repo_info.format_distpoint(arch.entities)
 
         return list(_distpoints())
 

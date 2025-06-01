@@ -272,15 +272,10 @@ class CRLBuilder:
         )
 
 
-def url_distribution_point(url, extra_urls=()):
-    def _wrap(x):
-        return x509.GeneralName({'uniform_resource_identifier': x})
-
-    return {
-        'distribution_point': {
-            'full_name': [_wrap(url), *(_wrap(x) for x in extra_urls)]
-        }
-    }
+def urls_as_names(*urls):
+    return [
+        x509.GeneralName({'uniform_resource_identifier': url}) for url in urls
+    ]
 
 
 def choose_signed_digest(

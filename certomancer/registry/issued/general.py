@@ -150,7 +150,7 @@ class RevocationStatus(ConfigurableMixin):
     Time of revocation.
     """
 
-    reason: crl.CRLReason = None
+    reason: Optional[crl.CRLReason] = None
     """
     Revocation reason.
     """
