@@ -12,7 +12,7 @@
 Quickly construct, mock & deploy PKI test configurations using simple declarative configuration.
 Includes CRL, OCSP and time stamping service provisioning.
 
-Requires Python 3.7 or later.
+Requires Python 3.9 or later.
 
 ## Quick start
 
