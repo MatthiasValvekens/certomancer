@@ -55,7 +55,7 @@ def dir_to_keyset_cfg(dirpath):
             # in the file name
             if 'pub' in fname:
                 cfg['public-only'] = True
-            elif not 'aa.key.pem' in fname:
+            elif not 'aa' in fname:
                 cfg['password'] = DUMMY_PASSWORD.decode('ascii')
             yield m.group(1), cfg
 

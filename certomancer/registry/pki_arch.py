@@ -5,14 +5,14 @@ import os.path
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 from zipfile import ZipFile
 
 import tzlocal
 import yaml
 from asn1crypto import cms, core, crl, ocsp, pem, x509
-from asn1crypto.x509 import ReasonFlags
 
+from .._asn1_types import register_extensions
 from ..config_utils import (
     ConfigurationError,
     SearchDir,
@@ -64,6 +64,8 @@ __all__ = [
     'PKIArchitecture',
     'ServiceRegistry',
 ]
+
+register_extensions()
 
 
 @dataclass(frozen=True)
