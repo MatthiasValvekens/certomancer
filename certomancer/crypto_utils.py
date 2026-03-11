@@ -138,7 +138,7 @@ class PycaCryptographyBackend(CryptoBackend):
             return priv_key.sign(tbs_bytes)
         else:  # pragma: nocover
             raise NotImplementedError(
-                f"The signature signature_algo {sig_algo} " f"is unsupported"
+                f"The signature signature_algo {sig_algo} is unsupported"
             )
 
     def optimal_pss_params(
@@ -173,15 +173,6 @@ class PycaCryptographyBackend(CryptoBackend):
                 'salt_length': optimal_salt_len,
             }
         )
-
-
-def pyca_cryptography_present() -> bool:
-    try:
-        import cryptography
-
-        return True
-    except ImportError:
-        return False
 
 
 CRYPTO_BACKEND: CryptoBackend = PycaCryptographyBackend()

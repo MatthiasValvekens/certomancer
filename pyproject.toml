@@ -101,4 +101,16 @@ markers = [
     "config_context: require a specific configuration file"
 ]
 
+[tool.ruff]
+line-length = 80
+
+[tool.ruff.format]
+quote-style = "preserve"
+
+[tool.ruff.lint]
+extend-select = [
+    "F",  # pyflakes
+    "I",  # isort
+]
+
 [tool.setuptools_scm]

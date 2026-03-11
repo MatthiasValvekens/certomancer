@@ -157,8 +157,7 @@ class ExtensionPluginRegistry:
             proc: ExtensionPlugin = self._dict[spec.schema]
         except KeyError as e:
             raise ConfigurationError(
-                f"There is no registered plugin for the schema "
-                f"'{spec.schema}'."
+                f"There is no registered plugin for the schema '{spec.schema}'."
             ) from e
 
         extn_oid: Optional[ObjectIdentifier]
@@ -250,8 +249,7 @@ class AttributePluginRegistry:
             proc: AttributePlugin = self._dict[spec.schema]
         except KeyError as e:
             raise ConfigurationError(
-                f"There is no registered plugin for the schema "
-                f"'{spec.schema}'."
+                f"There is no registered plugin for the schema '{spec.schema}'."
             ) from e
         if multivalued:
             if not isinstance(spec.params, list):

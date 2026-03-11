@@ -86,16 +86,14 @@ def _lazy_cfg(
 @click.option(
     '--config',
     help=(
-        'YAML file to load configuration from '
-        f'[default: {DEFAULT_CONFIG_FILE}]'
+        f'YAML file to load configuration from [default: {DEFAULT_CONFIG_FILE}]'
     ),
     required=False,
     type=click.Path(readable=True, dir_okay=False),
 )
 @click.option(
     '--key-root',
-    help='root folder for key material paths [default: config file '
-    'location]',
+    help='root folder for key material paths [default: config file location]',
     required=False,
     type=click.Path(readable=True, file_okay=False),
 )
@@ -221,13 +219,13 @@ def mass_summon(
     '--ignore-tty',
     type=bool,
     is_flag=True,
-    help='never try to prevent binary data from being written ' 'to stdout',
+    help='never try to prevent binary data from being written to stdout',
 )
 @click.option(
     '--as-pfx',
     type=bool,
     is_flag=True,
-    help='output PFX (PKCS #12) file (with key) instead of a ' 'certificate',
+    help='output PFX (PKCS #12) file (with key) instead of a certificate',
 )
 @click.option('--pfx-pass', type=str, help='set PFX file passphrase')
 @click.option(
@@ -303,7 +301,7 @@ def summon(
     '--ignore-tty',
     type=bool,
     is_flag=True,
-    help='never try to prevent binary data from being written ' 'to stdout',
+    help='never try to prevent binary data from being written to stdout',
 )
 @click.option(
     '--no-pem',
@@ -369,7 +367,7 @@ def necronomicon(
     '--ignore-tty',
     type=bool,
     is_flag=True,
-    help='never try to prevent binary data from being written ' 'to stdout',
+    help='never try to prevent binary data from being written to stdout',
 )
 @click.option(
     '--at-time',
@@ -577,7 +575,8 @@ def alch(
     try:
         backend = alchemist.DefaultAlchemistBackend(session)
         alchemist.Alchemist(backend, arch).store_key_bundles(
-            certs={CertLabel(l) for l in cert}, include_chains=include_chain
+            certs={CertLabel(label) for label in cert},
+            include_chains=include_chain,
         )
     finally:
         session.close()

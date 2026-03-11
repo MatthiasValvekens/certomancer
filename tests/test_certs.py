@@ -54,7 +54,7 @@ def dir_to_keyset_cfg(dirpath):
             # in the file name
             if 'pub' in fname:
                 cfg['public-only'] = True
-            elif not 'aa' in fname:
+            elif 'aa' not in fname:
                 cfg['password'] = DUMMY_PASSWORD.decode('ascii')
             yield m.group(1), cfg
 
@@ -135,7 +135,9 @@ def test_self_signed(label):
     root_cert = arch.get_cert(CertLabel(label))
     assert root_cert.subject == ENTITIES[EntityLabel('root')]
     assert root_cert.issuer == ENTITIES[EntityLabel('root')]
-    assert root_cert.not_valid_before == datetime(2000, 1, 1, tzinfo=timezone.utc)
+    assert root_cert.not_valid_before == datetime(
+        2000, 1, 1, tzinfo=timezone.utc
+    )
 
 
 def test_detect_self_reference():
@@ -196,12 +198,16 @@ def test_template_does_not_copy_inferred_authority_key():
     root_cert = arch.get_cert(CertLabel('root'))
     assert root_cert.subject == ENTITIES[EntityLabel('root')]
     assert root_cert.issuer == ENTITIES[EntityLabel('root')]
-    assert root_cert.not_valid_before == datetime(2000, 1, 1, tzinfo=timezone.utc)
+    assert root_cert.not_valid_before == datetime(
+        2000, 1, 1, tzinfo=timezone.utc
+    )
     other_cert = arch.get_cert(CertLabel('tsa'))
     assert other_cert.subject == ENTITIES[EntityLabel('tsa')]
     assert other_cert.issuer == ENTITIES[EntityLabel('tsa')]
     # check whether this was copied
-    assert other_cert.not_valid_before == datetime(2000, 1, 1, tzinfo=timezone.utc)
+    assert other_cert.not_valid_before == datetime(
+        2000, 1, 1, tzinfo=timezone.utc
+    )
 
 
 BASIC_AC_ISSUER_SETUP = '''
@@ -428,11 +434,15 @@ def test_issue_intermediate():
     root_cert = arch.get_cert(CertLabel('root-ca'))
     assert root_cert.subject == ENTITIES[EntityLabel('root')]
     assert root_cert.issuer == ENTITIES[EntityLabel('root')]
-    assert root_cert.not_valid_before == datetime(2000, 1, 1, tzinfo=timezone.utc)
+    assert root_cert.not_valid_before == datetime(
+        2000, 1, 1, tzinfo=timezone.utc
+    )
     interm_cert = arch.get_cert(CertLabel('intermediate-ca'))
     assert interm_cert.subject == ENTITIES[EntityLabel('interm')]
     assert root_cert.issuer == ENTITIES[EntityLabel('root')]
-    assert root_cert.not_valid_before == datetime(2000, 1, 1, tzinfo=timezone.utc)
+    assert root_cert.not_valid_before == datetime(
+        2000, 1, 1, tzinfo=timezone.utc
+    )
 
 
 def test_template_override_issuer():
