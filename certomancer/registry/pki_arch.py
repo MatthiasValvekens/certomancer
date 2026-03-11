@@ -700,8 +700,9 @@ class PKIArchitecture:
                 yield name, data
 
                 if include_pkcs12 and self.is_subject_key_available(cert_label):
-                    yield base_name + '.pfx', self.package_pkcs12(
-                        cert_label, password=pkcs12_pass
+                    yield (
+                        base_name + '.pfx',
+                        self.package_pkcs12(cert_label, password=pkcs12_pass),
                     )
 
     def _dump_attr_certs(self, use_pem=True, flat=False):
@@ -1152,13 +1153,16 @@ class ServiceRegistry:
             content_type = plugin.content_type
             svc_configs = _gen_svc_config(cfg_for_plugin)
             for service_label, cfg in svc_configs:
-                yield service_label, PluginServiceInfo(
-                    plugin_label=plugin_label,
-                    content_type=content_type,
-                    plugin_config=plugin.process_plugin_config(cfg),
-                    label=service_label,
-                    external_url_prefix=cfg['external-url-prefix'],
-                    arch_label=pki_arch.arch_label,
+                yield (
+                    service_label,
+                    PluginServiceInfo(
+                        plugin_label=plugin_label,
+                        content_type=content_type,
+                        plugin_config=plugin.process_plugin_config(cfg),
+                        label=service_label,
+                        external_url_prefix=cfg['external-url-prefix'],
+                        arch_label=pki_arch.arch_label,
+                    ),
                 )
 
         self._plugin_services = {

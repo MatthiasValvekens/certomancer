@@ -79,10 +79,13 @@ class CertificateSpec(IssuedItemSpec):
             if k.replace('-', '_') in EXCLUDED_FROM_TEMPLATE:
                 continue
             elif k == 'extensions':
-                yield k, [
-                    ext_dict
-                    for ext_dict in v
-                    if ext_dict['id'] not in EXTNS_EXCLUDED_FROM_TEMPLATE
-                ]
+                yield (
+                    k,
+                    [
+                        ext_dict
+                        for ext_dict in v
+                        if ext_dict['id'] not in EXTNS_EXCLUDED_FROM_TEMPLATE
+                    ],
+                )
             else:
                 yield k, v
