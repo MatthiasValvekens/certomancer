@@ -1,0 +1,3 @@
+graft example_plugin
+graft tests
+global-exclude *.py[cod]

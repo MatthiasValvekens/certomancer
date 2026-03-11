@@ -90,7 +90,6 @@ def test_mass_summon(cli_runner):
 
 
 @pytest.mark.config_context("with-services.yml")
-@pytest.mark.needcrypto
 def test_mass_summon_with_pkcs12(cli_runner):
     result = cli_runner.invoke(
         cli_root,

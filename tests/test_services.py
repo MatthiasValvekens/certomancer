@@ -1,10 +1,9 @@
 import hashlib
 import importlib
 from collections import namedtuple
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
-import pytz
 import requests
 from asn1crypto import algos, cms, core, crl, ocsp, tsp, x509
 from cryptography.hazmat.primitives import serialization
@@ -74,7 +73,7 @@ def test_crl(setup):
     )
     _check_crl_cardinality(some_crl3, expected_revoked=1)
     revo = some_crl3['tbs_cert_list']['revoked_certificates'][0]
-    rev_time = datetime(2020, 12, 1, tzinfo=pytz.utc)
+    rev_time = datetime(2020, 12, 1, tzinfo=timezone.utc)
     assert revo['revocation_date'].native == rev_time
 
     reason = next(
@@ -89,7 +88,7 @@ def test_crl(setup):
         for ext in revo['crl_entry_extensions']
         if ext['extn_id'].native == 'invalidity_date'
     )
-    assert invalidity_date == datetime(2020, 11, 30, tzinfo=pytz.utc)
+    assert invalidity_date == datetime(2020, 11, 30, tzinfo=timezone.utc)
 
 
 def test_aa_crl():
@@ -226,7 +225,6 @@ def test_aia_ca_issuers(setup):
 
 @freeze_time('2020-11-01')
 @pytest.mark.asyncio
-@pytest.mark.needcrypto
 async def test_validate(requests_mock, setup):
     from pyhanko_certvalidator import CertificateValidator, ValidationContext
     from pyhanko_certvalidator.policy_decl import DisallowWeakAlgorithmsPolicy
@@ -283,7 +281,7 @@ def test_timestamp(requests_mock, setup, include_nonce):
     if include_nonce:
         assert tst_info['nonce'].native == 0x1337
     assert tst_info['gen_time'].native == datetime.now().replace(
-        tzinfo=pytz.utc
+        tzinfo=timezone.utc
     )
 
 
