@@ -23,7 +23,6 @@ jobs:
     permissions: {}
     outputs:
       publish-env: ${{ steps.setenv.outputs.envname }}
-      release-version: ${{ steps.getversion.outputs.version }}
     steps:
       - id: setenv
         run: |
@@ -41,23 +40,6 @@ jobs:
           fi
           cat "$GITHUB_OUTPUT"
       - uses: actions/checkout@v6
-      - name: Get version information
-        id: getversion
-        run: |
-          set -eo pipefail
-          grep __version__ < certomancer/version.py \
-            | sed "s/__version__ = '\(.*\)'/version=\1/" >> "$GITHUB_OUTPUT"
-      - name: Generate release body
-        run: |
-          sed "s/:VERSION/$VERSION/g" < .github/gh-release-template.md > release.md
-          cat release.md
-        env:
-          VERSION: ${{ steps.getversion.outputs.version }}
-      - name: Upload release body
-        uses: actions/upload-artifact@v7
-        with:
-          name: release-body
-          path: release.md
   publish:
     name: Publish release artifacts
     needs: [ci, extract-params]
@@ -75,11 +57,6 @@ jobs:
         with:
           name: certomancer-dist
           path: dist/
-      - name: Download release body
-        uses: actions/download-artifact@v4
-        with:
-          name: release-body
-          path: release-body
       - name: Upload to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
@@ -98,7 +75,6 @@ jobs:
             dist/*.whl
             dist/*.tar.gz
             dist/*.sigstore.json
-          body_path: release-body/release.md
           fail_on_unmatched_files: true
           prerelease: true
           name: Certomancer ${{ needs.extract-params.outputs.release-version }} beta
