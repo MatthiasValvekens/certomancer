@@ -1,26 +1,26 @@
 [build-system]
-requires = ["setuptools>=80.9.0"]
+requires = ["setuptools>=80.9.0", "setuptools-scm>=8.3.1"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "certomancer"
 dynamic = ["version"]
 authors = [{name = "Matthias Valvekens", email = "dev@mvalvekens.be"}]
-license = {text = "MIT"}
+license = "MIT"
 description = "PKI testing tool"
 keywords = ["pki", "testing"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Security :: Cryptography",
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
+requires-python = ">=3.10"
 dependencies = [
     "asn1crypto==1.5.*",
     "click>=7.1.2",
@@ -38,38 +38,39 @@ content-type = "text/markdown"
 Homepage = "https://github.com/MatthiasValvekens/certomancer"
 
 [project.optional-dependencies]
-requests-mocker = ["requests-mock>=1.8.0"]
 web-api = ["Werkzeug>=2.2.3", "Jinja2>=2.11.3"]
-pkcs11 = ["python-pkcs11~=0.7.0"]
+pkcs11 = ["python-pkcs11>=0.9.0"]
+
+[dependency-groups]
 testing-minimal = [
     "pytest>=6.1.1",
-    "pytz>=2020.1",
     "freezegun>=1.1.0",
     "requests>=2.0.0",
     "pytest-cov~=4.0.0",
-    "pytest-asyncio==0.21.0",
-    "certomancer[requests-mocker,web-api]"
+    "pytest-asyncio>=0.26.0",
+    "requests-mock>=1.8.0",
+    "pyhanko-certvalidator>=0.26.5",
+    "certomancer[web-api]"
 ]
 testing = [
-    "pyhanko-certvalidator==0.26.5",
-    "certomancer[testing-minimal,pkcs11]"
+    { include-group = "testing-minimal" },
+    "certomancer[pkcs11]"
 ]
 mypy = [
+    "mypy",
     "types-requests",
     "types-python-dateutil",
     "types-PyYAML",
     "types-tzlocal",
-    "certomancer[testing]"
+    { include-group = "testing" },
 ]
+lint = ["ruff"]
 
 [project.scripts]
 certomancer = "certomancer.__main__:launch"
 
 [tool.setuptools]
 include-package-data = false
-
-[tool.setuptools.dynamic]
-version = {attr = "certomancer.version.__version__"}
 
 [tool.setuptools.packages.find]
 include = ["certomancer*"]
@@ -99,3 +100,5 @@ asyncio_mode = "strict"
 markers = [
     "config_context: require a specific configuration file"
 ]
+
+[tool.setuptools_scm]

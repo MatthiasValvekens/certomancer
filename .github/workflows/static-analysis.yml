@@ -9,18 +9,21 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-      - run: pip install --upgrade pip isort black
-      - name: Check import order
-        run: isort --profile black --line-length 80 --check certomancer tests
-      - name: Run Black
-        run: black -S --line-length 80 --check certomancer tests
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - run: pip install --upgrade uv
+      - name: Check formatting
+        run: uv run --group lint ruff format --check --diff
+      - name: Check linting rules
+        run: uv run --group lint ruff check
   mypy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: jpetrucciani/mypy-check@0.991
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
-          path: certomancer
-          requirements: "-e .[mypy] --config-settings editable_mode=strict"
+          python-version: "3.13"
+      - run: pip install --upgrade uv
+      - run: uv run --all-extras --group mypy mypy

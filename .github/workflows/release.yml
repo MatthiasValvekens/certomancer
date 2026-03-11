@@ -5,6 +5,7 @@ on:
     inputs:
       environment:
         type: environment
+        description: "Environment in which to execute the release process"
   push:
     branches: [ "ci/*", "ci-*" ]
 jobs:
@@ -12,8 +13,10 @@ jobs:
     name: Run CI pipeline
     uses: MatthiasValvekens/certomancer/.github/workflows/build-pipeline.yml@master
     permissions:
-      actions: read
+      actions: write
       contents: read
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
   extract-params:
     name: Determine release parameters
     runs-on: ubuntu-latest
@@ -37,7 +40,7 @@ jobs:
               exit 1
           fi
           cat "$GITHUB_OUTPUT"
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Get version information
         id: getversion
         run: |
@@ -51,7 +54,7 @@ jobs:
         env:
           VERSION: ${{ steps.getversion.outputs.version }}
       - name: Upload release body
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-body
           path: release.md
@@ -68,7 +71,7 @@ jobs:
       discussions: write
     steps:
       - name: Download dist artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: certomancer-dist
           path: dist/
@@ -82,7 +85,7 @@ jobs:
         with:
           repository-url: ${{ vars.REPOSITORY_URL }}
       - name: Sign with sigstore
-        uses: sigstore/gh-action-sigstore-python@v3.0.0
+        uses: sigstore/gh-action-sigstore-python@v3.2.0
         with:
           inputs: ./dist/*
           # useful to inspect workflow artifacts in test runs

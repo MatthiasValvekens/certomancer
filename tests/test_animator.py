@@ -1,11 +1,10 @@
 import hashlib
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from io import BytesIO
 from zipfile import ZipFile
 
 import pytest
-import pytz
 from asn1crypto import algos, cms, core, crl, ocsp, tsp, x509
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import padding
@@ -54,7 +53,7 @@ def test_timestamp():
     tst_info: tsp.TSTInfo = sd['encap_content_info']['content'].parsed
     assert tst_info['nonce'].native == 0x1337
     assert tst_info['gen_time'].native == datetime.now().replace(
-        tzinfo=pytz.utc
+        tzinfo=timezone.utc
     )
 
 
@@ -145,7 +144,7 @@ def test_crl():
     some_crl3 = crl.CertificateList.load(response.data)
     _check_crl_cardinality(some_crl3, expected_revoked=1)
     revo = some_crl3['tbs_cert_list']['revoked_certificates'][0]
-    rev_time = datetime(2020, 12, 1, tzinfo=pytz.utc)
+    rev_time = datetime(2020, 12, 1, tzinfo=timezone.utc)
     assert revo['revocation_date'].native == rev_time
 
     reason = next(
@@ -160,7 +159,7 @@ def test_crl():
         for ext in revo['crl_entry_extensions']
         if ext['extn_id'].native == 'invalidity_date'
     )
-    assert invalidity_date == datetime(2020, 11, 30, tzinfo=pytz.utc)
+    assert invalidity_date == datetime(2020, 11, 30, tzinfo=timezone.utc)
 
 
 def test_crl_archive():
@@ -215,7 +214,6 @@ def test_zip():
 
 
 @pytest.mark.parametrize('pw', [None, b'', b'secret'])
-@pytest.mark.needcrypto
 def test_pkcs12(pw):
     data = {'cert': 'signer1'}
     if pw is not None:

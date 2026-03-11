@@ -2,13 +2,12 @@ import hashlib
 import importlib
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from io import BytesIO
 from typing import Any
 from zipfile import ZipFile
 
 import pytest
-import pytz
 import yaml
 from asn1crypto import cms, core, x509
 
@@ -136,7 +135,7 @@ def test_self_signed(label):
     root_cert = arch.get_cert(CertLabel(label))
     assert root_cert.subject == ENTITIES[EntityLabel('root')]
     assert root_cert.issuer == ENTITIES[EntityLabel('root')]
-    assert root_cert.not_valid_before == datetime(2000, 1, 1, tzinfo=pytz.utc)
+    assert root_cert.not_valid_before == datetime(2000, 1, 1, tzinfo=timezone.utc)
 
 
 def test_detect_self_reference():
@@ -197,12 +196,12 @@ def test_template_does_not_copy_inferred_authority_key():
     root_cert = arch.get_cert(CertLabel('root'))
     assert root_cert.subject == ENTITIES[EntityLabel('root')]
     assert root_cert.issuer == ENTITIES[EntityLabel('root')]
-    assert root_cert.not_valid_before == datetime(2000, 1, 1, tzinfo=pytz.utc)
+    assert root_cert.not_valid_before == datetime(2000, 1, 1, tzinfo=timezone.utc)
     other_cert = arch.get_cert(CertLabel('tsa'))
     assert other_cert.subject == ENTITIES[EntityLabel('tsa')]
     assert other_cert.issuer == ENTITIES[EntityLabel('tsa')]
     # check whether this was copied
-    assert other_cert.not_valid_before == datetime(2000, 1, 1, tzinfo=pytz.utc)
+    assert other_cert.not_valid_before == datetime(2000, 1, 1, tzinfo=timezone.utc)
 
 
 BASIC_AC_ISSUER_SETUP = '''
@@ -429,11 +428,11 @@ def test_issue_intermediate():
     root_cert = arch.get_cert(CertLabel('root-ca'))
     assert root_cert.subject == ENTITIES[EntityLabel('root')]
     assert root_cert.issuer == ENTITIES[EntityLabel('root')]
-    assert root_cert.not_valid_before == datetime(2000, 1, 1, tzinfo=pytz.utc)
+    assert root_cert.not_valid_before == datetime(2000, 1, 1, tzinfo=timezone.utc)
     interm_cert = arch.get_cert(CertLabel('intermediate-ca'))
     assert interm_cert.subject == ENTITIES[EntityLabel('interm')]
     assert root_cert.issuer == ENTITIES[EntityLabel('root')]
-    assert root_cert.not_valid_before == datetime(2000, 1, 1, tzinfo=pytz.utc)
+    assert root_cert.not_valid_before == datetime(2000, 1, 1, tzinfo=timezone.utc)
 
 
 def test_template_override_issuer():
@@ -596,7 +595,6 @@ def test_dump_no_pfx(tmp_path):
     }
 
 
-@pytest.mark.needcrypto
 def test_dump_with_pfx(tmp_path):
     arch = CONFIG.get_pki_arch(ArchLabel('testing-ca'))
     arch.dump_certs(str(tmp_path), include_pkcs12=True)
@@ -691,7 +689,6 @@ def test_pss():
 
 
 @pytest.mark.parametrize('pw', [None, b'', b'secret'])
-@pytest.mark.needcrypto
 def test_pkcs12(pw):
     arch = CONFIG.get_pki_arch(ArchLabel('testing-ca'))
     package = arch.package_pkcs12(CertLabel('signer1'), password=pw)
@@ -848,8 +845,6 @@ async def test_pregenerated_cert():
     # content was actually used for the CA cert
     ca_from_disk = load_cert_from_pemder('tests/data/pregenerated-ca-cert.crt')
     assert ca.dump() == ca_from_disk.dump()
-
-    moment = datetime(2021, 5, 10, tzinfo=pytz.utc)
 
 
 def test_holder_config1():
