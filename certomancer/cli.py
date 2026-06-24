@@ -470,8 +470,16 @@ def seance(
     type=str,
     help=(
         'WSGI prefix under which to mount the application '
-        '(does not affect generated output)'
+        '(does not affect generated output); ignored with --aiohttp'
     ),
+)
+@click.option(
+    '--aiohttp',
+    'use_aiohttp',
+    help='run the asyncio (aiohttp) version of the Animator',
+    required=False,
+    type=bool,
+    is_flag=True,
 )
 @click.pass_context
 @exception_manager()
@@ -481,7 +489,17 @@ def animate(
     no_web_ui: bool,
     no_time_override: bool,
     wsgi_prefix: Optional[str],
+    use_aiohttp: bool,
 ):
+    if use_aiohttp:
+        _animate_aiohttp(
+            ctx,
+            port=port,
+            no_web_ui=no_web_ui,
+            no_time_override=no_time_override,
+            wsgi_prefix=wsgi_prefix,
+        )
+        return
     try:
         from werkzeug.exceptions import NotFound
         from werkzeug.middleware.dispatcher import DispatcherMiddleware
@@ -507,6 +525,39 @@ def animate(
         # more convenient to run from the CLI in this way)
         app = DispatcherMiddleware(NotFound(), {wsgi_prefix: app})
     run_simple('127.0.0.1', port, app)
+
+
+def _animate_aiohttp(
+    ctx,
+    *,
+    port: int,
+    no_web_ui: bool,
+    no_time_override: bool,
+    wsgi_prefix: Optional[str],
+):
+    try:
+        from .integrations.aiohttp_animator import (
+            build_animator_app,
+            run_animator_app,
+        )
+    except ImportError as e:
+        raise click.ClickException(
+            "'animate --aiohttp' requires additional dependencies. "
+            "Re-run setup with the [web-api-async] extension set, or install "
+            "aiohttp (and Jinja2 for the web UI) manually."
+        ) from e
+    if wsgi_prefix:
+        raise click.ClickException(
+            "--wsgi-prefix is not supported by the aiohttp Animator."
+        )
+    cfg: CertomancerConfig = next(ctx.obj['config'])
+    app = build_animator_app(
+        cfg.pki_archs,
+        with_web_ui=not no_web_ui,
+        allow_time_override=not no_time_override,
+    )
+    # bind both IPv4 and IPv6 loopback (the default for run_animator_app)
+    run_animator_app(app, port=port)
 
 
 @click.pass_context

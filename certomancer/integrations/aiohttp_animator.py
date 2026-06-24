@@ -1,7 +1,7 @@
 import logging
 from datetime import datetime
 from io import BytesIO
-from typing import Dict, Optional
+from typing import Dict, Optional, Sequence, Union
 
 from aiohttp import web
 from asn1crypto import ocsp, pem, tsp
@@ -417,7 +417,15 @@ def build_animator_app(
 
 
 def run_animator_app(
-    app: web.Application, host: str = '127.0.0.1', port: int = 9000
+    app: web.Application,
+    host: Union[str, Sequence[str]] = ('127.0.0.1', '::1'),
+    port: int = 9000,
 ) -> None:
-    """Convenience wrapper to run the animator app."""
-    web.run_app(app, host=host, port=port)
+    """Convenience wrapper to run the animator app.
+
+    By default this binds both the IPv4 and IPv6 loopback addresses; pass a
+    single host string (or a custom sequence) to override.
+    """
+    # web.run_app accepts a list of hosts to bind multiple addresses
+    hosts = [host] if isinstance(host, str) else list(host)
+    web.run_app(app, host=hosts, port=port)
