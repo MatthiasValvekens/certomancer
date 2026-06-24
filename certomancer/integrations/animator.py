@@ -1,11 +1,9 @@
 import logging
 import os
-from dataclasses import dataclass
 from datetime import datetime
 from io import BytesIO
-from typing import Callable, Dict, List, Optional
+from typing import Callable, Dict, Optional
 
-import tzlocal
 from asn1crypto import ocsp, pem, tsp
 from dateutil.parser import parse as parse_dt
 from werkzeug.exceptions import (
@@ -20,8 +18,6 @@ from werkzeug.wrappers import Request, Response
 from certomancer.config_utils import ConfigurationError
 from certomancer.registry import (
     ArchLabel,
-    AttributeCertificateSpec,
-    CertificateSpec,
     CertLabel,
     CertomancerConfig,
     CertomancerObjectNotFoundError,
@@ -33,14 +29,14 @@ from certomancer.registry import (
 )
 from certomancer.services import CertomancerServiceError
 
+from ._animator_shared import (
+    FAKE_TIME_HEADER,
+    WEB_UI_URL_PREFIX,
+    _now,
+    gen_index,
+)
+
 logger = logging.getLogger(__name__)
-
-
-def _now():
-    return datetime.now(tz=tzlocal.get_localzone())
-
-
-FAKE_TIME_HEADER = 'X-Certomancer-Fake-Time'
 
 
 class PemExtensionConverter(BaseConverter):
@@ -56,78 +52,6 @@ class PemExtensionConverter(BaseConverter):
 
     def to_url(self, value):
         return self.expected_exts[0] + ('.pem' if value else '')
-
-
-@dataclass(frozen=True)
-class AnimatorCertInfo:
-    spec: CertificateSpec
-    pfx_available: bool
-    subject_dn: str
-
-    @staticmethod
-    def gather_cert_info(pki_arch: PKIArchitecture):
-        def _for_cert(spec: CertificateSpec):
-            pfx = pki_arch.is_subject_key_available(spec.label)
-            return AnimatorCertInfo(
-                spec=spec,
-                pfx_available=pfx,
-                subject_dn=pki_arch.entities[spec.subject].human_friendly,
-            )
-
-        return {
-            iss: list(map(_for_cert, issd_certs))
-            for iss, issd_certs in pki_arch.enumerate_certs_by_issuer()
-        }
-
-
-@dataclass(frozen=True)
-class AnimatorAttrCertInfo:
-    spec: AttributeCertificateSpec
-    holder_dn: str
-
-    @staticmethod
-    def gather_cert_info(pki_arch: PKIArchitecture):
-        def _for_attr_cert(spec: AttributeCertificateSpec):
-            return AnimatorAttrCertInfo(
-                spec=spec,
-                holder_dn=pki_arch.entities[spec.holder.name].human_friendly,
-            )
-
-        return {
-            iss: list(map(_for_attr_cert, issd_certs))
-            for iss, issd_certs in pki_arch.enumerate_attr_certs_by_issuer()
-        }
-
-
-@dataclass(frozen=True)
-class ArchServicesDescription:
-    arch: ArchLabel
-    tsa: list
-    ocsp: list
-    crl: list
-    cert_repo: list
-    attr_cert_repo: list
-    certs_by_issuer: Dict[EntityLabel, List[AnimatorCertInfo]]
-    attr_certs_by_issuer: Dict[EntityLabel, List[AnimatorAttrCertInfo]]
-
-    @classmethod
-    def compile(cls, pki_arch: PKIArchitecture):
-        services = pki_arch.service_registry
-        cert_info = AnimatorCertInfo.gather_cert_info(pki_arch)
-        attr_cert_info = AnimatorAttrCertInfo.gather_cert_info(pki_arch)
-        return ArchServicesDescription(
-            pki_arch.arch_label,
-            tsa=services.list_time_stamping_services(),
-            ocsp=services.list_ocsp_responders(),
-            crl=services.list_crl_repos(),
-            cert_repo=services.list_cert_repos(),
-            attr_cert_repo=services.list_attr_cert_repos(),
-            certs_by_issuer=cert_info,
-            attr_certs_by_issuer=attr_cert_info,
-        )
-
-
-WEB_UI_URL_PREFIX = '_certomancer'
 
 
 def web_ui_rules():
@@ -228,29 +152,6 @@ def service_rules():
             methods=('GET',),
         ),
     ]
-
-
-def gen_index(architectures):
-    try:
-        from jinja2 import Environment, PackageLoader
-    except ImportError as e:  # pragma: nocover
-        raise CertomancerServiceError(
-            "Web UI requires Jinja2 to be installed"
-        ) from e
-
-    # the index is fixed from the moment the server is launched, so
-    #  just go ahead and render it
-    jinja_env = Environment(
-        loader=PackageLoader('certomancer.integrations', 'animator_templates'),
-        autoescape=True,
-    )
-    template = jinja_env.get_template('index.html')
-    return template.render(
-        pki_archs=[
-            ArchServicesDescription.compile(arch) for arch in architectures
-        ],
-        web_ui_prefix=WEB_UI_URL_PREFIX,
-    )
 
 
 class AnimatorArchStore:
