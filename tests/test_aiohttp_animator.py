@@ -307,3 +307,70 @@ async def test_no_web_ui(client_no_ui):
         '/_certomancer/any-cert/testing-ca/interm.crt'
     )
     assert resp.status == 404
+
+
+@pytest.mark.asyncio
+async def test_attr_cert_repo_aa(client):
+    resp = await client.get('/testing-ca-with-aa/attr-certs/role-aa/aa.crt')
+    assert resp.status == 200
+    body = await resp.read()
+    cert = x509.Certificate.load(body)
+    assert cert is not None
+
+
+@pytest.mark.asyncio
+async def test_attr_cert_repo_issued(client):
+    resp = await client.get(
+        '/testing-ca-with-aa/attr-certs/role-aa/issued/test-ac.attr.crt'
+    )
+    assert resp.status == 200
+    body = await resp.read()
+    ac = cms.AttributeCertificateV2.load(body)
+    assert ac is not None
+
+
+@pytest.mark.asyncio
+async def test_attr_cert_repo_by_holder(client):
+    resp = await client.get(
+        '/testing-ca-with-aa/attr-certs/role-aa/by-holder/signer2-all.attr.cert.pem'
+    )
+    assert resp.status == 200
+    body = await resp.read()
+    assert b'ATTRIBUTE CERTIFICATE' in body
+
+
+@pytest.mark.asyncio
+async def test_any_attr_cert(client):
+    resp = await client.get(
+        '/_certomancer/any-attr-cert/testing-ca-with-aa/test-ac.attr.crt'
+    )
+    assert resp.status == 200
+    body = await resp.read()
+    ac = cms.AttributeCertificateV2.load(body)
+    assert ac is not None
+
+
+@pytest.mark.asyncio
+async def test_attr_certs_of(client):
+    resp = await client.get(
+        '/_certomancer/attr-certs-of/testing-ca-with-aa/signer2-all.attr.cert.pem'
+    )
+    assert resp.status == 200
+    body = await resp.read()
+    assert b'ATTRIBUTE CERTIFICATE' in body
+
+
+@pytest.mark.asyncio
+async def test_attr_cert_not_found(client):
+    resp = await client.get(
+        '/testing-ca-with-aa/attr-certs/role-aa/issued/nonexistent.attr.crt'
+    )
+    assert resp.status == 404
+
+
+@pytest.mark.asyncio
+async def test_attr_cert_wrong_arch(client):
+    resp = await client.get(
+        '/nonexistent-arch/attr-certs/role-aa/issued/test-ac.attr.crt'
+    )
+    assert resp.status == 404

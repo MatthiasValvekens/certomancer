@@ -230,3 +230,58 @@ def test_pkcs12(pw):
 def test_index():
     response = CLIENT.get('/')
     assert b'testing-ca' in response.data
+
+
+def test_attr_cert_repo_aa():
+    response = CLIENT.get('/testing-ca-with-aa/attr-certs/role-aa/aa.crt')
+    assert response.status_code == 200
+    cert = x509.Certificate.load(response.data)
+    assert cert is not None
+
+
+def test_attr_cert_repo_issued():
+    response = CLIENT.get(
+        '/testing-ca-with-aa/attr-certs/role-aa/issued/test-ac.attr.crt'
+    )
+    assert response.status_code == 200
+    attr_cert = cms.AttributeCertificateV2.load(response.data)
+    assert attr_cert is not None
+
+
+def test_attr_cert_repo_by_holder():
+    response = CLIENT.get(
+        '/testing-ca-with-aa/attr-certs/role-aa/by-holder/signer2-all.attr.cert.pem'
+    )
+    assert response.status_code == 200
+    assert b'ATTRIBUTE CERTIFICATE' in response.data
+
+
+def test_any_attr_cert():
+    response = CLIENT.get(
+        '/_certomancer/any-attr-cert/testing-ca-with-aa/test-ac.attr.crt'
+    )
+    assert response.status_code == 200
+    attr_cert = cms.AttributeCertificateV2.load(response.data)
+    assert attr_cert is not None
+
+
+def test_attr_certs_of():
+    response = CLIENT.get(
+        '/_certomancer/attr-certs-of/testing-ca-with-aa/signer2-all.attr.cert.pem'
+    )
+    assert response.status_code == 200
+    assert b'ATTRIBUTE CERTIFICATE' in response.data
+
+
+def test_attr_cert_not_found():
+    response = CLIENT.get(
+        '/testing-ca-with-aa/attr-certs/role-aa/issued/nonexistent.attr.crt'
+    )
+    assert response.status_code == 404
+
+
+def test_attr_cert_wrong_arch():
+    response = CLIENT.get(
+        '/nonexistent-arch/attr-certs/role-aa/issued/test-ac.attr.crt'
+    )
+    assert response.status_code == 404

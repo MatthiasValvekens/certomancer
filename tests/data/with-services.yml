@@ -151,6 +151,11 @@ pki-architectures:
           distribution-point-name:
             relative-name:
               common_name: AA compromise DP
+      attr-cert-repo:
+        role-aa:
+          for-issuer: aa
+          issuer-cert: role-aa
+          publish-by-holder: true
       ocsp:
         role-aa:
           for-issuer: aa
