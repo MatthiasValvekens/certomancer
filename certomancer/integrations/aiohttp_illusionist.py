@@ -172,8 +172,10 @@ class AsyncIllusionist:
         # be unavailable when the clock is patched (e.g. under freezegun),
         # causing spurious errors that have no bearing on the served responses.
         await server.start_server(access_log=None)
+        port = server.port
+        assert port is not None
         connector = aiohttp.TCPConnector(
-            resolver=_FakeResolver(server.port),
+            resolver=_FakeResolver(port),
             use_dns_cache=False,
         )
         session = aiohttp.ClientSession(connector=connector)
