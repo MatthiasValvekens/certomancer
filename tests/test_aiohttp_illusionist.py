@@ -128,6 +128,32 @@ async def test_crl_with_revocation():
 
 
 @pytest.mark.asyncio
+@freeze_time('2020-11-01')
+async def test_serving_session_with_custom_app():
+    import aiohttp.web
+
+    arch = _get_arch()
+
+    async def extra_handler(request: aiohttp.web.Request):
+        return aiohttp.web.Response(body=b'pong', content_type='text/plain')
+
+    illusionist = AsyncIllusionist(arch)
+    app = illusionist.build_app()
+    app.router.add_get('/extra/ping', extra_handler)
+
+    async with illusionist.serving_session(app=app) as session:
+        # the custom route is served...
+        async with session.get('http://test.test/extra/ping') as r:
+            assert r.status == 200
+            assert await r.read() == b'pong'
+        # ...alongside the regular PKI services
+        async with session.get(
+            'http://test.test/testing-ca/crls/interm/latest.crl'
+        ) as r:
+            assert r.status == 200
+
+
+@pytest.mark.asyncio
 async def test_demo_plugin():
     importlib.import_module('example_plugin.encrypt_echo')
     cfg = CertomancerConfig.from_file(

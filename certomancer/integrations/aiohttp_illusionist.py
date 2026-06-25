@@ -151,14 +151,27 @@ class AsyncIllusionist:
         return app
 
     @asynccontextmanager
-    async def serving_session(self):
+    async def serving_session(
+        self, app: Optional[aiohttp.web.Application] = None
+    ):
         """
         Async context manager that starts an in-process TestServer and yields
         an aiohttp.ClientSession whose DNS resolver redirects all hostnames
         to that server.
+
+        :param app:
+            Optional pre-built application to serve. Defaults to the result of
+            :meth:`build_app`. Pass a customised application (e.g. one returned
+            by :meth:`build_app` with extra routes registered) to serve
+            additional endpoints alongside the PKI services.
         """
-        server = aiohttp.test_utils.TestServer(self.build_app())
-        await server.start_server()
+        if app is None:
+            app = self.build_app()
+        server = aiohttp.test_utils.TestServer(app)
+        # Disable the access logger: it reads the local UTC offset, which can
+        # be unavailable when the clock is patched (e.g. under freezegun),
+        # causing spurious errors that have no bearing on the served responses.
+        await server.start_server(access_log=None)
         connector = aiohttp.TCPConnector(
             resolver=_FakeResolver(server.port),
             use_dns_cache=False,
