@@ -175,6 +175,31 @@ class DefaultAlchemistBackend(AlchemistBackend):
                     pkcs11.Attribute.VALUE: key['private_key'].parsed.native,
                 }
             )
+        elif algo in ('mldsa44', 'mldsa65', 'mldsa87'):
+            paramset = {
+                'mldsa44': pkcs11.MLDSAParameterSet.ML_DSA_44,
+                'mldsa65': pkcs11.MLDSAParameterSet.ML_DSA_65,
+                'mldsa87': pkcs11.MLDSAParameterSet.ML_DSA_87,
+            }
+            seed = key['private_key'].parsed.chosen.native
+            # pyca/cryptography does not expose a method to derive the signing
+            # key from the seed, so we use dilithium-py
+            from dilithium_py.ml_dsa import ML_DSA_44, ML_DSA_65, ML_DSA_87
+
+            engine = {
+                'mldsa44': ML_DSA_44,
+                'mldsa65': ML_DSA_65,
+                'mldsa87': ML_DSA_87,
+            }
+
+            obj_attrs.update(
+                {
+                    pkcs11.Attribute.KEY_TYPE: pkcs11.KeyType.ML_DSA,
+                    pkcs11.Attribute.PARAMETER_SET: paramset[algo],
+                    pkcs11.Attribute.SEED: seed,
+                    pkcs11.Attribute.VALUE: engine[algo].key_derive(seed)[1],
+                }
+            )
         else:
             raise NotImplementedError(f"Algorithm {algo!r} is not supported")
 
