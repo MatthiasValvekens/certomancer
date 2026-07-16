@@ -1,8 +1,6 @@
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List
-
-import tzlocal
 
 from certomancer.registry import (
     ArchLabel,
@@ -18,7 +16,7 @@ WEB_UI_URL_PREFIX = '_certomancer'
 
 
 def _now():
-    return datetime.now(tz=tzlocal.get_localzone())
+    return datetime.now(tz=timezone.utc)
 
 
 @dataclass(frozen=True)

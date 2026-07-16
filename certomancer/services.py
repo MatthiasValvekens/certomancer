@@ -2,10 +2,9 @@ import abc
 import hashlib
 import os
 import struct
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Tuple
 
-import tzlocal
 from asn1crypto import algos, cms, core, crl, keys, ocsp, tsp, x509
 from asn1crypto.crl import TBSCertListExtension
 
@@ -73,7 +72,7 @@ class TimeStamper:
         digest_algorithm_obj = algos.DigestAlgorithm(
             {'algorithm': md_algorithm}
         )
-        dt = self.fixed_dt or datetime.now(tz=tzlocal.get_localzone())
+        dt = self.fixed_dt or datetime.now(tz=timezone.utc)
         tst_info_dict = {
             'version': 'v1',
             'policy': self.policy,

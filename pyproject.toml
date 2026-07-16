@@ -26,7 +26,6 @@ dependencies = [
     "click>=7.1.2",
     "pyyaml>=5.4.1",
     "python-dateutil>=2.8.1",
-    "tzlocal>=2.1",
     "cryptography>=49.0.0"
 ]
 
@@ -66,7 +65,6 @@ mypy = [
     "types-requests",
     "types-python-dateutil",
     "types-PyYAML",
-    "types-tzlocal",
     { include-group = "testing" },
 ]
 lint = ["ruff"]

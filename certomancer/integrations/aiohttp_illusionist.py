@@ -1,6 +1,6 @@
 import socket
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from urllib.parse import urlsplit
 
@@ -8,7 +8,6 @@ import aiohttp
 import aiohttp.abc
 import aiohttp.test_utils
 import aiohttp.web
-import tzlocal
 from asn1crypto import ocsp, tsp
 
 from certomancer.registry import PKIArchitecture, PluginLabel, ServiceLabel
@@ -61,7 +60,7 @@ class AsyncIllusionist:
 
     @property
     def at_time(self) -> datetime:
-        return self.fixed_time or datetime.now(tz=tzlocal.get_localzone())
+        return self.fixed_time or datetime.now(tz=timezone.utc)
 
     def _make_ocsp_handler(self, label: ServiceLabel):
         async def handle(request: aiohttp.web.Request) -> aiohttp.web.Response:

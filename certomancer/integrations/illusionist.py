@@ -1,9 +1,8 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from functools import partial
 from typing import Optional
 
 import requests_mock
-import tzlocal
 from asn1crypto import ocsp, tsp
 
 from certomancer.registry import PKIArchitecture, PluginLabel, ServiceLabel
@@ -69,7 +68,7 @@ class Illusionist:
 
     @property
     def at_time(self):
-        return self.fixed_time or datetime.now(tz=tzlocal.get_localzone())
+        return self.fixed_time or datetime.now(tz=timezone.utc)
 
     def serve_ocsp_response(self, request, _context, *, label: ServiceLabel):
         ocsp_resp = self.pki_arch.service_registry.summon_responder(

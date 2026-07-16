@@ -4,11 +4,10 @@ import os
 import os.path
 from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 from zipfile import ZipFile
 
-import tzlocal
 import yaml
 from asn1crypto import cms, core, crl, ocsp, pem, x509
 
@@ -1310,7 +1309,7 @@ class ServiceRegistry:
 
         if number is None:
             if at_time is None:
-                at_time = datetime.now(tz=tzlocal.get_localzone())
+                at_time = datetime.now(tz=timezone.utc)
             # work backwards to find a reasonable CRL number
             elapsed = at_time - time_origin
             if elapsed < timedelta(0):

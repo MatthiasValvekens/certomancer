@@ -1,11 +1,10 @@
 import logging
 import sys
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Iterable, Optional, Union
 
 import click
-import tzlocal
 from asn1crypto import algos, ocsp, pem
 from dateutil.parser import parse as parse_dt
 
@@ -332,7 +331,7 @@ def necronomicon(
     cfg: CertomancerConfig = next(ctx.obj['config'])
     pki_arch = cfg.get_pki_arch(ArchLabel(architecture))
     if at_time is None:
-        at_time_dt = datetime.now(tz=tzlocal.get_localzone())
+        at_time_dt = datetime.now(tz=timezone.utc)
     else:
         at_time_dt = parse_dt(at_time)
     crl = pki_arch.service_registry.get_crl(
@@ -391,7 +390,7 @@ def seance(
     cfg: CertomancerConfig = next(ctx.obj['config'])
     pki_arch = cfg.get_pki_arch(ArchLabel(architecture))
     if at_time is None:
-        at_time_dt = datetime.now(tz=tzlocal.get_localzone())
+        at_time_dt = datetime.now(tz=timezone.utc)
     else:
         at_time_dt = parse_dt(at_time)
 
