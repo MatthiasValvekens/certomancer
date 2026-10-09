@@ -37,7 +37,7 @@ jobs:
     needs: build
     strategy:
       matrix:
-        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14", "3.15"]
         group: ["testing-minimal", "testing"]
     steps:
       - uses: actions/checkout@v6
@@ -45,6 +45,7 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
+          allow-prereleases: true
       - name: Install uv
         uses: astral-sh/setup-uv@v7
         with:
